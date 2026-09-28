@@ -113,4 +113,10 @@ The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 ## License
 
-TODO: match the upstream license, see `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+**Disclaimer:** This project is a fan-made, non-commercial endeavor and is in no way affiliated with, authorized, maintained, sponsored, or endorsed by Bandai Namco Entertainment Inc. or any of its affiliates. "Tekken" and all associated trademarks, characters, and assets are registered trademarks of Bandai Namco Entertainment Inc.
+
+**No Copyrighted Material:** This repository **does not contain any copyrighted game assets, ROMs, or ISOs**. It only provides open-source tools, scripts, and source code intended to be used with a legally owned and dumped copy of the game. Users must provide their own original game data to use this software.
+
+**Source Code License:**
+The original tools, build scripts, and modifications provided in this repository are licensed under the [MIT License](LICENSE). 
+*(Note: Any third-party libraries or upstream decompilation code retain their original respective licenses).*
