@@ -9,7 +9,7 @@ STATE=ROOT/'.setup'
 BUILD=ROOT/'build-release'
 WINDOWS=os.name=='nt'
 EXE=BUILD/('Tekken_3_Recompiled.exe' if WINDOWS else 'Tekken_3_Recompiled')
-RELEASE='0.1.2-easy-setup'
+RELEASE='0.1.3-easy-setup'   # a new value makes existing installs rebuild once
 LOCK=json.loads((ROOT/'launcher/tools.lock.json').read_text())
 
 class SetupError(Exception):
