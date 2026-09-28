@@ -62,19 +62,24 @@ def log_line(text):
     STATE.mkdir(exist_ok=True)
     with (STATE/'setup.log').open('a',encoding='utf-8') as f:f.write(text+'\n')
 
-def run(command, *, environment=None, directory=ROOT, friendly='Setup could not finish.', timeout=None):
+def run(command, *, environment=None, directory=ROOT, friendly='Setup could not finish.', timeout=None, only_code=None):
+    """friendly: the message for a failure; with only_code, for that exit code
+    only, and any other failure shows the last line of the command's output."""
     log_line('RUN '+subprocess.list2cmdline([str(x) for x in command]))
     with subprocess.Popen([str(x) for x in command],cwd=directory,env=environment,
             stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',
             creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0) as process:
         # The launcher's Windows Job owns this worker and all its children.
-        last=0
+        last=0;tail=''
         for line in process.stdout:
             log_line(line.rstrip())
+            if line.strip():tail=line.strip()
             match=re.match(r'\[(\d+)/(\d+)\]',line)
             if match and time.monotonic()-last>.25:
                 emit(detail='Preparing game files: '+match[1]+' / '+match[2]);last=time.monotonic()
         code=process.wait(timeout=timeout)
+    if code and only_code is not None and code!=only_code:
+        raise SetupError(f'Setup stopped: {tail[-300:]} (details in {STATE/"setup.log"})')
     if code:raise SetupError(friendly)
 
 def download(spec):
@@ -214,11 +219,22 @@ def single_bin(disc):
     path=out/f'{stem}.cue';path.write_text('\n'.join(cue)+'\n',encoding='utf-8')
     return path
 
+REQUIRED=('psxrecomp/psxrecomp_cli.py','psxrecomp/tools/sdk_progress.py','psxrecomp/runtime','psxrecomp/recompiler/CMakeLists.txt',
+          'recomp-ui','tools/ttt1_import.py','tools/ttt1_setup.py','src','mods','CMakeLists.txt','game.toml')
+
+def complete():
+    """A partly extracted download (an interrupted unzip, an antivirus, or
+    Windows' 260-character path limit) fails later with a confusing error."""
+    missing=[p for p in REQUIRED if not (ROOT/p).exists()]
+    if missing:raise SetupError('This folder is incomplete (missing: '+', '.join(missing[:4])+'). Extract the whole download again '
+                                '(on Windows, to a short path such as C:\\Games, with 7-Zip or git clone), then run the setup again.')
+
 def validate_files(disc,ttt,include_ttt1):
     if not disc.is_file():raise SetupError('Choose your Tekken 3 USA PS1 disc image first.')
     emit(message='Checking your game files',detail='Checking the supported disc revision.')
     run([sys.executable,ROOT/'psxrecomp/psxrecomp_cli.py','verify-disc','--project-root',ROOT,'--config',ROOT/'game.toml','--disc',disc],
-        friendly='This disc does not match the supported Tekken 3 USA (SLUS-00402) release. Choose its CUE or BIN file, with all tracks present.')
+        friendly='This disc does not match the supported Tekken 3 USA (SLUS-00402) release. Choose its CUE or BIN file, with all tracks present.',
+        only_code=3)   # psxrecomp_cli: 3 = digest mismatch, 1 = an error of its own
     if include_ttt1:
         if not ttt.is_file():raise SetupError("Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.")
         sys.path.insert(0,str(ROOT/'tools'))
@@ -252,6 +268,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
     STATE.mkdir(exist_ok=True)
     with (STATE/'setup.log').open('w',encoding='utf-8') as f:f.write('Tekken 3 easy setup '+RELEASE+'\n')
     # Only run in the unpacked writable application folder, never require admin.
+    complete()
     if shutil.disk_usage(ROOT).free<4*1024**3:raise SetupError('Setup needs at least 4 GB of free space in this folder.')
     save_json(STATE/'last-inputs.json',{'disc':str(disc),'ttt1':str(ttt) if include_ttt1 else '',
         'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),'jin_red':jin_red})
