@@ -72,14 +72,28 @@ def sources(args):
     if not mame: mame = choose('Executable MAME 0.289', '*')
     MAME = str(Path(mame).resolve())
     WORK.mkdir(parents=True, exist_ok=True)
-    SOURCE.write_text(json.dumps(dict(ttt1=str(zip_path), mame=MAME), indent=2) + '\n')
+    # Lu et ecrit par les imports paralleles : n'ecrire que s'il change, et
+    # d'un bloc (sinon un autre import peut lire un fichier vide).
+    text = json.dumps(dict(ttt1=str(zip_path), mame=MAME), indent=2) + '\n'
+    if not SOURCE.is_file() or SOURCE.read_text() != text:
+        tmp = SOURCE.with_name(f'.source-{os.getpid()}.json'); tmp.write_text(text); os.replace(tmp, SOURCE)
     ROMS.mkdir(exist_ok=True)
     link = ROMS / 'tektagt.zip'
     # Plusieurs imports en parallele : ne jamais laisser le lien absent, un
     # MAME d'un autre import pourrait l'ouvrir a cet instant.
-    if not (link.is_symlink() and link.resolve() == zip_path):
+    # Windows refuse les liens symboliques sans admin ni mode developpeur :
+    # lien physique (meme disque), sinon copie (copy2 garde la date).
+    same = link.resolve() == zip_path if link.is_symlink() else link.is_file() and (
+        os.path.samefile(link, zip_path) or (link.stat().st_size, link.stat().st_mtime_ns)
+        == (zip_path.stat().st_size, zip_path.stat().st_mtime_ns))
+    if not same:
         tmp = ROMS / f'.tektagt-{os.getpid()}.zip'
-        tmp.unlink(missing_ok=True); tmp.symlink_to(zip_path); os.replace(tmp, link)
+        tmp.unlink(missing_ok=True)
+        try: tmp.symlink_to(zip_path)
+        except OSError:
+            try: os.link(zip_path, tmp)
+            except OSError: shutil.copy2(zip_path, tmp)
+        os.replace(tmp, link)
     names = ('bankedroms.bin', 'c352.bin', 'sub.bin', 'maincpu_rom.bin')
     if not all((TTT1 / n).is_file() for n in names):
         import arcade_model_probe as probe

@@ -124,7 +124,11 @@ def main():
     for game, z in zips.items():
         link = roms / f'{game}.zip'
         if link.is_symlink() or link.exists(): link.unlink()
-        link.symlink_to(z)
+        # Windows refuse les liens symboliques sans admin ni mode developpeur.
+        try: link.symlink_to(z)
+        except OSError:
+            try: os.link(z, link)
+            except OSError: shutil.copy2(z, link)
 
     ps1 = {(d, s): exe[0x800 + PS1_TABLE - 0x80010000 + d * STAGES * PS1_BLOCK + s * PS1_BLOCK:][:PS1_BLOCK]
            for d in range(3) for s in range(STAGES)}
