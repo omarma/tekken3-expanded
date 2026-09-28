@@ -3608,9 +3608,11 @@ void draw_controller_config_view(LauncherModel* m, const LauncherTheme& th) {
         const bool is_psx = prof && prof->id && !strcmp(prof->id, "psx");
 
         // ---- PSX: Gamepad Bindings (per selected SDL GUID) -----------------
-        // Replaces the keyboard grid on Configure. Column-major layout
+        // Replaces the keyboard grid on Configure, unless the player's Input
+        // source is the keyboard: that player gets the keyboard grid below
+        // (keybinds.ini, primary + alternate). Column-major layout
         // (top→bottom then next column) matching kPsxGamepadBindOrder.
-        if (is_psx) {
+        if (is_psx && m->s.player_src[p] != 1) {
             ImGui::PushStyleColor(ImGuiCol_Text, col(th.accent2));
             ImGui::Text("GAMEPAD BINDINGS - PLAYER %d", p + 1);
             ImGui::PopStyleColor();
@@ -3620,7 +3622,7 @@ void draw_controller_config_view(LauncherModel* m, const LauncherTheme& th) {
                                      m->s.player_gamepad_guid[p][0];
             if (!has_pad_src) {
                 ImGui::TextColored(col(th.text_muted),
-                    "Select a gamepad as Input source to configure bindings.");
+                    "Select Keyboard or a gamepad as Input source to configure bindings.");
             } else {
                 float label_col_w = px(90.0f);
                 for (int i = 0; i < LNG_PSX_PAD_BUTTON_COUNT; ++i) {
