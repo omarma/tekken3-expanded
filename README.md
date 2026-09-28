@@ -67,6 +67,16 @@ The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 **Platforms:** macOS on Intel and Apple Silicon (tested on macOS 15 and 26). Windows: **not tested yet**; the setup is there, reports are welcome.
 
+## Where to put your game files
+
+Anywhere you like: the setup asks for each file, and never moves or changes them.
+
+- **Keep the disc files together**: the `.cue` and every `.bin` it lists in the same folder. Choose the `.cue`.
+- **Don't unzip the arcade ROMs**: choose `tektagt.zip` and `tekken3.zip` as they are.
+- **Tip:** put all of them in one folder (for example `Documents/Tekken3-files`). When you choose the disc, the setup fills in `tektagt.zip` and `tekken3.zip` by itself if they sit next to it.
+
+On macOS without the setup window, drag each file onto the Terminal window when it asks, then press Return.
+
 ## Install on macOS
 
 1. Install the tools with [Homebrew](https://brew.sh):
@@ -86,11 +96,14 @@ The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 1. Install [Python 3.12](https://www.python.org/downloads/) (keep "py launcher" and "tcl/tk" ticked) and [Git](https://git-scm.com/).
 2. `git clone https://github.com/omarma/tekken3-expanded.git`
-3. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files.
+3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
+4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
 
 ## Troubleshooting
 
-- The setup keeps a log in `.setup/setup.log`, and each character import its own in `workspace/ttt1-import/logs/`.
+- **"Setup needs attention"**: the reason is in `.setup/setup.log`, inside the `tekken3-expanded` folder (the folder is hidden on macOS: press Cmd+Shift+. in Finder). Please [open an issue](https://github.com/omarma/tekken3-expanded/issues) and attach that file, with your OS and Python version (`python3 --version`, or `py --version` on Windows).
+- **"The game files could not be prepared"** on Windows: this is the step that compiles the game's code generator. Try first: Python 3.12 (not 3.13 or newer), the folder on a short path outside OneDrive, then delete `.setup` and run the setup again.
+- Each character import keeps its own log in `workspace/ttt1-import/logs/`.
 - To start over, delete the `.setup`, `workspace`, `generated`, `disc` and `build-release` folders.
 
 ## Controls
