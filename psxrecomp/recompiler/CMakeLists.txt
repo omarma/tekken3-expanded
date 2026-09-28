@@ -28,20 +28,21 @@ endif()
 # "-I dir" is misparsed, and a .template extension is taken as linker input,
 # so it silently writes a guard-only header and exits 0. Preprocess with an
 # explicit language instead, reproducing tables/tools/c_table_gen.sh.
-# Scoped to non-Windows so the author's MSVC/MinGW path, where these headers
-# are already staged, is untouched.
-if(NOT WIN32)
+# Runs with any GNU-style driver (clang/gcc, including the Windows setup's
+# clang pack); only MSVC's cl.exe, which lacks -x c, is left out.
+if(NOT MSVC)
     set(_rbz "${CMAKE_CURRENT_SOURCE_DIR}/lib/rabbitizer")
     if(NOT EXISTS "${_rbz}/include/generated/InstrId_enum.h")
         message(STATUS "Generating rabbitizer table headers with ${CMAKE_C_COMPILER}")
         file(MAKE_DIRECTORY "${_rbz}/include/generated"
                             "${_rbz}/cplusplus/include/generated")
-        # <template subdir>:<output dir>:<output suffix>
+        # <template subdir>|<output dir>|<output suffix> ("|", not ":", which
+        # a Windows drive letter carries)
         set(_rbz_sets
-            "c:${_rbz}/include/generated:h"
-            "cplusplus:${_rbz}/cplusplus/include/generated:hpp")
+            "c|${_rbz}/include/generated|h"
+            "cplusplus|${_rbz}/cplusplus/include/generated|hpp")
         foreach(_set IN LISTS _rbz_sets)
-            string(REPLACE ":" ";" _parts "${_set}")
+            string(REPLACE "|" ";" _parts "${_set}")
             list(GET _parts 0 _lang)
             list(GET _parts 1 _outdir)
             list(GET _parts 2 _ext)

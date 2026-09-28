@@ -118,7 +118,10 @@ def build(indexes, sounds: dict, out: Path, name: str) -> dict:
             missing.append(index); report.append(info); continue
         entries.append((index, len(pcm) // 2, info['driver_id'], pcm))
         report.append(dict(info, pcm_sha256=hashlib.sha256(pcm).hexdigest()))
-    directory = out / 'sounds'; directory.mkdir(exist_ok=True)
+    # A donor moveset (Tetsujin@Lee) shares out/ with the other donors, imported
+    # in parallel: its own listing and report, or they delete each other's files.
+    own = '@' + name.split('@', 1)[1] if '@' in name else ''
+    directory = out / f'sounds{own}'; directory.mkdir(exist_ok=True)
     for old in directory.glob('*.wav'): old.unlink()
     for index, frames, driver, pcm in entries:
         with wave.open(str(directory / f'{index:03d}-{index:#05x}-driver-{driver:#05x}.wav'), 'wb') as w:
@@ -133,5 +136,5 @@ def build(indexes, sounds: dict, out: Path, name: str) -> dict:
     result = dict(format_version=1, bytes=len(blob), sounds=len(entries), sha256=hashlib.sha256(blob).hexdigest(),
                   silent_or_missing=missing, truncated=[r['index'] for r in report if r.get('truncated')],
                   entries=report)
-    (out / 'sfx-report.json').write_text(json.dumps(result, indent=2) + '\n')
+    (out / f'sfx-report{own}.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
