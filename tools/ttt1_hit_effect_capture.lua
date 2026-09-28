@@ -35,7 +35,7 @@ steps[#steps + 1] = {t + 130, p2, "Right"}
 steps[#steps + 1] = {t + 170, p2, "Button 1"}
 local dump = t + 1300
 
-local frame = 0
+local frame = tonumber(os.getenv("TTT1_FRAME0") or "0")   -- apres -state : trame de la sauvegarde
 ttt1_hit_effect = emu.add_machine_frame_notifier(function()
     frame = frame + 1
     space:write_u32(UNLOCK, 0xffffffff)

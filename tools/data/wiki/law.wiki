@@ -1,0 +1,457 @@
+'''Forest Law/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Forest Law]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Dragon's Fire]]
+!1+3
+!Front
+!7,23
+!1
+|-
+![[Hopping Frog]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Headlock Kick]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Ball Breaker]]
+!1+3 (or 2+4)
+!Right
+!42
+!2
+|-
+![[Dragon Bites]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Run Up to Drop]]
+!f+2+3
+!Front
+!30
+!1
+|-
+![[Headlock Punch]]
+!d/f+1+2
+!Front
+!30
+!1+2
+|-
+![[Headlock Drop]]
+!d/f+1+2, 1, 2, 1+2
+!Front
+!35
+!
+|-
+![[Knee Lift (throw)|Knee Lift]]
+!f, f+3+4
+!Front
+!28
+!1
+|-
+![[Dragon's Fire|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!20
+!
+|-
+![[Parry (Law)|Parry]]
+!b+1+3 (or 2+4)
+!Parry
+!-
+!
+|-
+![[Low Parry (Forest Law)|Low Parry]]
+!d/b+1+3 (or 2+4)
+!Parry
+!-
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Machine Gun Arrow]]
+!1, 1, 1, 1, 1
+!5, 5, 5, 5, 5
+!High, high, high, high, high
+!
+|-
+![[Left Right Combo]]
+!1, 2
+!5, 12
+!High, high
+!
+|-
+![[Quick Rave War]]
+!2, 2
+!6, 10
+!High, high
+!
+|-
+![[Triple Head Kick]]
+!3, 3, 3
+!18, 10, 10
+!High, high, high
+!
+|-
+![[Mid Kick Combo]]
+!During Triple Head Kick, F+3
+!18, 10, 15
+!High, high, mid
+!
+|-
+![[High Kick to Somersault]]
+!3, 4
+!18, 21
+!High, mid
+!JG RC
+|-
+![[Shaolin Spin Kicks]]
+!4, 3, 4
+!16, 12, 12
+!High, high, high
+!
+|-
+![[Crescent Kick Combo]]
+!4, u+3
+!16, 30
+!High, mid
+!
+|-
+![[Somersault Flip|Backflip]]
+!3+4
+!10, 21
+!Mid
+!JG RC
+|-
+![[Back Flipper|Backflipper]]
+!3+4, 3 (or U+4, 3)
+!21, 21
+!Mid, mid
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Blackout]]
+!After Supercharger 1
+!10
+!High
+!
+|-
+![[Blackout Muggin']]
+!After Supercharger 1, 3
+!10, 7
+!High, low
+!
+|-
+![[Poison Arrow]]
+!f+[2~1]
+!40
+!Mid
+!DS
+|-
+![[Rave War Combo]]
+!F+2, 2, 2
+!6, 5, 10
+!High, mid, high
+!
+|-
+![[Dragon Hammer]]
+!f+1+2
+!23
+!Mid
+!GB BNc
+|-
+![[Mid Kick (Law)|Mid Kick]]
+!d/f+3
+!15
+!Mid
+!
+|-
+![[Step in Combo]]
+!D/F+3, 3, 3
+!18, 10, 16
+!Mid, low, high
+!
+|-
+![[Right Middle Kick to Somersault Kick]]
+!d/f+4, 3
+!15, 15
+!Mid, mid
+!
+|-
+![[Body Blow to Somersault]]
+!d+2, 3
+!10, 15
+!Mid, mid
+!
+|-
+![[Dragon Low Kick]]
+!d (or d/b)+3
+!17
+!Low
+!
+|-
+![[Triple Head Kick to Somersault Variation]]
+!d+3, 3, 3, 3, 4
+!18, 10, 15
+!Low, high, high, high, mid
+!
+|-
+![[Low Kick to Somersault]]
+!d+4, 3
+!10, 15
+!Low, mid
+!
+|-
+![[Frogman]]
+!d+3+4
+!25, 27
+!Mid
+!
+|-
+![[Elbow Spring Kick]]
+!d/b+2, 4
+!20, 20
+!Mid, mid
+!
+|-
+![[Dragon's Tail]]
+!d/b+4
+!25
+!Low
+!MS
+|-
+![[Charge Power Punch]]
+!d/b+1+2 (u, u to cancel)
+!100
+!!
+!
+|-
+![[Dragon Storm]]
+!b+1, 2, 1
+!12, 12, 15
+!High, mid, mid
+!JG
+|-
+![[Junkyard Kick]]
+!b+2, 3, 4
+!12, 8, 22
+!Mid, low, mid
+!JG
+|-
+![[Fake Step]]
+!b+1+2
+!-
+!-
+!
+|-
+![[Tricky Trap]]
+!After successfully completing Fake Step 1
+!12
+!High
+!OB
+|-
+![[Tricky Fist]]
+!After successfully completing Fake Step 2
+!12
+!High
+!SH
+|-
+![[Tricky Mid Kick]]
+!After successfully completing Fake Step 3
+!22
+!Mid
+!
+|-
+![[Tricky Low Kick]]
+!After successfully completing Fake Step 4
+!15
+!Low
+!
+|-
+![[Fake Step Blow]]
+!During Fake Step 1
+!43
+!Mid
+!
+|-
+![[Fake Step Uppercut]]
+!During Fake Step 2
+!32
+!Mid
+!JG
+|-
+![[Fake Step Low]]
+!During Fake Step 3
+!10
+!Low
+!
+|-
+![[Jumping Kick to Somersault]]
+!u/f (or u or u/b)+3, 4
+!25, 25
+!Mid, mid
+!JG RC
+|-
+![[Somersault Flip|Somersault Kick]]
+!U/F (or U or U/B)+4
+!22
+!Mid
+!JG RC
+|-
+![[Back Flipper|Backflipper]]
+!U/F (or U or U/B)+4, 3
+!21, 21
+!Mid, mid
+!
+|-
+![[Flash Jab]]
+!d, d/f, f+1
+!15
+!High
+!
+|-
+![[Running Side Kick]]
+!f, f, f+3
+!30
+!Mid
+!
+|-
+![[Dragon Uppercut (Law)|Dragon Uppercut]]
+!WS+2
+!32
+!Mid
+!
+|-
+![[Side Kick to Somersault]]
+!WS+3, 4
+!28, 25
+!High, mid
+!JG
+|-
+![[Front Kick Somersault Variation]]
+!WS+4, 3
+!12, 21
+!Mid, mid
+!JG RC
+|-
+![[Somersault]]
+!WS+U (or U/F or U/B)
+!-
+!-
+!
+|-
+![[Somersault Fake]]
+!WS+U (or U/F or U/B), N, 4
+!10
+!Mid
+!
+|-
+![[Double Impact (Law)|Double Impact]]
+!FC+3, 4
+!12, 21
+!Low, mid
+!JG RC
+|-
+![[Low Kick to Somersault]]
+!FC+4, 3
+!7, 21
+!Low, mid
+!JG RC
+|-
+![[High Somersault Kick|Catapult Kick]]
+!FC+U/F (or U or U/B)+4
+!21
+!Mid
+!JG RC
+|-
+![[Rainbow Kick]]
+!FC+U/F (or U or U/B)+3+4
+!30, 20
+!Mid, mid
+!
+|-
+![[Slide Kick]]
+!FC+d/f, d, d/f+3
+!17
+!Low
+!
+|-
+![[Dragon Judgement]]
+!SS+2, 1, 2, 1
+!10, 7, 10, 27
+!Mid, mid, mid, mid
+!
+|-
+![[Double Dragon (Law)|Double Dragon]]
+!SS+3+4
+!16, 22
+!Mid, high
+!
+|-
+![[Dragon Back Blow]]
+!Back to opponent 1 or 2
+!15
+!High
+!OB
+|}
+
+==10 hit combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Marshall and Forest Law)|d/f+1, 2, 2, 1, 3, 3, 3, 4, 3, 4]]
+!88
+!mhmhhLhhhm
+|-
+![[10 Hit Combo 2 (Marshall and Forest Law)|d/f+1, 2, 2, 1, 3, d+3, 3, N+4, 4, 4]]
+!106
+!mhmhhLmlLm
+|-
+![[10 Hit Combo 3 (Marshall and Forest Law)|d/f+1, 2, 2, 1, 3, d+3, 3, 3, 4, 4]]
+!97
+!mhmhhLmlLm
+|-
+![[10 Hit Combo 4 (Marshall and Forest Law)|d/f+1, 3, 2, 2, 3, 3, 3, 4, 3, 4]]
+!91
+!mlmhhLhhhm
+|-
+![[10 Hit Combo 5 (Marshall and Forest Law)|d/f+1, 3, 2, 2, 3, d+3, 3, N+4, 4, 4]]
+!109
+!mlmhhLmhlm
+|-
+![[10 Hit Combo 6 (Marshall and Forest Law)|d/f+1, 3, 2, 2, 3, d+3, 3, N+3, 4, 4]]
+!100
+!mlmhhLmlLm
+|}
+[[Category:Moves Lists]]
+[[Category:Forest Law Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

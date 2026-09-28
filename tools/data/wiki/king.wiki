@@ -1,0 +1,729 @@
+'''King II/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[King II]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Winding Nut]]
+!1+3
+!Front
+!35
+!1
+|-
+![[Suplex]]
+!2+4
+!Front
+!35
+!2
+|-
+![[Argentina Backbreaker]]
+!1+3 (or 2+4)
+!Left
+!20, 20
+!1
+|-
+![[Knee Crusher]]
+!1+3 (or 2+4)
+!Right
+!42
+!2
+|-
+![[Cobra Twist]]
+!2+4
+!Back
+!60
+!
+|-
+![[Half Boston Crab]]
+!1+3
+!Back
+!60
+!
+|-
+![[Stretch Buster]]
+!b, f+1+2
+!Back
+!75
+!
+|-
+![[Knee Bash]]
+!d/f+2+3
+!Front
+!30
+!2
+|-
+![[Figure Four Leg Lock]]
+!d/b+1+2
+!Front
+!32
+!1+2
+|-
+![[Tombstone Pile Driver|Tombstone Piledriver]]
+!d/b, f+2
+!Front
+!58
+!2
+|-
+![[Pile Driver]]
+!d, d/f, f+1
+!Front
+!25
+!1
+|-
+![[Double Arm Face Buster]]
+!During Pile Driver 1+2
+!Front
+!30
+!3+4
+|-
+![[Boston Crab]]
+!During Pile Driver 1+2, 3, 4, 1+2
+!Front
+!25
+!3+4
+|-
+![[Muscle Buster]]
+!d, d/b, b+1+2
+!Front
+!50
+!1+2
+|-
+![[Giant Swing]]
+!f, b, d/b, d, d/f, f+1
+!Front
+!35, 35
+!1
+|-
+![[Falling Headlock]]
+!FC+d/b, d, d/b+1+2
+!Front
+!55
+!1+2
+|-
+![[Ultimate Tackle]]
+!FC+1+2
+!Front
+!5
+!1+2 or 2
+|-
+![[Ultimate Punch]]
+!During Tackle 2, 1, 2, 1, 2
+!Front
+!5, 5, 5, 5, 5
+!1 or 2
+|-
+![[Cross Arm Lock]]
+!During Tackle 1+2
+!Front
+!25
+!1+2
+|-
+![[Arm Twist]]
+!During Cross Arm Lock 1+2
+!Front
+!10
+!
+|-
+![[Leg Cross Hold]]
+!During Tackle 3+4
+!Front
+!20
+!1+2
+|-
+![[Stretch Combo]]
+!During Leg Cross Hold 1+2 Hold
+!Front
+!20, 20
+!1+2
+|-
+![[Jumping Powerbomb|Jumping Power Bomb]]
+!(Crouching opponent) d+1+3 (or 2+4)
+!Front
+!45
+!1
+|-
+![[Leg Screw|Leg Screw or Double Heel Hold]]
+!Synchro with opponent's kick b+1+3 (or 2+4)
+!Parry
+!40
+!
+|-
+![[Low Parry (King)|Low Parry]]
+!d/b+1+4 (or 2+3)
+!Parry
+!-
+!
+|-
+![[Suplex|Reverse Throw]]
+!Back to opponent 2+4
+!Front
+!20
+!
+|}
+
+===Ground Catch===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Swing Away]]
+!(Opponent on the back) feet side d/b+1+3
+!Front
+!30
+!1 or 2
+|-
+![[Head Bomber]]
+!(Opponent on the back) feet side d/b+2+4
+!Front
+!33
+!1
+|-
+![[Figure Four Leg Lock]]
+!(Opponent on the back) feet side d/b+2+4
+!Front
+!33
+!2
+|-
+![[Shoulder Cracker]]
+!(Opponent on the back) head side d/b+1+3 (or 2+4)
+!Front
+!28
+!1 or 2
+|-
+![[Turn Over]]
+!(Opponent on the back) on the opponent's side d/b+1+3 (or 2+4)
+!Front
+!0
+!1 or 2
+|-
+![[Half Boston Crab]]
+!(Opponent facing the ground) side feet d/b+1+3 (or 2+4)
+!Front
+!60
+!1 or 2
+|-
+![[Wing Tearer]]
+!(Opponent facing the ground) head side d/b+1+3 (or 2+4)
+!Front
+!32
+!1 or 2
+|-
+![[Camel Clutch (King)|Camel Clutch]]
+!(Opponent facing the ground) from the left d/b+1+3 (or 2+4)
+!Front
+!35
+!1 or 2
+|-
+![[Bow & Arrow Stretch Hold]]
+!(Opponent facing down) from the right d/b+1+3 (or 2+4)
+!Front
+!37
+!1 or 2
+|}
+
+===Throws during [[Throw Away]]===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Throw Away]]
+!b+1+2
+!Front
+!0
+!1+2
+|-
+![[Throw Away Feint]]
+!b+1+2, 1+3
+!Front
+!0, 0
+!1
+|-
+![[Throw Away Knockdown]]
+!b+1+2, 2+4
+!Front
+!0, 8
+!2
+|-
+![[Throw and Destroy]]
+!b+1+2, 3+4
+!Front
+!0, 10
+!3+4
+|-
+![[Turn Around]]
+!b+1+2, 1+2
+!Front
+!0, 0
+!1+2
+|}
+
+===[[Standing Heel Hold Combo]]===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Standing Heel Hold (King)|Standing Heel Hold]]
+!f, N, d, d/f+2+3
+!Front
+!30
+!2
+|-
+![[Indian Death Lock]]
+!During Stanfing Heel Hold 1+2, 1, 3, 1+2
+!Front
+!30
+!1+2
+|-
+![[King's Bridge]]
+!During Indian Death Lock 1, 3, 4, 1+2, 3+4
+!Front
+!50
+!
+|-
+![[S.T.F.|S•T•F•]]
+!During Stanfing Heel Hold 1, 2, 3, 1+2
+!Front
+!35
+!1
+|-
+![[Scorpion Death Lock|Scorpion Deathlock]]
+!During Stanfing Heel Hold 1+2, 3, 1, 1+3
+!Front
+!40
+!2
+|}
+
+===[[Arm Breaker Combo]]===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Arm Breaker]]
+!f, N, d, d/f+1+4
+!Front
+!20
+!1
+|-
+![[Triple Arm Breaker]]
+!During Arm Breaker 1+2, 1+2
+!Front
+!25
+!1
+|-
+![[Head Jammer]]
+!During Arm Breaker 1+2, 4, 2+4
+!Front
+!20
+!2
+|-
+![[Struggle Combination]]
+!During Head Jammer 4, 3, 4, 3+4, 1+2
+!Front
+!25
+!
+|-
+![[Chicken Wing Face Lock|Chicken Face Wing Lock]]
+!During Arm Breaker 2, 1, 1+2+3
+!Front
+!25
+!1+2
+|-
+![[Dragon Sleeper Finish]]
+!During Chicken Wing Face Lock 2, 1, 3, 1+2+4, 1+2+4
+!Front
+!30
+!1
+|-
+![[Rolling Death Cradle]]
+!During Chicken Wing Face Lock 1+3, 3+4, 2+4, 1+2, 1+2+3
+!Front
+!75
+!2
+|}
+
+===[[Reverse Arm Slam Combo]]===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Reverse Arm Slam]]
+!f, d/f+1+3 (or 2+4)
+!Front
+!25
+!1 or 2
+|-
+![[Backdrop (King)|Backdrop]]
+!During Reverse Arm Slam 2, 1, 1+2
+!Front
+!18
+!1
+|-
+![[German Suplex]]
+!During Backdrop 3+4, 1+2
+!Front
+!18
+!1
+|-
+![[Power Bomb]]
+!During German Suplex 1, 2, 3+4
+!Front
+!22
+!
+|-
+![[Giant Swing]]
+!During Powe Bomb 2, 1, 3, 4
+!Front
+!27
+!1
+|-
+![[Muscle Buster]]
+!During Power Bomb 3, 1, 2, 3+4, 1+2+3+4
+!Front
+!35
+!2
+|}
+
+===[[Reverse Special Stretch Bomb Combo]]===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Reverse Special Stretch Bomb]]
+!f, d/f+1+2
+!Front
+!28
+!1+2
+|-
+![[Reverse Special Stretch Bomb]]
+!FC+d/f, d/f+2+4
+!Front
+!28
+!1 or 2
+|-
+![[Reverse Special Stretch Bomb]]
+!SS+2+4
+!Front
+!28
+!1+2
+|-
+![[Cannonball Buster]]
+!During Reverse Special Stretch Bomb 2, 2, 1+2
+!Front
+!18
+!
+|-
+![[Manhattan Drop]]
+!During Cannonball Buster 3+4, 1+2, 1+2+4
+!Front
+!17
+!2
+|-
+![[Victory Bomb]]
+!During Manhattan Drop 1, 2, 3+4, 1+2
+!Front
+!20
+!
+|-
+![[Giant Swing]]
+!During Victory Bomb 2, 1, 3, 4
+!Front
+!27
+!1
+|-
+![[Muscle Buster]]
+!During Victory Bomb 3, 1, 2, 3+4, 1+2+3+4
+!Front
+!35
+!2
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Palm Attack]]
+!1, 2
+!6, 15
+!High, high
+!
+|-
+![[Palm Attack to Uppercut]]
+!1, 2, 1
+!6, 15, 10
+!High, high, mid
+!
+|-
+![[Jab Uppercut]]
+!2, 1
+!10, 12
+!High, mid
+!
+|-
+![[Head Spinner (King)|Head Spinner]]
+!1+2, 1
+!15, 21
+!Mid, mid
+!
+|-
+![[Exploder]]
+!3+4
+!25
+!Mid
+!GB
+|-
+![[Moonsault Body Press]]
+!1+4
+!25
+!!
+!KND
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Rolling Sobat]]
+!f+4
+!23
+!Mid
+!
+|-
+![[Jaguar Lariat]]
+!f+1+2
+!50
+!!
+!KND
+|-
+![[Shoulder Tackle (King)|Shoulder Tackle]]
+!f+2+3
+!40
+!Mid
+!GB
+|-
+![[Elbow Sting]]
+!d/f+1, 2
+!15, 12
+!Mid, mid
+!
+|-
+![[Low Kick (King)|Low Kick]]
+!d/f+4
+!15
+!Low
+!
+|-
+![[Frankensteiner]]
+!d/f+3+4
+!15
+!Mid
+!
+|-
+![[Jab Uppercut (d+1)|Jab Uppercut]]
+!d+1, N, 2
+!5, 15
+!Mid, mid
+!
+|-
+![[Elbow Drop]]
+!d+1+2
+!25
+!Mid
+!
+|-
+![[Stagger Kick]]
+!d+3+4, 4, 4
+!17, 7, 7
+!Low, low, low
+!
+|-
+![[Stagger Kick|Stagger Kicks]]
+!During Counterattack d+3+4, 4, 4, 4
+!17, 7, 5, 4, 3
+!Low, low, low, low, low
+!
+|-
+![[Stagger Kick Spinning Uppercut]]
+!During Stagger Kick 2
+!17, 7, 7, 10
+!Low, low, low, mid
+!
+|-
+![[Disgraceful Kick]]
+!b+4
+!20
+!High
+!BT
+|-
+![[Capital Punishment]]
+!u/f+1+2
+!35
+!Mid
+!GB
+|-
+![[High Elbow Drop]]
+!u/f (or u or u/b)+2+4
+!35
+!Mid
+!
+|-
+![[Stomach Smash]]
+!f,f,N,2
+!6
+!Low
+!DSc
+|-
+![[Hi-Jack Back Breaker|Hi-Jack Backbreaker]]
+!During Counterattack 1+2
+!6, 30
+!Low
+!
+|-
+![[Jaguar Driver]]
+!During Counterattack 1+2, u, d, N, 3+4
+!6, 60
+!Low
+!
+|-
+![[Flying Cross Chop (King)|Flying Cross Chop]]
+!f, f, N, 1+2
+!15
+!High
+!GB
+|-
+![[K's Flicker]]
+!f, f+2
+!20
+!Mid
+!JGc
+|-
+![[Konvict Kick]]
+!f, f+4
+!26
+!Mid
+!
+|-
+![[Lay Off]]
+!f, f+1+2
+!-
+!-
+!
+|-
+![[Diving Body Press]]
+!f, f+2+3
+!30
+!Mid
+!
+|-
+![[Black Bomb]]
+!f, N, d, d/f+1+2
+!28
+!Mid
+!BNc
+|-
+![[Running Exploder]]
+!f, f, f+3+4
+!40
+!Mid
+!GB
+|-
+![[K's Flicker]]
+!WS+2
+!20
+!Mid
+!JGc
+|-
+![[Leg Breaker]]
+!FC+d/f+1
+!21
+!Low
+!RC
+|-
+![[Crouching Uppercut (King)|Crouching Uppercut]]
+!FC+D/F+2
+!20
+!Mid
+!JG
+|-
+![[Knockout Punch]]
+!SS+2
+!30
+!High
+!FSc
+|-
+![[Deadly Boomerang]]
+!SS+3+4
+!54
+!High
+!GB
+|-
+![[Blind Kick]]
+!Back to opponent 3
+!25
+!Mid
+!CSc MS
+|-
+![[Atomic Blaster]]
+!Back to opponent 1+2
+!50
+!!
+!
+|}
+
+==10 Hit Combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (King)|1, 2, 1, 1, 2, 4, 4, 4, 1, 3]]
+!95
+!hhmmhlllmm
+|-
+![[10 Hit Combo 2 (King)|1, 2, 1, 1, 2, 4, 4, 4, 1, 1]]
+!93
+!hhmmhmllmm
+|-
+![[10 Hit Combo 3 (King)|1, 2, 1, 1, 3, 3, 4, 4, 1, 3]]
+!100
+!hhmmhmllmh
+|-
+![[10 Hit Combo 4 (King)|1, 2, 1, 1, 3, 3, 4, 4, 1, 1]]
+!93
+!hhmmhmllmm
+|-
+![[10 Hit Combo 5 (King)|1, 2, 1, 1, 3, 3, 4, 3, 2, 1+2]]
+!101
+!hhmmhmlllthrow
+|}
+[[Category:Moves Lists]]
+[[Category:King Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

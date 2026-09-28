@@ -17,7 +17,7 @@ local space = machine.devices[":maincpu"].spaces["program"]
 local port = machine.ioport.ports[":JVS_PLAYER1"]
 local UNLOCK, KEY = 0x2fe4fc, 0x29ef00
 local index = tonumber(os.getenv("TTT1_INDEX") or "")   -- avec MAME -debug -debugger none
-local frame, n, portrait = 0, 0, nil
+local frame, n, portrait = tonumber(os.getenv("TTT1_FRAME0") or "0"), 0, nil   -- apres -state : trame de la sauvegarde
 local gp0, pending = {}, nil
 local index = assert(io.open("ui-uploads.csv", "w"))
 index:write("n,frame,x,y,w,h,file\n")

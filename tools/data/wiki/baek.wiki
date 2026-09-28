@@ -1,0 +1,435 @@
+'''Baek Doo San/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Baek Doo San]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Hammerhead Throw]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Blue Shark Claw]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Snake Revenge]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Hunting Serpent]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Reverse Neck Throw|Starfish Throw]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Roll and Choke]]
+!f, f+2
+!Front
+!30
+!2
+|-
+![[Human Cannonball]]
+!f+2+3
+!Front
+!30
+!1+2
+|-
+![[Leg Hook Throw|Swordfish Throw]]
+!d/b+1+3
+!Front
+!30
+!1+2
+|-
+![[Hammerhead Throw|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!30
+!
+|-
+![[Parry (Baek Doo San)|Parry]]
+!Synchro with the opponent's punch b+1+2
+!Parry
+!-
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Double Jab (Baek Doo San)|Double Jab]]
+!1, 1
+!5, 8
+!High, high
+!
+|-
+![[Left Right Combo|One Two Combo]]
+!1, 2
+!5, 10
+!High, high
+!
+|-
+![[One Two Flamingo Step]]
+!1, 2, 3, f (or b)
+!5, 10, 15
+!High, high
+!
+|-
+![[One Two Butterfly Kicks]]
+!1, 2, 3, 3, 3, 4
+!5, 10, 15, 12, 12, 25
+!High, high, high, high, mid, high
+!CS
+|-
+![[One Two Butterfly Needle]]
+!1, 2, 3, 3, 3, d+4
+!5, 10, 15, 12, 12, 10
+!High, high, high, high, mid, low
+!MS RC
+|-
+![[One Two Black Widow]]
+!1, 2, 3, 3, 4, 4, 3
+!5, 10, 15, 12, 15, 18, 10
+!High, high, high, high, high, mid, mid
+!FSc
+|-
+![[One Two Silver Mantis]]
+!1, 2, 3, 3, 4, 4, 4, 3
+!5, 10, 15, 12, 15, 18, 15, 15
+!High, high, high, high, high, mid, high, high
+!JG CSc GB
+|-
+![[One Two Butterfly Blade]]
+!1, 2, 3, 4, 3
+!5, 10, 15, 18, 15
+!High, high, high, low, mid
+!
+|-
+![[Demon Backhand Spin|Right Punch Back Fist]]
+!2, 2
+!12, 21
+!High, high
+!
+|-
+![[Butterfly Kicks]]
+!3, 3, 3, 4
+!25, 12, 12, 25
+!High, high, mid, high
+!CS
+|-
+![[Butterfly Kicks to Low Kick]]
+!3, 3, 3, d+4
+!25, 12, 12, 10
+!High, high, mid, low
+!MS RC
+|-
+![[Black Widow]]
+!3, 3, 4, 4, 3
+!25, 12, 15, 18, 10
+!High, high, high, mid, mid
+!FSc
+|-
+![[Baek's Special]]
+!3, 3, 4, 4, 4, 3
+!25, 12, 15, 18, 15, 15
+!High, high, high, mid, high
+!JG GB CSc
+|-
+![[High to Low Kick]]
+!3, 4
+!15, 8
+!High, low
+!
+|-
+![[Launching Rocket]]
+!3, 4, 3
+!15, 8, 25
+!High, low, mid
+!JG
+|-
+![[Double High Kick]]
+!4, 3, 4
+!25, 20, 8
+!High, high, low
+!
+|-
+![[Falling Axe]]
+!4, 4
+!15, 18
+!High, mid
+!SHc
+|-
+![[Lightning Halberd]]
+!3+4
+!12, 12
+!High, high
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Uraken|Back Fist]]
+!f+2
+!12
+!High
+!
+|-
+![[Heel Drop to Middle Kick]]
+!f+4, 3
+!22, 10
+!Mid, mid
+!FSc
+|-
+![[Triple Threat]]
+!f+4, 4, 3
+!22, 15, 15
+!Mid, high, high
+!JG GB
+|-
+![[Snake Rocket]]
+!d+3, 3, 3
+!12, 7, 15
+!Low, low, mid
+!JG
+|-
+![[Snake Kick]]
+!d+3, 3, d+3
+!12, 7, 7
+!Low, low, low
+!RC
+|-
+![[Baek's Rush]]
+!d+4, 3, 3, 3
+!7, 10, 15, 25
+!Low, mid, mid, mid
+!
+|-
+![[Baek's Rush Low]]
+!d+4, 3, 3, d+3
+!7, 10, 15, 15
+!Low, mid, mid, low
+!
+|-
+![[Heel Axe]]
+!d/b+4
+!17
+!Mid
+!GB 
+|-
+![[Dynamite Heel]]
+!d/b+3+4 (b, b cancel)
+!40
+!!
+!
+|-
+![[Stealth Needle]]
+!b+1
+!17
+!Mid
+!MSc
+|-
+![[Bolt Cut]]
+!b+2
+!15
+!High
+!KNDc
+|-
+![[Flamingo]]
+!b+3
+!-
+!-
+!
+|-
+![[Heel Cutter]]
+!During Flamingo 3
+!21
+!Mid
+!
+|-
+![[Flamingo to High Low Kick]]
+!During Flamingo 3, 3, 4
+!15, 15, 10
+!Mid, mid, low
+!MS
+|-
+![[Flamingo Eliminator]]
+!During Flamingo 3, 4, 4, 3
+!15, 10, 18, 10
+!Mid, high, mid, mid
+!
+|-
+![[Flamingo Hurricane]]
+!During Flamingo 3, 4, 4, 4, 3
+!15, 10, 18, 15, 15
+!Mid, high, mid, high, high
+!JG GB
+|-
+![[Flamingo Pick]]
+!During Flamingo d+3
+!7
+!Low
+!
+|-
+![[Head Crusher]]
+!During Flamingo b+3
+!21
+!Mid
+!
+|-
+![[Heel Lance]]
+!b+4
+!14
+!Mid
+!SH
+|-
+![[Bone Stinger]]
+!u/f+2
+!22
+!High
+!KSc GB
+|-
+![[Hunting Hawk]]
+!u/f+3, 4, 3
+!15, 14, 25
+!Mid, mid, high
+!
+|-
+![[Trick Butterfly Kicks]]
+!u/f, N, 3, 3, 3, 4
+!25, 12, 12, 25
+!Mid, high, mid, high
+!CS
+|-
+![[Trick Butterfly Needle]]
+!u/f, N, 3, 3, 3, d+4
+!25, 12, 12, 10
+!Mid, high, mid, low
+!MS RC
+|-
+![[Trick Black Widow]]
+!u/f, N, 3, 3, 4, 4, 3
+!25, 12, 15, 18, 10
+!Mid, high, high, mid, mid
+!FSc
+|-
+![[Hopping Double Kick]]
+!u/f, N, 3, 4
+!25, 20
+!Mid, high
+!
+|-
+![[Hopping Kick to Low Kick]]
+!u/f, N, 3, d+4
+!25, 8
+!Mid, low
+!
+|-
+![[Rocket Lifter]]
+!u/f, N, 3, d+4, 3
+!25, 8, 25
+!Mid, low, mid
+!JG
+|-
+![[Hammer Heel]]
+!f, f+4
+!15
+!Mid
+!
+|-
+![[Rocket Shooter]]
+!f, N, d, d/f+3
+!25
+!Mid
+!JG
+|-
+![[Leaping Sidekick|Killing Blade]]
+!f, f, f+3
+!23
+!Mid
+!JG
+|-
+![[Double High to Low Kick]]
+!WS+3, 3, 4
+!12, 10, 10
+!High, mid, low
+!MS RC
+|-
+![[Eliminator]]
+!WS+3, 4, 4, 3
+!12, 15, 18, 10
+!High, high, mid, mid
+!FSc
+|-
+![[Hurricane Eliminator]]
+!WS+3, 4, 4, 4, 3
+!12, 15, 18, 15, 15
+!High, high, mid, high, high
+!JG GB CSc
+|-
+![[Albatross]]
+!WS+4, 4, 3
+!13, 16, 10
+!Mid, mid, mid
+!FSc
+|-
+![[Triple Kick Combo (Baek)|Triple Kick Combo]]
+!WS+4, 4, 4, 3
+!13, 16, 15, 15
+!Mid, mid, mid, mid
+!JG GB
+|-
+![[Race Hammer]]
+!SS+1
+!8
+!Mid
+!
+|-
+![[Reverse Middle Kick]]
+!Back to opponent 4
+!15
+!Mid
+!
+|}
+
+==10 Hit Combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Baek)|4, 3, 4, 3, 3, 3, 3, 3, 4, 3]]
+!92
+!hhlmmmhmlm
+|-
+![[10 Hit Combo 2 (Baek)|4, 3, 3, 4, 3, 3, 3, 4, 3, 3]]
+!106
+!hhhlmmmlm[!]
+|}
+[[Category:Moves Lists]]
+[[Category:Baek Doo San Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

@@ -1,0 +1,233 @@
+'''Devil/Tekken Tag Tournament Movelist''' is a list of all the moves that [[Devil]]/[[Angel]] can perform in [[Tekken Tag Tournament]].
+
+==Throws==
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+|[[Double Face Kick]]
+|1+3
+|Front
+|30
+|1
+|-
+|[[Hip Throw]]
+|2+4
+|Front
+|28
+|2
+|-
+|[[Steel Pedal Drop]]
+|1+3 or 2+4
+|Left
+|40
+|1
+|-
+|[[Skull Smash]]
+|1+3 or 2+4
+| Right
+|40
+|2
+|-
+|[[Atomic Drop]]
+|1+3 or 2+4
+|Behind
+|60
+|
+|-
+|[[Double Face Kick|Reverse Throw]]
+|Back to the opponent 1+3 or 2+4
+|Any
+|Depends on Type
+|1 or 2
+|-
+|[[Stonehead]]
+|f, F+1+2
+|Front
+|33
+|1+2
+|}
+==Moves==
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+|[[Left Right Combo|One Two Punch]]
+|1, 2
+|5, 10
+|High, high
+|
+|-
+|[[Demon Slayer (Mishima)|Demon Slayer]]
+|1, 2, 2
+|5, 10, 18
+|High, high, high
+|
+|-
+|[[Demon Backhand Spin]]
+|2, 2
+|12, 21
+|High, high
+|
+|-
+|[[Flash Punch Combo]]
+|1, 1, 2
+|5, 8, 18
+|High, high, mid
+|
+|-
+|[[Uraken]]
+|f+2
+|12
+|High
+|
+|-
+|[[Right Splits Kick]]
+|f+4
+|27
+|Mid
+|KNDc
+|-
+|[[Twin Pistons (Kazuya)|Twin Pistons]]
+|d/f+1, 2 [~5]
+|18, 15
+|Mid, mid
+|JG
+|-
+|[[Rising Sun]]
+|u/f+4, 4
+|25, 15
+|Mid, low
+|KND
+|-
+|[[Demon Scissors]]
+|4~3
+|25
+|Mid
+|KND
+|-
+|[[Inferno (move)|Inferno]]
+|1+2
+|40
+|(!)
+|CF
+|-
+|[[Devil Blaster]]
+|3+4
+|50
+|[!]
+|CF
+|-
+|[[Reverse Devil Blaster]]
+|3+4, 3+4
+|50
+|[!]
+|CF
+|-
+|[[Air Inferno]]
+|u+1+2
+|16
+|(!)
+|#3
+|-
+|[[Devil Twister]]
+|SS+ 2 ~5
+|30
+|Mid
+|JG
+|-
+|[[Devil Fist]]
+|f, F+2
+|30
+|Mid
+|#1
+|-
+|[[Left Splits Kick]]
+|f, F+3
+|23
+|Mid
+|KND
+|-
+|[[Rising Uppercut]]
+|f, N, d, d/f+2 ~5
+|25
+|Special Mid
+|JG
+|-
+|[[Spinning Demon]]
+|f, N, d, d/f+4, 4
+|15, 9
+|Low, low
+|KND,BS
+|-
+|[[Dragon Uppercut (Mishima)|Dragon Uppercut]]
+|f, N, d, d/f+1
+|24
+|Mid
+|KND
+|-
+|[[Dragon Uppercut to Middle Kick]]
+|f, N, d, d/f+1, 3
+|24, 20
+|Mid, mid
+|KND
+|-
+|[[Dragon Uppercut to Spinning Low Kick]]
+|f, N, d, d/f+1, 4
+|24, 12
+|Mid, low
+|KND
+|-
+|[[Heaven's Door]]
+|f, N, d, d/f+1, U/F
+|24, 15
+|Mid
+|#2
+|-
+|[[Tsunami Kick]]
+|WS+4, 4
+|13, 18
+|Mid, mid
+|
+|-
+|[[Leaping Sidekick|Leaping Side Kick]]
+|f, f, f+3
+|30
+|Mid
+|GB,KND
+|-
+|[[Supercharger]]
+|1+2+3+4
+| -
+| -
+|
+|}
+
+#''If this move connects, Devil/Angel will shoot straight "through" the opponent so that he is standing behind the opponent with their back turned. This move does nothing if blocked, and it also does nothing if it connects with an opponent that is not on his/her feet.''
+#''The first hit must connect for this move to work; otherwise the user will only perform "Dragon Uppercut"''
+#''This move can only connect when an opponent is in the air for whatever reason. In some cases, it can work if the opponent's feet are just barely off of the ground - as with heavier opponents''
+
+==String Hits==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+|[[Mishima Style 10 Hit Combo|f, f, N, 2, 1, 2, 2, 3, 4, 4, 1, 2, 1]]
+|93
+|hhhhmmlhmm
+|}
+==See Also==
+
+*[[Angel]]
+*[[Devil]]
+
+[[Category:Moves Lists]]
+[[Category:Devil/Angel Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]
