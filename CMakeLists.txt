@@ -164,8 +164,7 @@ tekken3_wrap_symbol(func_80028CD4)
 # Sounds that must not speed up with the load that follows them (same file).
 tekken3_wrap_symbol(func_800753BC)
 set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages/tekken3.enhancement.true-widescreen/1.0.0/manifest.toml"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages/tekken3.enhancement.true-widescreen/1.0.0/README.md")
+    "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages/tekken3.enhancement.true-widescreen/1.0.0/manifest.toml")
 
 # TTT1 characters. The code needs no game data to build; the characters come
 # from the user's own ROM (tools/ttt1_import.py, tools/ttt1_stage_roster.py)
