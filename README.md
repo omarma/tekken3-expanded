@@ -67,8 +67,6 @@ The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 **Platforms:** macOS on Intel and Apple Silicon (tested on macOS 15 and 26). Windows: **not tested yet**; the setup is there, reports are welcome.
 
-Plan about **1 hour** for the first setup with the TTT1 characters (the setup runs your arcade ROM in MAME to extract them), and about 10 GB of free space.
-
 ## Install on macOS
 
 1. Install the tools with [Homebrew](https://brew.sh):
