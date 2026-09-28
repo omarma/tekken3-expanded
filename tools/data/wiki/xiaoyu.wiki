@@ -1,0 +1,651 @@
+'''Ling Xiaoyu/Tekken Tag Tournament Movelist''' is a list of moves [[Ling Xiaoyu]] is able to perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Jade]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Ruby (Xiaoyu)|Ruby]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Arm Flip]]
+!1+3 (or 2+4)
+!Left
+!45
+!1
+|-
+![[Dump the Bucket]]
+!1+3 (or 2+4)
+!Right
+!38
+!2
+|-
+![[Crank Up]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Dislocator]]
+!d, d/b, b+2
+!Front
+!35
+!2
+|-
+![[So Shoe Me]]
+!f+[2~1]
+!Front
+!4
+!1+2
+|-
+![[Cradle Throw]]
+!During Phoenix 1+3 (or 2+4)
+!Front
+!Varies
+!
+|-
+![[Bei Shen Zhuan Wu|Reverse Throw A]]
+!Back to the opponent, 1+3 (or 2+4)
+!Front
+!Varies
+!
+|-
+![[Bei Shen Zhuan Wu|Reverse Throw B]]
+!Back to opponent f, f+1+3 (or 2+4)
+!Front
+!Varies
+!
+|-
+![[Low Parry (Xiaoyu)|Low Parry]]
+!d/b+1+4
+!Parry
+!-
+!
+|-
+![[High Mid Parry|Parry]]
+!Synchro with opponent's attack, 1+4
+!Parry
+!-
+!
+|-
+![[Rain Dance to High Mid Parry|Rain Dance to Parry]]
+!Back to opponent 1+4
+!Parry
+!-
+!
+|-
+![[Low Parry (Xiaoyu)|Rain Dance to Low Parry]]
+!Back to opponent d+1+4
+!Parry
+!-
+!
+|-
+
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Bayonet]]
+!1, 2
+!4, 7
+!High, high
+!
+|-
+![[Bayonet McTwist]]
+!1, d+2
+!4, 10
+!High, mid
+!
+|-
+![[April Showers]]
+!2, 1
+!8, 10
+!High, mid
+!
+|-
+![[May Flowers]]
+!2, d/f+1
+!8, 10
+!High, mid
+!
+|-
+![[Birds Flock]]
+!1+2
+!24
+!Mid
+!CF KNDc
+|-
+![[Spinner|Left Spinner]]
+!3+4
+!-
+!-
+!
+|-
+![[Spinner|Right Spinner]]
+!d+3+4
+!-
+!-
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Cloud Kick]]
+!f+3
+!25
+!High
+!
+|-
+![[Cartwheel Left]]
+!f+1+2
+!-
+!-
+!
+|-
+![[Dive Roll Right]]
+!f+3+4
+!-
+!-
+!
+|-
+![[Belly Chop Backward]]
+!d/f+1
+!10
+!Mid
+!
+|-
+![[Belly Chop]]
+!D/F+1
+!10
+!Mid
+!
+|-
+![[Butter the Bread]]
+!d/f+2
+!15
+!Mid
+!SH
+|-
+![[Cross Lifting Palms]]
+!d/f+[2~1]
+!15, 12
+!Mid, mid
+!JG
+|-
+![[Right Front Kick]]
+!d/f+4
+!11
+!Mid
+!
+|-
+![[Sunset Fan]]
+!d+1
+!7, 7, 7
+!Mid, mid, mid
+!RC
+|-
+![[Flapping Wings]]
+!D+1
+!7, 7, 7
+!Mid, mid, mid
+!
+|-
+![[Storming Flower]]
+!d/b+1
+!25
+!Mid
+!
+|-
+![[Knee Cracker]]
+!d/b+3
+!0
+!Low
+!GB
+|-
+![[Nutcracker]]
+!d/b+4
+!10
+!Low
+!KS SLDc
+|-
+![[Great Wall Left|Great Wall-Left]]
+!B+1
+!10
+!Mid
+!
+|-
+![[Great Wall Right|Great Wall-Right]]
+!B+2
+!10
+!Mid
+!
+|-
+![[Phoenix Twin Kick]]
+!b+4
+!13, 15
+!High, high
+!
+|-
+![[Hypnotist]]
+!b+1+2
+!-
+!-
+!
+|-
+![[Spin Sticker]]
+!During Hypnotist 2
+!25
+!Mid
+!
+|-
+![[Thunder Strike (Xiaoyu)|Thunder Strike]]
+!During Hypnotist 1+2
+!40
+!!
+!
+|-
+![[Single Fan]]
+!u+1
+!5
+!Mid
+!
+|-
+![[Single Fan Forward]]
+!U+1
+!5
+!Mid
+!
+|-
+![[Double Fan|Double Fan Forward]]
+!u+1+2
+!5, 8
+!Mid, mid
+!RC GB
+|-
+![[Hydrangea]]
+!u+1+2, 2
+!5, 8, 12
+!Mid, mid, mid
+!
+|-
+![[Fortune Cookie]]
+!u+1+2, 2, 1
+!5, 8, 12, 25
+!Mid, mid, mid, mid
+!
+|-
+![[Ginger Snap]]
+!u+1+2, 3+4
+!5, 8
+!Mid, mid
+!
+|-
+![[Cyanide]]
+!u/f (or u) +4
+!25
+!Mid
+!JGc
+|-
+![[Raccoon Swing]]
+!f, f+3
+!13
+!Mid
+!
+|-
+![[Step Kick (Xiaoyu)|Step Kick]]
+!f, f+4
+!25
+!Mid
+!
+|-
+![[X Marks the Spot]]
+!f, f+1+2, 1+2
+!12, 27
+!Mid, mid
+!BNc GB
+|-
+![[Front Layout]]
+!f, f+3+4
+!25
+!Mid
+!
+|-
+![[Sunflower]]
+!WS+2
+!12
+!Mid
+!JGc
+|-
+![[Sunflower Wake Up Call]]
+!WS+2, f
+!12
+!Mid
+!JGc
+|-
+![[Skyscraper Kick]]
+!WS+4
+!14
+!Mid
+!
+|-
+![[Fire Dancer]]
+!FC+3, 2, 1, 4
+!8, 6, 6, 12
+!Low, high, high, mid
+!JG
+|-
+![[Lotus Twist]]
+!FC+d/f+2, 1
+!10, 15
+!Mid, mid
+!RC
+|-
+![[Quick Shady Lotus]]
+!FC+d/f+2, D/F
+!10
+!Low
+!
+|-
+![[Double Map Sweep]]
+!FC+d/f+4, 4
+!6, 10
+!Low, low
+!RC
+|-
+![[Low Back Turn]]
+!FC+d/b+3+4
+!-
+!-
+!
+|-
+![[Rain Dance]]
+!b+3+4
+!-
+!-
+!
+|-
+![[Phoenix]]
+!d+1+2
+!-
+!-
+!
+|-
+![[False Salute]]
+!1+3+4
+!-
+!-
+!
+|-
+![[Greetings]]
+!2+3+4
+!-
+!-
+!
+|-
+|}
+
+===During [[Phoenix]]===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Phoenix]]
+!d+1+2
+!-
+!-
+!
+|-
+![[Wave Crest Quick]]
+!d+1+2~1+2
+!14
+!Mid
+!JG
+|-
+![[Left Handful]]
+!During Phoenix 1
+!7
+!Mid
+!RC
+|-
+![[Right Handful]]
+!During Phoenix 2
+!12
+!Mid
+!
+|-
+![[Knee Stabber]]
+!During Phoenix 3
+!15
+!Low
+!
+|-
+![[Back Kick]]
+!During Phoenix 4
+!23
+!Mid
+!
+|-
+![[Back Kick to Rain Dance]]
+!During Phoenix 4, b
+!23
+!Mid
+!
+|-
+![[Firecracker (Xiaoyu)|Firecracker]]
+!During Phoenix [4~3]
+!15
+!Low
+!
+|-
+![[Firecracker Roll]]
+!During Phoenix [4~3], u (or d)
+!-
+!-
+!
+|-
+![[Wave Crest Power]]
+!During Phoenix 1+2
+!16
+!Mid
+!JG
+|-
+![[Flower Garden]]
+!During Phoenix f+4, 4
+!7, 10
+!Low, low
+!RC
+|-
+![[Phoenix to Rain Dance|Back Turn]]
+!During Phoenix f+1+2
+!-
+!-
+!
+|-
+![[Roll Ball]]
+!During Phoenix f+3+4
+!-
+!-
+!
+|-
+![[Butterfly]]
+!During Phoenix d
+!-
+!-
+!
+|-
+![[Wave Crest|Wave Crest Heavy]]
+!During Phoenix d+1+2
+!25
+!Mid
+!JG
+|-
+![[Jump (Ling Xiaoyu)|Jump]]
+!During Phoenix u/f (or u or u/b)
+!-
+!-
+!
+|-
+![[Double Barrel Shotgun]]
+!During Phoenix u/f (or u or u/b)+3, 3
+!15, 23
+!Mid, high
+!
+|-
+![[Double Scissor Kick]]
+!During Phoenix u/f (or u or u/b)+3, 4
+!15, 25
+!Mid, mid
+!
+|-
+![[Flower Power]]
+!During Phoenix u/f (or u)+4, 4
+!8, 12
+!Mid, mid
+!RC
+|-
+![[Jumping Pirouette]]
+!During Phoenix u/f (or u or u/b), N, 3
+!30
+!Mid
+!OB
+|-
+![[Crane Kick (Ling Xiaoyu)|Crane Kick]]
+!During Phoenix u/f (or u or u/b), N, 4
+!25
+!Mid
+!
+|-
+![[Sky Kick]]
+!During Phoenix u/f (or u or u/b), when falling, 3
+!19
+!Low
+!JG RC
+|-
+
+|}
+
+===[[Rain Dance|Back to the opponent]]===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Rain Dance]]
+!b+3+4
+!-
+!-
+!
+|-
+![[Dark & Stormy]]
+!Back to the opponent 2, 1, 4
+!10, 10, 15
+!High, high, mid
+!JG
+|-
+![[Mistrust]]
+!Back to the opponent 4
+!16
+!Mid
+!JG
+|-
+![[Spin Tornado Up]]
+!Back to the opponent 3+4
+!-
+!-
+!
+|-
+![[California Roll]]
+!Back to the opponent f+3+4
+!-
+!-
+!
+|-
+![[Cyclone Left]]
+!Back to the opponent f+3+4, 3+4
+!25
+!Mid
+!JG
+|-
+![[Back Circle Breaker]]
+!Back to the opponent d+3
+!15
+!Low
+!FCDc
+|-
+![[Back Circle Breaker Backward|Back Circle Breaker Forward]]
+!Back to the opponent D+3
+!15
+!Low
+!FCDc
+|-
+![[Guard Breaker (Xiaoyu)|Guard Breaker]]
+!Back to the opponent d+4
+!10
+!Low
+!GB
+|-
+![[Spin Tornado]]
+!Back to the opponent d+1+2
+!-
+!-
+!
+|-
+![[Peg Leg]]
+!Back to the opponent f, f+3
+!20
+!Mid
+!
+|-
+![[Back Layout]]
+!Back to the opponent  f, f+3+4
+!17
+!High
+!
+|-
+|}
+
+==10 hit combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Xiaoyu)|u+4, 1, 2, 1+2, 1, 3, 4, 4, 4, 1]]
+!118
+!mhhmmmllmm
+|-
+![[10 Hit Combo 2 (Xiaoyu)|u+4, 1, 2, 4, 4, 2, 1+2, 1, 4, 2]]
+!118
+!mhhllmmllmm
+|}
+[[Category:Moves Lists]]
+[[Category:Ling Xiaoyu Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

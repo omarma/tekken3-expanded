@@ -16,7 +16,7 @@ conversion lists them: moves.convert report 'sound_indexes') and writes
 <name>-TTT1-sfx.jus for src/tekken3_ttt1_sfx.c.
 """
 from __future__ import annotations
-import array, csv, hashlib, json, struct, wave
+import csv, hashlib, json, struct, wave
 from pathlib import Path
 
 TABLE = 0x194ca8          # main RAM offset of the sound table
@@ -81,10 +81,11 @@ def cut_all(recordings) -> dict:
 
 def cut(wav_path: Path, csv_path: Path) -> dict:
     """index -> (mono PCM bytes, report), from the oracle recording."""
+    import numpy as np                                 # the sample loops below, vectorised: same integer math
     with wave.open(str(wav_path)) as w:
         if w.getframerate() != RATE or w.getsampwidth() != 2 or w.getnchannels() != 2:
             raise ValueError('expected a 44100 Hz 16-bit stereo recording (-samplerate 44100)')
-        data = array.array('h', w.readframes(w.getnframes()))
+        data = np.frombuffer(w.readframes(w.getnframes()), '<i2').astype(np.int64)
     rows = [r for r in csv.DictReader(csv_path.open()) if r['index'].isdigit()]
     starts = [round(float(r['time']) * RATE) for r in rows]
     out = {}
@@ -92,20 +93,22 @@ def cut(wav_path: Path, csv_path: Path) -> dict:
         a = starts[k]
         b = starts[k + 1] if k + 1 < len(rows) else len(data) // 2
         seg = data[a * 2:b * 2]
-        mono = [(seg[i] + seg[i + 1]) // 2 for i in range(0, len(seg), 2)]
-        loud = [i for i, v in enumerate(mono) if abs(v) > SILENCE]
+        mono = (seg[0::2][:len(seg) // 2] + seg[1::2]) // 2   # floor division, as Python's //
+        loud = np.flatnonzero(np.abs(mono) > SILENCE)
         info = dict(index=int(r['index']), driver_id=int(r['driver_id']), param=int(r['param']))
-        if not loud:
+        if not len(loud):
             info.update(frames=0, silent=True); out[info['index']] = (b'', info); continue
-        first, last = loud[0], loud[-1] + 1
-        pcm = [max(-32768, min(32767, round(v * GAIN))) for v in mono[first:last]] + [0] * 32
-        left = sum(abs(seg[i]) for i in range(0, len(seg), 2)); right = sum(abs(seg[i + 1]) for i in range(0, len(seg), 2))
-        info.update(frames=len(pcm), delay_frames=first, peak=max(abs(v) for v in pcm),
+        first, last = int(loud[0]), int(loud[-1]) + 1
+        # np.round rounds half to even, as round() does.
+        pcm = np.concatenate([np.clip(np.round(mono[first:last] * GAIN), -32768, 32767).astype(np.int64),
+                              np.zeros(32, np.int64)])
+        left = int(np.abs(seg[0::2]).sum()); right = int(np.abs(seg[1::2]).sum())
+        info.update(frames=len(pcm), delay_frames=first, peak=int(np.abs(pcm).max()),
                     balance=round((right - left) / max(1, left + right), 3),
                     # Still sounding when the next request came: a loop or a
                     # sound longer than the oracle's step, cut there.
                     truncated=last >= len(mono) - RATE // 50)
-        out[info['index']] = (struct.pack(f'<{len(pcm)}h', *pcm), info)
+        out[info['index']] = (pcm.astype('<i2').tobytes(), info)
     return out
 
 

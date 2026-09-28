@@ -3,8 +3,9 @@
 -- TTT1 envoie celui du boss (Unknown, qui n'a pas de case au selecteur).
 -- Arcade a un joueur (Xiaoyu et le partenaire a sa droite). Pendant chaque
 -- combat, deux cheats de la base de Pugsy (valables pour TEG2/VER.C1) :
---   - « Select Level » : niveau 0x2FE244 remis a 6 (stage 7) ; gagner ce
---     stage mene au stage final (partir directement du final fait planter) ;
+--   - « Select Level » : niveau 0x2FE244 mis a 6 pendant le premier combat ;
+--     le gagner mene droit au stage final (partir directement du final fait
+--     planter) ;
 --   - « Player 2/CPU 1 Hit Death » : octet 0x2A0D2A a 0, le premier coup tue.
 -- Le joueur 1 frappe en continu et Start passe les ecrans. Comme
 -- tools/ttt1_ui_capture.lua, chaque image est interceptee a son envoi en VRAM
@@ -59,7 +60,9 @@ ttt1_final_stage = emu.add_machine_frame_notifier(function()
         port.fields["P1 Button 1"]:set_value((frame // 5) % 2)
         port.fields["P1 Button 2"]:set_value((frame // 7) % 2)
         port.fields["1 Player Start"]:set_value((frame % 240) < 4 and 1 or 0)
-        if timer > 0 and timer < 3600 and space:read_u32(LEVEL) < 6 then space:write_u32(LEVEL, 6) end
+        -- Chrono du round lance : il part de 4260 (NVRAM neuve), sous 3600 le
+        -- combat au premier coup est deja fini et le niveau n'etait jamais ecrit.
+        if timer > 0 and timer < 4260 and space:read_u32(LEVEL) < 6 then space:write_u32(LEVEL, 6) end
         space:write_u8(CPU_LIFE, 0)
     end
     if (done and frame == done) or frame == 30000 then index:close(); machine:exit() end

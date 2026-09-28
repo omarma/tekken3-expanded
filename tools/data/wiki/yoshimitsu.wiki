@@ -1,0 +1,477 @@
+'''Yoshimitsu/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Yoshimitsu]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Jumping Body Slam]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Sword Face Smash]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Wheels of Hell]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Spiritual Division]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Tornado Drop]]
+!1+3 (or 2+4)
+!Back
+!70
+!
+|-
+![[Rainbow Drop]]
+!d, d/b, b+1+2
+!Front
+!50
+!1+2
+|-
+![[Jumping Body Slam|Reverse Throw]]
+!Back to the opponent, 1+3 (or 2+4)
+!Front
+!20
+!
+|-
+![[Low Parry (Yoshimitsu)|Lower Parry]]
+!d/b+1+3 (or 2+4)
+!Parry
+!-
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="attacks" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Flash Attack]]
+!2, 3
+!12, 21
+!High, high
+|-
+![[Jab Sweep|Flash Punch Low Kick]]
+!2, d+3
+!12, 8
+!High, low
+|-
+![[Oni Kick]]
+!3
+!30 
+!High
+|-
+![[Zig Zag]]
+!3, 4
+!30, 30
+!High, mid
+|-
+![[Ballerina Kick to Kangaroo Kick]]
+!3, d+3+4
+!30, 30
+!High, mid
+|-
+![[Kangaroo Kick]]
+![4~3]
+!30
+!Mid
+|-
+![[Triple Roundhouse Combo]]
+!4, 4, 4
+!20, 20, 21
+!High, high, high
+|-
+![[Flea]]
+!1+2 (d to cancel)
+!-
+!-
+|-
+![[Skull Splitter (Yoshimitsu)|Skull Splitter]]
+!During Flea 1+2
+!22
+!High
+|-
+![[Flea to Kangaroo Kick]]
+!During Flea 3+4
+!30
+!Mid
+|-
+![[Running Flea]]
+!During Flea f, f (or b, b,)
+!15
+!!
+|-
+![[Flea Indian Stance]]
+!During Flea d+3+4
+!-
+!-
+|-
+![[Jumping Flea]]
+!During Flea u (or u/f or u/b)
+!25
+!!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+|-
+![[Manji Backfist|Manji Backfist 1]]
+!f+2 (or back to the opponent)
+!12
+!High
+|-
+![[Backfist to Stone Fist]]
+!f+2, D/B+2, 2, 2, 2, 2, 2
+!12, 10, 10, 12, 12, 14, 15
+!High, mid, mid, mid, mid, mid, mid
+|-
+![[Door Knocker]]
+!d/f+1, 1, 1, 1
+!15, 12, 12, 24
+!Mid, high, high, mid
+|-
+![[Door Knocker to Back Knuckle]]
+!d/f+1, 2
+!15, 12
+!Mid, high
+|-
+![[Door Knocker to Back Knuckle Slap U Crazy]]
+!d/f+1, 2, D/B+2, 2, 2, 2, 2, 2
+!15, 12, 10, 10, 12, 12, 14, 15
+!Mid, high, mid, mid, mid, mid, mid, mid
+|-
+![[Basic Uppercut]]
+!d/f+2
+!13
+!Mid
+|-
+![[Cyclone Lift]]
+!d+1+2
+!12
+!!
+|-
+![[Indian Stance]]
+!d+3+4
+!-
+!-
+|-
+![[Indian Stance Healing]]
+!d+3+4, N
+!-
+!-
+|-
+![[Indian Stance Stone Fists]]
+!During Indian Stance Healing 2
+!10
+!Mid
+|-
+![[Indian Stance Kangaroo Kick]]
+!During Indian Stance Healing 4
+!30
+!Mid
+|-
+![[Indian Stance Vacuum Dance]]
+!During Indian Stance Healing b (or f)
+!-
+!-
+|-
+![[Harakiri]]
+!d+1+4
+!60
+!!
+|-
+![[Harakiri to Manji Blood Dance]]
+!d+1+4, B+1, 1, 1, 1, 1
+!60, 3, 3, 3, 3, 3
+!!, !, !, !, !, !
+|-
+![[Quick Slash]]
+!d/b+1
+!10
+!!
+|-
+![[Death Slash]]
+!d/b+1, N, D/B
+!15
+!!
+|-
+![[Slap U Silly|Stone Fists]]
+!D/B+2, 2, 2, 2, 2, 2
+!10, 10, 12, 12, 14, 15
+!Mid, mid, mid, mid, mid, mid
+|-
+![[Manji Spin Low Kicks]]
+!D/B+3, 3, 3, 3, 3, 3
+!12, 7, 7, 5, 5
+!Low, low, low, low, low, low
+|-
+![[Manji Spin Low Kicks Front Kick]]
+!During Manji Spin Low Kicks f+4
+!10
+!Mid
+|-
+![[Spirit Shield]]
+!d/b+1+2
+!-
+!!
+|-
+![[Stone Fists|Slap U Silly]]
+!b+1, 1, 1, 1, 1, 1
+!10, 10, 10, 10, 10, 10
+!High, high, high, high, high, high
+|-
+![[Slap U Silly to Side Spin]]
+!During Slap U Silly 3+4
+!-
+!-
+|-
+![[Bad Stomach]]
+!b+1+2
+!-
+!-
+|-
+![[Poison Breath]]
+!During Bad Stomach, press any key
+!35
+!!
+|-
+![[Spinning Evade]]
+!B+3+4, 3+4, 3+4, 3+4, 3+4, 3+4
+!-8, -8, -8, -8, -8, -8
+!-
+|-
+![[Yoshimitsu Flash]]
+!b+1+4
+!25
+!!
+|-
+![[Avoiding the Puddle]]
+!u/f (or u or u/b)+4
+!25
+!Mid
+|-
+![[Deathcopter|Death Copter]]
+!u/f+1+2
+!40
+!!
+|-
+![[Deathcopter Slice|Death Copter Slice]]
+!u/f+1+2, d
+!25
+!!
+|-
+![[Deathcopter Trick|Death Copter Trick]]
+!u/f+1+2, b
+!35
+!!
+|-
+![[Poison Wind]]
+!u/f+3+4
+!10
+!Mid
+|-
+![[Poison Wind to Kangaroo Kick]]
+!u/f+3+4, 3+4
+!10, 30
+!Mid, mid
+|-
+![[Bronze Fist|Poison Wind Bronze Fist]]
+!u/f+3+4, b+1
+!10, 2
+!Mid, mid
+|-
+![[Silver Fist|Poison Wind Silver Fist]]
+!u/f+3+4, b+1, 4
+!10, 2, 15
+!Mid, mid, mid
+|-
+![[Poison Wind Gold Fist]]
+!u/f+3+4, b+1, 4, D/B+1
+!10, 2, 20, 15
+!Mid, high, mid, mid
+|-
+![[Steel Fist|Poison Wind Bronze Fist Steel Fist]]
+!u/f+3+4, b+1, 3+4
+!10, 20, 2
+!Mid, high, mid
+|-
+![[Sword Smash]]
+!f, f+2
+!18
+!Mid
+|-
+![[Yomi Kakenuke]]
+!f, f+2, during the attack, 2
+!18, 12
+!Mid
+|-
+![[Wood Cutter]]
+!f, f+3, 1
+!20, 18
+!Mid, !
+|-
+![[Fubuki]]
+!f, f+4
+!20
+!Mid
+|-
+![[Reverse Cartwheel|Solar Kick]]
+!f, f+1+2
+!22
+!Mid
+|-
+![[Solar Kick Soul Siphon]]
+!During Solar Kick 1+4
+!22, 35
+!Mid
+|-
+![[Solar Kick Possession]]
+!During Solar Kick f+1+4
+!22, -35
+!Mid
+|-
+![[Reverse Cartwheel]]
+!f, f+3+4
+!30
+!Mid
+|-
+![[Reverse Cartwheel Shark Attack]]
+!f, f+3+4, 1+2
+!30, 40
+!Mid, mid
+|-
+![[Solar Kick Shark Attack]]
+!f, f+3+4, 1+2, 3+4
+!30, 40, 30
+!Mid, mid, mid
+|-
+![[Suicide]]
+!f, f+1+4
+!100
+!!
+|-
+![[Confusion]]
+!f,f+1+4, N
+!-
+!-
+|-
+![[Double Suicide]]
+!f, f+1+4, f, F
+!100, 100
+!!
+|-
+![[Sword Stab]]
+!b, b+1
+!90
+!!
+|-
+![[Sword Spin|Sword Poke Windmill]]
+!b, b+1, N, 1
+!30
+!!
+|-
+![[Moonsault Slayer]]
+!d, d/f, f+1
+!30, 15, 28
+!!
+|-
+![[Knee Cap]]
+!FC+d/f+3
+!12
+!Low
+|-
+![[Samurai Cutter]]
+!FC+d/b, B+1
+!20
+!!
+|-
+![[Inner Palm]]
+!SS+1
+!21
+!Mid
+|-
+![[Shrine]]
+!SS+2
+!20
+!Mid
+|-
+![[Whirlwind]]
+!SS+4
+!21
+!High
+|-
+![[Meditation]]
+!SS+3+4
+!-
+!-
+|-
+![[Meditation Healing]]
+!During Meditation f
+!-
+!-
+|-
+![[Manji Backfist|Manji Backfist 2]]
+!Back to the opponent, 2
+!15
+!High
+|-
+![[Indian Stance Healing]]
+!On the ground (on the back) 3+4
+!-
+!-
+|}
+
+==10 Hit Combo==
+{| class="wikitable sortable" id="10 hit combos" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Yoshimitsu)|1, 2, 1, 4, 4, 4, 1, 1, 1, 1]]
+!93
+!<nowiki>hmmhhlm!!!</nowiki>
+|-
+![[10 Hit Combo 2 (Yoshimitsu)|1, 2, 1, 4, 2, 2, 2, 4, 1, 1]]
+!82
+!<nowiki>hmmhmmmm!!</nowiki>
+|-
+![[10 Hit Combo 3 (Yoshimitsu)|1, 2, 1, 4, 4, 4, 1, 3+4]]
+!72
+!hmmhhlmm
+|-
+![[10 Hit Combo 4 (Yoshimitsu)|4, 4, 2, 2, 4, 4, 1, 1, 1, 1]]
+!116
+!<nowiki>hhmhhlm!!!</nowiki>
+|-
+![[10 Hit Combo 5 (Yoshimitsu)|4, 4, 2, 2, 4, 4, 1, 3+4]]
+!95
+!hhmhhlmm
+|-
+![[10 Hit Combo 6 (Yoshimitsu)|4, 4, 2, 2, 1]]
+!81
+!hhmh!
+|}
+[[Category:Moves Lists]]
+[[Category:Yoshimitsu Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

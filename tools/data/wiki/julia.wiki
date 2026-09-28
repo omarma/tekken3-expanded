@@ -1,0 +1,475 @@
+'''Julia Chang/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Julia Chang]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Death Valley Bomb]]
+!1+3
+!Front
+!35
+!1
+|-
+![[Knee Suplex]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Headlock Back Crusher]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Twisted Sister]]
+!1+3 (or 2+4)
+!Right
+!45
+!2
+|-
+![[Calf Branding]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Arm Lock Suplex]]
+!d/f+1+2
+!Front
+!37
+!2
+|-
+![[Waist Suplex]]
+!d, d/b+1+3
+!Front
+!30
+!1
+|-
+![[Mad Axes]]
+!d, d/b, b, f+2
+!Front
+!42
+!1+2
+|-
+![[Cross Arm Suplex]]
+!d, d/b, d, d/b+1+2
+!Front
+!45
+!1+2
+|-
+![[Death Valley Bomb|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!Varies
+!
+|-
+![[Low Parry (Julia)|Low Parry]]
+!d/b (or d)+1+3 (or d/b+2+4)
+!Parry
+!-
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[G-Clef Cannon]]
+!1, 1, 1
+!10, 5, 21
+!High, mid, mid
+!JG
+|-
+![[Bow & Arrow Sweep|G-Clef Cannon Bow & Arrow Kick]]
+!1, 1, 4, 3
+!10, 5, 12, 15
+!High, mid, low, mid
+!
+|-
+![[Machine Gun Punch]]
+!1, 2
+!10, 8
+!High, mid
+!
+|-
+![[Machinegun Cannon|Machine Gun Cannon]]
+!1, 2, 1 (During Counterattack)
+!10, 8, 21
+!High, mid, mid
+!CH
+|-
+![[Machine Gun Low Kick]]
+!1, 2, 3
+!10, 8, 10
+!High, mid, low
+!RC
+|-
+![[Machine Gun High Kick]]
+!1, 2, 4
+!10, 8, 20
+!High, mid, high
+!
+|-
+![[Spin Behind]]
+!2, b (shot must hit head-on)
+!12
+!High
+!'''OB'''
+|-
+![[Double Fist]]
+!During Spin Behind 1+2
+!25
+!High
+!GB
+|-
+![[Tequila Sunrise]]
+![3~2]
+!15
+!Mid
+!
+|-
+![[Tequila Sunrise Elbow Smash|Tequila Sunrise Middle Smash]]
+![3~2], 2
+!15, 22
+!Mid, mid
+!
+|-
+![[Tequila Sunrise Low Kick Slash Uppercut]]
+![3~2], 4, 1
+!15, 12, 21
+!Mid, low, mid
+!JG
+|-
+![[Tequila Sunrise Low High Kicks]]
+![3~2], 4, 4
+!15, 12, 23
+!Mid, low, high
+!
+|-
+![[Tequila Sunrise Low Kicks]]
+![3~2], 4, d+4
+!15, 12, 10
+!Mid, low, low
+!RC
+|-
+![[Tequila Sunrise Combo]]
+![3~2], 1, 1
+!15, 5, 21
+!Mid, mid, mid
+!SH
+|-
+![[Tequila Sunrise Arrow Kick]]
+![3~2], 1, 4, 3
+!15, 5, 12, 15
+!Mid, mid, low, mid
+!
+|-
+![[Spinning Kicks Slash Uppercut]]
+!4, 4, 1
+!20, 12, 21
+!High, low, mid
+!JG
+|-
+![[Triple Spinning Kick]]
+!4, 4, 4
+!20, 12, 23
+!High, low, high
+!
+|-
+![[Triple Spinning Low Kick]]
+!4, 4, d+4
+!20, 12, 10
+!High, low, low
+!RC
+|-
+![[Twin Arrow]]
+!1+2
+!25
+!Mid
+!GB
+|-
+![[Wind Roll]]
+!3+4
+!-
+!-
+!
+|-
+![[Spin and Kick]]
+!3+4, 4
+!20
+!High
+!
+|-
+![[Bow and Arrow Kick|Bow & Arrow Kick]]
+!1+4, 3
+!12, 12, 15
+!Mid, low, mid
+!
+|-
+![[Ultimate Cannon]]
+!2+3, 1
+!10_8, 9, 25
+!Mid, mid, mid
+!JG
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Flash Uppercut]]
+!f+1
+!15
+!Mid
+!JG
+|-
+![[Palm Explosion]]
+!f+[1~2]
+!21
+!Mid
+!FSc
+|-
+![[Shove It Up]]
+!f+1+2
+!28
+!Mid
+!JGc
+|-
+![[Heavy Uppercut]]
+!f+1+4
+!50
+!!
+!JG
+|-
+![[Mini G-Clef Cannon]]
+!d/f+1, 1
+!8, 21
+!Mid, mid
+!JG
+|-
+![[Slow Power Punch]]
+!d/f+2
+!10
+!Mid
+!
+|-
+![[Slow Power Punch Combo]]
+!d/f+2, 1
+!10, 21
+!Mid, mid
+!JG
+|-
+![[Slow Power Punch to Low Kick]]
+!d/f+2, 3
+!10, 10
+!Mid, low
+!RC
+|-
+![[Slow Power Punch to High Kick]]
+!d/f+2, 4
+!10, 20
+!Mid, high
+!
+|-
+![[Front Snap Kick]]
+!d/f+3
+!17
+!Mid
+!
+|-
+![[Mountain Crusher (Julia)|Mountain Crusher]]
+!d/f+4, 2, b, f+1
+!12, 15, 25
+!Mid, mid, mid
+!MS
+|-
+![[Mini G-Clef Cannon to Bow & Arrow Kick]]
+!d/f+1, 4, 3
+!8, 12, 15
+!Mid, low, high
+!
+|-
+![[Ultimate Cannon]]
+!d+2, 3 ,1
+!10_8, 9, 25
+!Mid, mid, mid
+!JG
+|-
+![[Sweep]]
+!d+4
+!10
+!Low
+!RC
+|-
+![[Razor's Edge]]
+!d+4, 1
+!10, 21
+!Low, mid
+!JG
+|-
+![[Sweep Head Kick]]
+!d+4, 4
+!10, 23
+!Low, high
+!
+|-
+![[Sweep to Low Kick|Sweep Low Kick]]
+!d+4, d+4
+!10, 10
+!Low, low
+!
+|-
+![[Liquid Sweep]]
+!b+3
+!12
+!Low
+!MS PLDc
+|-
+![[Heaven Shatter Kick]]
+!b+4
+!17
+!High
+!CSc
+|-
+![[Foot Stomp]]
+!u/f+3+4
+!35
+!Mid
+!
+|-
+![[Party Crasher]]
+!f, f+1
+!10
+!Mid
+!
+|-
+![[Elbow Skyscraper Kick]]
+!f, f+1, 4
+!10, 15
+!Mid, mid
+!JG
+|-
+![[Rapid Counter Attack]]
+!d, d/f+1
+!14
+!Mid
+!
+|-
+![[Lightning Bolt (Julia)|Lightning Bolt]]
+!d, d/f+1, 2
+!14, 21
+!Mid, mid
+!
+|-
+![[Tequila Sunrise]]
+!WS+2
+!15
+!Mid
+!
+|-
+![[Tequila Sunrise Elbow Smash]]
+!WS+2, 2
+!15, 22
+!Mid, mid
+!
+|-
+![[Tequila Sunrise Low Kick Slash Uppercut]]
+!WS+2, 4, 1
+!15, 12, 21
+!Mid, low, mid
+!JG
+|-
+![[Tequila Sunrise Low High Kicks]]
+!WS+2, 4, 4
+!15, 12, 23
+!Mid, low, high
+!
+|-
+![[Tequila Sunrise Low Kicks]]
+!WS+2, 4, d+4
+!15, 12, 10
+!Mid, low, low
+!RC
+|-
+![[Tequila Sunrise Combo]]
+!WS+2, 1, 1
+!15, 5, 21
+!Mid, mid, mid
+!SH
+|-
+![[Tequila Sunrise Arrow Kick]]
+!WS+2, 1, 4, 3
+!15, 5, 12, 15
+!Mid, mid, low, mid
+!
+|-
+![[Skyscraper Kick]]
+!WS+4
+!15
+!Mid
+!
+|-
+![[Body Elbow]]
+!FC+d/f+2
+!20
+!Mid
+!
+|-
+![[Spinning Sweep]]
+!FC+d/f+4
+!12
+!Low
+!
+|-
+![[Spinning Sweep Combo]]
+!FC+d/f+4, 3
+!12, 15
+!Low, mid
+!
+|-
+![[Parting Fist]]
+!SS+2
+!21
+!Mid
+!MS
+|-
+![[Welcome]]
+!2+3+4
+!-
+!-
+!
+|}
+
+==10 Hit Combos==
+{| class="wikitable sortable" id="10 hit combos" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Michelle, Wang, Julia and Jaycee)|2, 1, 1, 2, 3, 3, 3, 4, 4, 1]]
+!84
+!hmmhlhmhlm
+|-
+![[10 Hit Combo 2 (Michelle, Julia and Jaycee)|2, 1, 1, 2, 3, 3, 2, 3, 2, 1]]
+!85
+!hmmhlhmlmm
+|-
+![[10 Hit Combo 3 (Michelle, Julia and Jaycee)|2, 1, 1, 2, 3, 3, 2, 1, 4, 3]]
+!87
+!hmmhlhmmlm
+|}
+[[Category:Moves Lists]]
+[[Category:Tekken Tag Tournament Move Lists]]
+[[Category:Julia Chang Moves]]

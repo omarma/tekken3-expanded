@@ -1,0 +1,667 @@
+'''Hwoarang/Tekken Tag Tournament Movelist''' is a list of all the moves that [[Hwoarang]] can perform in [[Tekken Tag Tournament]].
+
+==Movelist==
+
+=== Throws ===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Pickpocket]]
+!1+3
+!Front
+! 30
+!1
+|-
+![[Falcon Dice Kick]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Bring It On]]
+!1+3 (or 2+4)
+!Left
+!45
+!1
+|-
+![[Dead-End]]
+!1+3 (or 2+4)
+!Right
+! 44
+!2
+|-
+![[Slaughterhouse]]
+!1+3 (or 2+4)
+!Back
+!55
+!
+|-
+![[Roll and Choke]]
+!f,f+2
+!Front
+!30
+!2
+|-
+![[Human Cannonball]]
+!f+2+3
+!Front
+!30
+!1+2
+|-
+![[Leg Hook Throw]]
+! d,d/b+1+3
+!Front
+!30
+!1+2
+|-
+![[Door Mat]]
+!d,d/b,b+3
+!Front
+!40
+!1
+|-
+![[Pickpocket|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!30
+!
+|-
+![[Low Parry (Hwoarang)|Low Parry]]
+!d/b+1+3 (or 2+4)
+!Parry
+!-
+!
+|-
+
+|}
+
+==Attacks==
+
+===During Left Stance===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" | Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Migraine (Left Stance)|Migraine]]
+!1, 1
+!5, 8
+!High, high
+|-
+![[Double Jab Low Kick|Double Jab to Low Kick]]
+!1, 1, 3
+!5, 8, 10
+!High, high, low
+|-
+![[Home Surgery]]
+!1, 1, 3, 3
+!5, 8, 10, 18
+!High, high, low, high
+|-
+![[One Two Punch (Hwoarang)|One Two Punch]]
+!1, 2
+!5, 10
+!High, high
+|-
+![[Rejector]]
+!1, 2, 3
+!5, 10, 16
+!High, high, mid
+|-
+![[Rejection (Hwoarang)|Rejection]]
+!1, 2, 4
+!5, 10, 25
+!High, high, high
+|-
+![[Right Jab Side Kick]]
+!2, 3
+!12, 16
+!High, mid
+|-
+![[Right Jab to Spinning Back Kick]]
+!2, 4
+!12, 25
+!High, high
+|-
+![[Machinegun Kicks (Hwoarang)|Machine Gun Kicks]]
+!3, 3, 3, 3
+!15, 12, 10, 25
+! High, mid, mid, high
+|-
+![[Left Kick Combo to Right Hook Kick]]
+!3, 3, 3, 4
+!15, 12, 10, 20
+!High, mid, mid, high
+|-
+! [[Left Kicks to Right Hook Kick]]
+!3, 3, 4
+!15, 12, 20
+!High, mid, high
+|-
+![[Left Kicks to Right Middle Kick]]
+!3, 3, 4, 4
+!15, 12, 20, 15
+! High, mid, high, mid
+|-
+![[Total Outrage]]
+!3, 3, 3, 4, 4
+!15, 12, 10, 20, 15
+!High, mid, mid, high, mid
+|-
+![[Left Kick Combo Low]]
+!3, 3, d+3
+!15, 12, 7
+!High, mid, low
+|-
+![[Left Kick Combo Low to Right Hook Kick]]
+!3, 3, d+3, 4
+!15, 12, 7, 13
+!High, mid, low, high
+|-
+![[Menace to Society]]
+!3, 3, d+3, 4, 4
+!15, 12, 7, 13, 15
+! High, mid, low, high, mid
+|-
+![[Flying Eagle]]
+![3~4]
+!15, 28
+!Mid, mid
+|-
+![[Axe Murderer]]
+!4, 3
+!14, 20
+!High, mid
+|-
+![[Right Kicks|Right Kicks to Left Stance]]
+!4, 4
+!14, 10
+!High, high
+|-
+![[Rude Boy]]
+!4, f+3
+!14, 17
+!High, mid
+|-
+![[Hard Rocker]]
+!4, f+4
+!14, 20
+!High, high
+|-
+![[Right Kick Combo to Right Flamingo]]
+!4, 4, 4
+!14, 10, 10
+!High, high, high
+|-
+![[Da Bomb]]
+!4, 4, f+4
+!14, 10, 25
+!High, high, high
+|-
+![[Right Kick Combo to Left Stance]]
+!4, 4, b+4
+!14, 10, 10
+!High, high, high
+|-
+![[Blizzard Kicks]]
+!4, 4, 4, 3
+!14, 10, 10, 10
+!High, high, high, low
+|-
+![[Hot Feet]]
+!4, 4, 4, 4
+!14, 10, 10, 20
+! High, high, high, mid
+|-
+![[Disrespect]]
+!1+2
+!-
+!-
+|-
+! [[Motion Switch]]
+!3+4
+!-
+!-
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+|-
+![[Rusty Knife]]
+! f+2
+!15
+!Mid
+|-
+![[Middle Back Blow to Left Stance]]
+!F+2
+!15
+!Mid
+|-
+![[Left Flamingo Feint]]
+!f+3
+!-
+!-
+|-
+![[Cheap Shot Snap Kick]]
+!f+[3~3]
+!22
+!Mid
+|-
+![[Right Flamingo Feint]]
+!f, N, 4
+!-
+!-
+|-
+![[Doggie Lift]]
+!f+4
+!20
+!High
+|-
+![[Grand Theft (Left Stance)|Grand Theft]]
+!f+4, 4
+!20, 15
+!High, mid
+|-
+![[Public Enemy]]
+!d/f+3, 4
+!17, 21
+!Mid, mid
+|-
+![[Body Blow (Hwoarang)|Body Blow]]
+!d/f+1+2
+!10
+!Mid
+|-
+![[Smash Low Right]]
+!d+3, 4
+!12, 13
+!Mid, high
+|-
+![[Firecracker]]
+!d+4, 4
+!7, 22
+!Low, high
+|-
+![[Ankle Biter|Crippler]]
+!d/b+4
+!10
+!Low
+|-
+![[Feint Heel Drop]]
+!d/b+4, 4
+!30
+!High
+|-
+![[Dynamite Heel]]
+!d/b+3+4 (b, b to cancel)
+!40
+!!
+|-
+![[Uraken|Backhand]]
+!b+2
+!12
+!High
+|-
+![[Nose Bleeder]]
+! b+4
+!28
+!High
+|-
+![[Jump Kick]]
+!u (or u/b)+3
+!20
+!High
+|-
+![[Circular Saw|Spinning Back Kick]]
+!u (or u/b or u/f)+4
+!30
+!High
+|-
+![[Hunting Hawk]]
+!u/f+3, 4, 3
+!15, 11, 12
+!Mid, mid, high
+|-
+![[Spinning Axe Kick to Right Stance]]
+!f, f+3
+!30
+!Mid
+|-
+![[Torpedo Kick]]
+!f, f+4
+!30
+!High
+|-
+![[Sky Rocket]]
+!f, N, d, d/f+4
+!23
+!Mid
+|-
+![[Iron Heel]]
+!WS+3
+! 28
+!Mid
+|-
+![[Tsunami Kick]]
+!WS+4, 4
+!13, 15
+!Mid, mid
+|-
+![[Plasma Blade]]
+!Left Stance, back to opponent 4
+!25
+!Mid
+|-
+![[Right Stance]]
+!Left Stance, back to opponent 1+2
+!-
+!-
+|}
+
+===During [[Right Stance]]===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Disrespect]]
+!1+2
+!-
+!-
+|-
+![[Motion Switch]]
+!3+4
+!-
+!-
+|-
+![[Migraine (Right Stance)|Migraine]]
+!1, 1
+!10, 12
+!High, mid
+|-
+![[Big Fists]]
+!2, 1, 1
+!6, 10, 12
+!High, high, mid
+|-
+![[Right PK Combo]]
+!2, 3
+!6, 25
+!High, high
+|-
+![[Chainsaw Kick Combo]]
+!2, 4, 3
+!6, 15, 20
+!High, high, mid
+|-
+![[Right Reverse Kick Combo]]
+!2, 4, 4
+!6, 15, 27
+!High, high, high
+|-
+![[Right Jab Spin Kick]]
+!2, b+4
+!6, 32
+!High, high
+|-
+![[Teaser]]
+!3, 3
+!15, 40
+!Low, high
+|-
+![[Backlash]]
+![3~4]
+!54
+!High
+|-
+![[Chainsaw Kick]]
+!4, 3
+!15, 20
+!High, mid
+|-
+![[Right Reverse Kick]]
+!4, 4
+!15, 27
+!High, high
+|-
+![[Right Flamingo Feint]]
+!f+4
+!-
+!-
+|-
+![[Grand Theft (Right Stance)|Grand Theft]]
+!f+[4~4]
+!20
+!Mid
+|-
+![[Cheap Shot]]
+!f+3
+!18
+!High
+|-
+![[Cheap Shot to Disrespect]]
+!f+3, b
+!18
+!High
+|-
+![[Cheap Shot Low Spin]]
+!f+3, 4
+!18, 20
+!High, low
+|-
+![[Nose Bleeder]]
+!b+3
+!28
+!High
+|-
+![[Misdemeanor]]
+!b+4
+!32
+!High
+|-
+![[Ripoff]]
+!f, f+3
+!25
+!High
+|-
+![[Screw Kick (ff+4)|Screw Kick]]
+!f, f+4, 3
+!18, 20
+!Mid, high
+|-
+![[Right Sidekick|Right Side Kick]]
+!d/f+4
+!12
+!Mid
+|-
+![[Left Plasma Blade]]
+!Right Stance, back to opponent 3
+!25
+!Mid
+|-
+![[Left Stance]]
+!Right Stance, back to opponent 1+2
+!-
+!-
+|}
+
+===During [[Left Flamingo]]===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Trick Jab]]
+!During Left Flamingo 1
+!7
+!High
+|-
+![[Right Backhand]]
+!During Left Flamingo 2
+!12
+!Mid
+|-
+![[Flamingo Sidekick Combo|Flamingo Side Kick Combo]]
+!During Left Flamingo 3, 4
+!12, 21
+!Mid, mid
+|-
+![[Rocket Launcher (Hwoarang)|Rocket Launcher]]
+!During Left Flamingo 3, 3, 3
+!12, 10, 25
+!Mid, mid, high
+|-
+![[Flamingo Kick Combo to Right Hook Kick]]
+!During Left Flamingo 3, 3, 4
+!12, 10, 20
+!Mid, mid, high
+|-
+![[Cannon Kicks]]
+!During Left Flamingo 3, 3, 4, 4
+!12, 10, 20, 15
+!Mid, mid, high, mid
+|-
+![[Step Kick (Hwoarang)|Step Kick]]
+!During Left Flamingo 4
+!28
+!High
+|-
+![[Power Blast]]
+!During Left Flamingo 1+4 (b, b to cancel) 
+!80
+!!
+|-
+![[Snap Kick]]
+!During Left Flamingo f+3
+!18
+!Mid
+|-
+![[Cutter Left (Left Flamingo)|Cutter Left]]
+!During Left Flamingo d/f+3
+!12
+!Low
+|-
+![[Cutter Right (Left Flamingo)|Cutter Right]]
+!During Left Flamingo d/b+4
+!15
+!Low
+|-
+![[Snap Spin Kick]]
+!During Left Flamingo b+3
+!32
+!High
+|-
+![[Right Heel Lance]]
+!During Left Flamingo b+4
+!21
+!Mid
+|-
+![[Left Flamingo Step-In]]
+!During Left Flamingo f
+!-
+!-
+|-
+![[Left Flamingo Back Dash]]
+!During Left Flamingo b
+!-
+!-
+|-
+![[Left Flamingo Sidestep]]
+!During Left Flamingo u (or d)
+!-
+!-
+|}
+
+===During [[Right Flamingo]]===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" | Hit Range
+|-
+![[Left Punch]]
+!During Right Flamingo 1
+!12
+!Mid
+|-
+![[Right Punch]]
+!During Right Flamingo 2
+!7
+!High
+|-
+![[Step Kick (Hwoarang)|Step Kick]]
+!During Right Flamingo 3
+!25
+!High
+|-
+![[Right Kick]]
+!During Right Flamingo 4
+!20
+!Mid
+|-
+![[Snap Kick]]
+!During Right Flamingo f+4
+!18
+!Mid
+|-
+![[Cutter Left (Right Flamingo)|Cutter-Left]]
+!During Right Flamingo d/b+3
+!15
+!Low
+|-
+![[Cutter Right (Right Flamingo)|Cutter-Right]]
+!During Right Flamingo d/b+4
+!13
+!Low
+|-
+![[Left Heel Lance]]
+!During Right Flamingo b+3
+!21
+!Mid
+|-
+![[Snap Spin Kick (Right Flamingo)|Snap Spin Kick]]
+!During Right Flamingo b+4
+!32
+!Mid
+|-
+![[Right Flamingo Step-In|Right Flamingo Step-in]]
+!During Right Flamingo f
+!-
+!-
+|-
+![[Right Flamingo Back Dash]]
+!During Right Flamingo b
+!-
+!-
+|-
+![[Right Flamingo Sidestep]]
+!During Right Flamingo u (or d)
+!-
+!-
+|}
+
+== 10 Hit Combo ==
+{| class="wikitable sortable" border="1" width="83%" id="moves" style="text-align:center"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Hwoarang)|During Left Flamingo 2, 2, 3, 4, 3, 4, 4, 4, 4, 3]]
+!105
+!mhhlmmlhmh
+|-
+![[10 Hit Combo 3 (Hwoarang)|During Right Flamingo 1, 2, 3, 4, 3, 4, 4, 4, 4, 3]]
+!105
+!mhhlmmlhmh
+|}
+[[Category:Moves Lists]]
+[[Category:Hwoarang Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]
