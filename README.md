@@ -95,14 +95,14 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 ## Install on Windows *(not tested yet)*
 
 1. Install [Python 3.12](https://www.python.org/downloads/) (keep "py launcher" and "tcl/tk" ticked) and [Git](https://git-scm.com/).
-2. `git clone https://github.com/omarma/tekken3-expanded.git`
+2. `git clone https://github.com/omarma/tekken3-expanded.git`, or download the ZIP of the [latest release](https://github.com/omarma/tekken3-expanded/releases/latest) and extract **all** of it with [7-Zip](https://www.7-zip.org/). Windows' own extractor can silently skip files whose path is too long: the setup then stops with a confusing error.
 3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
 4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
 
 ## Troubleshooting
 
 - **"Setup needs attention"**: the reason is in `.setup/setup.log`, inside the `tekken3-expanded` folder (the folder is hidden on macOS: press Cmd+Shift+. in Finder). Please [open an issue](https://github.com/omarma/tekken3-expanded/issues) and attach that file, with your OS and Python version (`python3 --version`, or `py --version` on Windows).
-- **"The game files could not be prepared"** on Windows: this is the step that compiles the game's code generator. Try first: Python 3.12 (not 3.13 or newer), the folder on a short path outside OneDrive, then delete `.setup` and run the setup again.
+- **"This disc does not match…" or "The game files could not be prepared"** on Windows, with a disc you know is right: the folder is often incomplete (a partial extraction). Extract the ZIP again with 7-Zip, or use `git clone`. Then try: Python 3.12 (not 3.13 or newer), the folder on a short path outside OneDrive, then delete `.setup` and run the setup again.
 - Each character import keeps its own log in `workspace/ttt1-import/logs/`.
 - To start over, delete the `.setup`, `workspace`, `generated`, `disc` and `build-release` folders.
 
