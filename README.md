@@ -88,7 +88,7 @@ Plan about **1 hour** for the first setup with the TTT1 characters (the setup ru
 
 1. Install [Python 3.12](https://www.python.org/downloads/) (keep "py launcher" and "tcl/tk" ticked) and [Git](https://git-scm.com/).
 2. `git clone https://github.com/omarma/tekken3-expanded.git`
-3. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files as on macOS.
+3. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files.
 
 ## Troubleshooting
 
