@@ -13,6 +13,9 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef TEKKEN3_RUNTIME
+#include "tekken3_keyboard_defaults.h"
+#endif
 
 /* Keep in sync with RECOMP_LAUNCHER_MAX_PLAYERS / PSXKB_MAX_PLAYERS. */
 #define PSX_BINDS_MAX_PLAYERS 5
@@ -216,9 +219,21 @@ static int psx_kb_load_ini(const char* path) {
     return native_hits;
 }
 
+/* A player's factory map. Tekken 3 gives player 2 its own keys, as the
+ * runtime does (psx_keybinds_reset_player): with player 1's map, one key
+ * drove both players. */
+static void psx_kb_player_defaults(int player) {
+    memcpy(s_psx_binds[player], kPsxDefaults, sizeof(kPsxDefaults));
+#ifdef TEKKEN3_RUNTIME
+    for (int b = 0; b < LNG_PSX_PAD_BUTTON_COUNT; ++b)
+        s_psx_binds[player][b] =
+            tekken3_keyboard_default(player, kPsxKbKeyName[b], s_psx_binds[player][b]);
+#endif
+}
+
 static void psx_kb_seed_defaults(void) {
     for (int p = 0; p < PSX_BINDS_MAX_PLAYERS; ++p) {
-        memcpy(s_psx_binds[p], kPsxDefaults, sizeof(kPsxDefaults));
+        psx_kb_player_defaults(p);
         for (int b = 0; b < LNG_PSX_PAD_BUTTON_COUNT; ++b)
             s_psx_binds_alt[p][b] = SDL_SCANCODE_UNKNOWN;   /* no alt by default */
     }
@@ -234,8 +249,21 @@ static int psx_kb_player_all_unbound(int player) {
  * shared default map so Reset / keyboard routing works on every player. */
 static void psx_kb_promote_empty_players(void) {
     for (int p = 0; p < PSX_BINDS_MAX_PLAYERS; ++p) {
+#ifdef TEKKEN3_RUNTIME
+        /* Player 2 still on player 1's factory map gets its own keys, as in
+         * the runtime's promote_empty_players; a map the player changed is kept. */
+        if (p == 1) {
+            int alt_unbound = 1;
+            for (int b = 0; b < LNG_PSX_PAD_BUTTON_COUNT; ++b)
+                if (s_psx_binds_alt[1][b] != SDL_SCANCODE_UNKNOWN) alt_unbound = 0;
+            if ((psx_kb_player_all_unbound(1) ||
+                 !memcmp(s_psx_binds[1], kPsxDefaults, sizeof(kPsxDefaults))) && alt_unbound)
+                psx_kb_player_defaults(1);
+            continue;
+        }
+#endif
         if (psx_kb_player_all_unbound(p))
-            memcpy(s_psx_binds[p], kPsxDefaults, sizeof(kPsxDefaults));
+            psx_kb_player_defaults(p);
     }
 }
 
@@ -292,7 +320,7 @@ void rui_psx_binds_set_slot(const char* path, int player, int b, int slot, int s
 void rui_psx_binds_reset(const char* path, int player) {
     if (player < 0 || player >= PSX_BINDS_MAX_PLAYERS) return;
     if (!s_psx_binds_init) rui_psx_binds_init(path);
-    memcpy(s_psx_binds[player], kPsxDefaults, sizeof(kPsxDefaults));
+    psx_kb_player_defaults(player);
     for (int b = 0; b < LNG_PSX_PAD_BUTTON_COUNT; ++b)
         s_psx_binds_alt[player][b] = SDL_SCANCODE_UNKNOWN;
     psx_kb_write_ini(path);
