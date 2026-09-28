@@ -131,5 +131,5 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 **No Copyrighted Material:** This repository **does not contain any copyrighted game assets, ROMs, or ISOs**. It only provides open-source tools, scripts, and source code intended to be used with a legally owned and dumped copy of the game. Users must provide their own original game data to use this software.
 
 **Source Code License:**
-The original tools, build scripts, and modifications provided in this repository are licensed under the [MIT License](LICENSE). 
+The original tools, build scripts, and modifications provided in this repository are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE), like the upstream project (see LICENSE).
 *(Note: Any third-party libraries or upstream decompilation code retain their original respective licenses).*
