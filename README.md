@@ -109,6 +109,17 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
 4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
 
+## Updating to a new version
+
+Update the folder you already set up: no full reinstall. The setup keeps its tools, the TTT1 characters it imported and the build, so an update takes about a minute instead of the first setup's 17.
+
+1. Get the new files into your existing `tekken3-expanded` folder:
+   - with git: `git pull` in the folder;
+   - with the ZIP: extract it, then copy **the contents** of its `tekken3-expanded-x.y.z` folder into your existing folder, replacing every file (7-Zip: *Yes to All*).
+2. Start **Setup Tekken 3.cmd** (or **Setup Tekken 3.command**). The setup window opens with your files already filled in: click **Set up & play**.
+
+Don't move `.setup`, `workspace` or `build-release` to a new folder: they remember their location, and the build would fail there.
+
 ## Troubleshooting
 
 - **"Setup needs attention"**: the reason is in `.setup/setup.log`, inside the `tekken3-expanded` folder (the folder is hidden on macOS: press Cmd+Shift+. in Finder). Please [open an issue](https://github.com/omarma/tekken3-expanded/issues) and attach that file, with your OS and Python version (`python3 --version`, or `py --version` on Windows).
@@ -126,6 +137,20 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 | MOVESET card | ✕ or Start | Confirm |
 | MOVESET card | ○ | Go back to the grid |
 | In a fight, as Unknown | L1 | Switch style |
+
+### Keyboard
+
+| Button | Player 1 | Player 2 |
+|---|---|---|
+| Directions | Arrow keys | I J K L |
+| ✕ / ○ / □ / △ | X / S / Z / A | Keypad 1 / 2 / 4 / 5 |
+| L1 / R1 | Q / W | U / O |
+| L2 / R2 | E / R | Keypad 7 / 9 |
+| Start / Select | Return / Right Shift | Keypad Enter / Backspace |
+
+On a Mac, player 2's buttons are F G V B (△ ○ □ ✕), 7 / 9 (L2 / R2) and P (Start). The keys are positions on a US keyboard: on an AZERTY keyboard, "A" is the key marked Q.
+
+To change them, open the launcher: in Terminal or the command prompt, in the `tekken3-expanded` folder, run `"Setup Tekken 3.cmd" --settings` (macOS: `./"Setup Tekken 3.command" --settings`). Set a player's input source to **Keyboard**, click **Configure**, then click a button and press the new key. Each button takes a second key or a mouse button in the next column. The keys are saved in `build-release/keybinds.ini`.
 
 ---
 
