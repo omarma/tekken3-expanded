@@ -1,0 +1,820 @@
+'''Eddy Gordo/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Eddy Gordo]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Rio Deal]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Rio Special]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Missile Launcher]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Shadow Dancer]]
+!1+3 (or 2+4)
+!Right
+!42
+!2
+|-
+![[Air Mail]]
+!1+3 (or 2+4)
+!Back
+!60
+!
+|-
+![[Rodeo Spin]]
+!b, d/b, d, d/f, f+1+2
+!Front
+!55
+!1+2
+|-
+![[Rio Deal|Reverse Throw]]
+!Back to the opponent 1+3 (or 2+4)
+!Front
+!'''34'''
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[One Two Elbows]]
+!1, 2
+!6, 15
+!High, high
+!
+|-
+![[Combo Jilar]]
+!1, 2, 4
+!6, 15
+!High, high
+!
+|-
+![[Heran Bago]]
+![3~3]
+!21
+!Mid
+!JG
+|-
+![[Slippery Kick]]
+![3~4]
+!10, 10
+!Low, low
+!JG
+|-
+![[Slippery Kick to Handstand]]
+![3~4], b
+!10, 10
+!Low, low
+!
+|-
+![[Slippery Kick to Side Flop]]
+![3~4], 4, 4
+!10, 10, 15, 15
+!Low, low, low, low
+!
+|-
+![[Satellite Moon]]
+![4~3]
+!16
+!Mid
+!
+|-
+![[Satellite Moon Hot Plate Special]]
+![4~3], 3
+!15
+!Mid
+!
+|-
+![[Satellite Moon Roundhouse]]
+![4~3], 4
+!16, 15
+!Mid, mid
+!
+|-
+![[Sidestep|Rewinder Away]]
+!1+2
+!-
+!-
+!
+|-
+![[Back Handspring (Eddy, Christie and Tiger)|Back Handspring]]
+!3+4
+!18
+!Mid
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Shin Cutter Combo]]
+!f+2, 1, 4
+!8, 10, 12
+!High, high, mid
+!
+|-
+![[Handstand Kick (Eddy, Christie and Tiger)|Handstand Kick]]
+!f+3
+!15
+!Mid
+!
+|-
+![[Samba]]
+!f+4
+!20
+!Mid
+!
+|-
+![[Samba Handstand]]
+!f+4, b
+!20
+!Mid
+!
+|-
+![[Samba Slippery Kick]]
+!f+4, 3+4
+!20, 20, 20
+!Mid, low, low
+!
+|-
+![[Handstand]]
+!f+1+2
+!-
+!-
+!
+|-
+![[Elbow Uppercut]]
+!d/f+2
+!15
+!Mid
+!SH
+|-
+![[Island Mirage]]
+!d/f+3
+!15
+!Mid
+!
+|-
+![[Island Mirage to Negativa|Island Mirage Relaxed]]
+!d/f+3, d
+!15
+!Mid
+!
+|-
+![[Kneecap Crusher]]
+!d/f+4
+!12
+!Low
+!
+|-
+![[Mirage]]
+!d/f+3+4
+!20
+!Mid
+!JG
+|-
+![[Sidestep|Rewinder Near]]
+!d+1+2
+!-
+!-
+!
+|-
+![[Rasteila|Thong Bikini]]
+!d/b+3
+!12
+!Low
+!RC
+|-
+![[Rasteila to Handstand|Thong Bikini to Handstand]]
+!d/b+3, b
+!12
+!Low
+!
+|-
+![[Rasteila Chibata|Thong Bikini Bushwacker]]
+!d/b+3, 3
+!12, 13
+!Low, mid
+!
+|-
+![[Rasteila Hot Plate Special|Thong Bikini Hot Plate Special]]
+!d/b+3, N, 3
+!12, 13
+!Low, mid
+!
+|-
+![[Thong Bikini to Circle Kick]]
+!d/b+3, 4
+!12, 15
+!Low, high
+!
+|-
+![[Thong Bikini to Low Kick 1]]
+!d/b+[3~4]
+!12, 25
+!Low, low
+!
+|-
+![[Thong Bikini to Low Kick 2]]
+!d/b+[3~4], 4
+!12, 25, 15
+!Low, low, low
+!RC
+|-
+![[Rasteila to Crying Needle|Thong Bikini to Crying Needle]]
+!d/b+[3~4], 1+2
+!12, 25, 20
+!Low, low, mid
+!
+|-
+![[Barbed Wire]]
+!d/b+4, 4, 4,...
+!15, 30, 30...
+!High, high, high...
+!
+|-
+![[Barbed Wire Infinite Upside Down Kick]]
+!d/b+4, b+4
+!15, 15
+!Mid, mid
+!
+|-
+![[Fruit Picker]]
+!d/b+3+4 (b, b to cancel)
+!40, 40
+!!, !
+!
+|-
+![[Asfixiante]]
+!b+2
+!17
+!High
+!
+|-
+![[Knee Thruster]]
+!b+3
+!10
+!Mid
+!
+|-
+![[Armada|Leg Whip Mars Attack]]
+!b+4
+!15
+!High
+!CSc
+|-
+![[Armada to Rasteila|Leg Whip Mars Attack to Thong Bikini]]
+!b+4,3
+!15, 12
+!High, low
+!RC
+|-
+![[Leg Whip Thong Bikini Hot Plate Special]]
+!b+4, 3, 3
+!15, 12, 13
+!High, low, mid
+!
+|-
+![[Armada to Macaco|Leg Whip Mars Attack to Macaco]]
+!b+4, 4
+!15, 15
+!High, mid
+!
+|-
+![[Armada to Macaco to Negativa|Leg Whip Mars Attack to Macaco to Negativ]]<nowiki/>[[Armada to Macaco to Negativa|a]]
+!b+4, 4, d
+!15, 15
+!High, mid
+!
+|-
+![[Leg Whip Mars Attack Flip]]
+!b+4, 4, 3+4
+!15, 12, 25, 20
+!High, mid, mid, mid
+!
+|-
+![[Firekick]]
+!u (or u/b or u/f)+3+4
+!20
+!Mid
+!
+|-
+![[Firekick to Negativa|Firekick to Relaxed Position]]
+!u (or u/b or u/f)+3+4, d
+!20
+!Mid
+!
+|-
+![[Roundhouse (Eddy, Tiger and Christie)|Roundhouse]]
+!u/f+4
+!28
+!Mid
+!
+|-
+![[Vasuuna]]
+!u/f (or u or u/b)+1+2
+!21
+!High
+!GB
+|-
+![[Lunging Brush Fire]]
+!f, f+3
+!30
+!Mid
+!
+|-
+![[Lunging Brush Fire to Negativa|Lunging Brush Fire to Relax]]
+!f, f+3, d
+!30
+!Mid
+!
+|-
+![[Lunging Brush Fire to Handstand]]
+!f, f+3, b
+!30
+!Mid
+!
+|-
+![[Back Summy]]
+!f, f+4
+!-
+!-
+!
+|-
+![[Back Summy Crouch]]
+!f, f+4, D
+!-
+!-
+!
+|-
+![[Back Summy to Firekick|Back Summy to Fire Kick]]
+!f, f+4, 3
+!20
+!Low
+!
+|-
+![[Back Summy to Scoot Kick]]
+!f, f+4, 4
+!35
+!High
+!
+|-
+![[Boomerang]]
+!f, f+3+4
+!30
+!Mid
+!GB BN
+|-
+![[Face Jammer]]
+!WS+3
+!25
+!High
+!
+|-
+![[Circle Kick]]
+!WS+4
+!15
+!Mid
+!
+|-
+![[Crying Needle]]
+!FC+1+2
+!20
+!Mid
+!
+|-
+![[Hammer Head]]
+!FC+1+2, 1, 2
+!30
+!Mid
+!
+|-
+![[Front Stinger]]
+!FC+3+4
+!12
+!Mid
+!KS
+|-
+![[Front Stinger to Negativa]]
+!FC+3+4, d
+!12
+!Mid
+!
+|-
+![[Front Stinger to Handstand|Front Stinger to Relax]]
+!FC+3+4, b
+!12
+!Mid
+!
+|-
+![[Haule]]
+!FC+d/b+4
+!15
+!Mid
+!
+|-
+|}
+
+===During side step (Rewinder)===
+{| class="wikitable sortable" id="phoenix" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Sidestep|Rewinder Away]]
+!1+2
+!-
+!-
+|-
+![[Sidestep|Rewinder Near]]
+!d+1+2
+!-
+!-
+|-
+![[Cruncher]]
+!SS+2
+!18
+!Mid
+|-
+![[Hot Plate Special]]
+!SS+3
+!15
+!Mid
+|-
+![[Hot Plate Special Cancel to Negativa]]
+!SS+3, d
+!-
+!-
+|-
+![[Hot Plate Special Cancel to Handstand]]
+!SS+3, b
+!-
+!-
+|-
+![[Hot Plate Special to Handstand]]
+!SS+3, N, b
+!25
+!Mid
+|-
+![[Twister]]
+!SS+4
+!12
+!Low
+|-
+![[Twister to Handstand]]
+!SS+4, b
+!12
+!Low
+|-
+![[Twister Sweep]]
+!SS+4, N, 3
+!12, 25
+!Low, low
+|-
+![[Dos Sole]]
+!SS+[4~3]
+!50
+!High
+|-
+![[Dos Sole to Handstand]]
+!SS+[4~3], b
+!50
+!High
+|-
+![[Twister Front Stinger]]
+!SS+4, 3+4
+!12, 20
+!Low, mid
+|-
+![[Twister Front Stinger to Negativa]]
+!SS+4, 3+4, d
+!12, 20
+!Low, mid
+|-
+![[Twister Front Stinger to Handstand]]
+!SS+4, 3+4, b
+!12, 20
+!Low, mid
+|-
+![[Handslaps]]
+!SS+1+2
+!12, 15
+!High, high
+|-
+![[Handslaps Island Mirage]]
+!SS+1+2, N, 3
+!12, 15
+!High, high
+|-
+![[Handslaps Mirage]]
+!SS+1+2, 3
+!12, 15, 20
+!High, mid
+|-
+![[Wheel Kicks]]
+!SS+3+4
+!6, 6
+!High, mid
+|-
+![[Wheel Kicks to Crouch]]
+!SS+3+4, D
+!6, 6
+!High, mid
+|-
+![[Wheel Kicks São Paulo Special]]
+!SS+3+4, 3+4, 3+4, u/f+3+4
+!6, 6, 25, 18, 20
+!High, mid, mid, mid, mid
+|-
+![[Banda]]
+!SS+1+4
+!17
+!Low
+|-
+![[Jumping Jacks]]
+!SS+u+3
+!25
+!Mid
+|-
+![[Jumping Jacks to Negativa|Jumping Jacks Relaxed]]
+!SS+u+3, D
+!25
+!Mid
+|-
+![[Jumping Jacks Mirage]]
+!SS+u+3, 3
+!25, 20
+!Mid, mid
+|-
+![[Jumping Jacks Evil Stinger]]
+!SS+u+3, d+3+4
+!25, 15
+!Mid, low
+|}
+
+===During [[Handstand]]===
+{| class="wikitable sortable" id="phoenix" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Handstand]]
+!f+1+2
+!-
+!-
+!
+|-
+![[Crouch to Handstand]]
+!FC+d/f+1+2
+!-
+!-
+!
+|-
+![[Handstand Walking]]
+!During Handstand f
+!-
+!-
+!
+|-
+![[Somersault to Standing]]
+!During Handstand D/F
+!-
+!-
+!
+|-
+![[Handstand Cancel]]
+!During Handstand B
+!-
+!-
+!
+|-
+![[Flop Left]]
+!During Handstand 1
+!10
+!Mid
+!RC
+|-
+![[Calypso]]
+!During Handstand 1, 3
+!10, 25
+!Mid, low
+!
+|-
+![[Flop Right]]
+!During Handstand 2
+!10
+!Mid
+!RC
+|-
+![[Circus]]
+!During Handstand 2, 4
+!10, 12
+!Mid, low
+!
+|-
+![[Carnival (Move)|Carnival]]
+!During Handstand 2, 4, 3
+!10,12,25
+!Mid, low, low
+!
+|-
+![[Super Carnival]]
+!During Handstand 2, 4, 3, B
+!10, 12, 25
+!Mid, low, low
+!
+|-
+![[Scoot Kick]]
+!During Handstand 3
+!15
+!Low
+!
+|-
+![[Slippery Kick]]
+!During Handstand [3~4]
+!10, 13
+!Low, low
+!
+|-
+![[Helicopter]]
+!During Handstand 4
+!12, 12
+!Mid, high
+!
+|-
+![[Helicopter to Slippery Kick]]
+!During Handstand 4, 3+4
+!12, 12, 10, 13
+!Mid, high, low, low
+!
+|-
+![[Armadillo]]
+!During Handstand f+1+2
+!-
+!-
+!
+|-
+![[Perch]]
+!During Handstand d
+!-
+!-
+!
+|-
+![[Perch Flop Kick]]
+!During Handstand d+3+4
+!25
+!Mid
+!JG
+|-
+![[Hot Plate Special]]
+!During Handstand b+3
+!20
+!Mid
+!
+|-
+![[Hot Plate Special to Handstand]]
+!During Handstand b+3, B
+!20
+!Mid
+!
+|-
+![[Scoot Kick Feint]]
+!During Handstand B+3
+!-
+!-
+!
+|-
+![[Handstand Tilt]]
+!During Handstand u, N (or d, N)
+!-
+!-
+!
+|-
+![[Drop Kick (Eddy, Christie and Tiger)|Drop Kick]]
+!During Handstand u, N, 3 (or u, N, 4)
+!25
+!Low
+!
+|-
+![[Straight Flop]]
+!During Handstand u+3 (or u+4)
+!10
+!Mid
+!
+|-
+![[Tilt Twist Sweep]]
+!During Handstand u+3, d (or u+4, d)
+!10
+!Mid
+!
+|}
+
+===During [[Negativa]] (Relaxed Position)===
+{| class="wikitable sortable" id="phoenix" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Rio Delight Knee Slicer]]
+!During Negativa 3, N, 4
+!7, 28
+!Low, mid
+!
+|-
+![[S-Dobrado|Mirage]]
+!During Negativa [3~4]
+!20
+!Mid
+!JG
+|-
+![[Knee Slicer (Eddy Gordo)|Knee Slicer]]
+!During Negativa 4
+!10
+!Mid
+!
+|-
+![[Knee Slicer Low Front Stinger]]
+!During Negativa 4, 3+4
+!10, 25
+!Mid, mid
+!
+|-
+![[Ipanema Wings]]
+!During Negativa [4~3]
+!12, 12
+!Low, low
+!
+|-
+![[Ipanema Wings to Slippery Kick]]
+!During Negativa [4~3], 3+4
+!12, 12, 25, 25
+!Low, low, low, low
+!
+|-
+![[Low Header]]
+!During Negativa 1+2
+!20
+!Mid
+!
+|-
+![[Low Front Stinger]]
+!During Negativa 3+4
+!25
+!Mid
+!
+|-
+![[Low Front Stinger Cancel]]
+!During Negativa 3+4, 3
+!25
+!Mid
+!
+|}
+
+==10 Hit Combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Eddy, Christie and Tiger)|[4~3], 4, 2, 4, 4, 3+4, 3+4, 3+4, d/b+3+4, u/f+3+4]]
+!169
+!mmmhhmmmhmmm
+|-
+![[10 Hit Combo 2 (Eddy, Christie and Tiger)|[4~3], 4, 2, 4, 3]]
+!91
+!mmmhhl
+|}
+[[Category:Moves Lists]]
+[[Category:Eddy Gordo Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

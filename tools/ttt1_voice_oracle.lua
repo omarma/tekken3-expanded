@@ -10,7 +10,7 @@ local ids = {}
 for v in string.gmatch(os.getenv('TTT1_VOICE_IDS') or '', '%d+') do ids[#ids + 1] = tonumber(v) end
 local out = assert(io.open(os.getenv('TTT1_OUT') or 'voice-oracle.csv', 'w'))
 out:write('tick,requested_id,voice,volume_front,frequency,flags,bank,start,end\n')
-local tick, requested = 0, 0
+local tick, requested = tonumber(os.getenv('TTT1_FRAME0') or '0'), 0   -- apres -state : trame de la sauvegarde
 
 ttt1_voice_tap = sub:install_write_tap(0x280404, 0x280405, 'ttt1-voice-keyon', function()
     local base = 0x280000 + 21*16

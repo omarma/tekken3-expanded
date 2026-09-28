@@ -176,13 +176,9 @@ def main():
         if args.ttt1: command += ['--tektagt', args.ttt1]
         if args.mame: command += ['--mame', args.mame]
         logged(command, LOGS / 'difficulty.log')
-    # Practice's COMMAND LIST comes from the Tekken wiki (text kept out of git):
-    # fetch it now; without a network the guests show Jin's list until it runs.
-    try:
-        run([sys.executable, ROOT / 'tools/ttt1/movelist.py', '--fetch', *wanted], cwd=ROOT)
-    except (OSError, subprocess.SubprocessError) as error:
-        print(f'Warning: could not fetch the move lists from the Tekken wiki ({error}); '
-              'run python3 tools/ttt1/movelist.py --fetch later.', file=sys.stderr, flush=True)
+    # Practice's COMMAND LIST comes from the Tekken wiki pages kept in the
+    # repository (tools/data/wiki): no network needed, the same lists for everyone.
+    run([sys.executable, ROOT / 'tools/ttt1/movelist.py', *wanted], cwd=ROOT)
     # COMBO TRAINING: the measured combos (tools/data/combos) become each guest's pack.
     run([sys.executable, ROOT / 'tools/ttt1/combos.py', 'build'], cwd=ROOT)
     run([sys.executable, ROOT / 'tools/ttt1_stage_roster.py'], cwd=ROOT)

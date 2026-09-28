@@ -1,0 +1,804 @@
+These are all of the moves that [[Nina Williams]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Arm Grab Flip]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Over The Back Toss|Over the Back Toss]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Shoulder Through Buster]]
+!2+4, 1, 2, 1
+!Front
+!35
+!2
+|-
+![[Shoulder Through Arm Breaker]]
+!During Shoulder Through Buster 2, 1, 3
+!Front
+!10
+!
+|-
+![[Triangle Hold]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Hammer Throw]]
+!1+3 (or 2+4)
+!Right
+!38
+!2
+|-
+![[Leaping Triangle Hold]]
+!1+3 (or 2+4)
+!Back
+!60
+!
+|-
+![[Jumping Flip]]
+!u/f+1+2
+!Front
+!40
+!1+2
+|-
+![[Elbow Smash (Nina Williams)|Elbow Smash]]
+!d/f, d/f+1
+!Front
+!33
+!1+2
+|-
+![[Arm Grab Flip|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!20
+!
+|-
+![[Attack Reversal]]
+!Synchro with the opponent's attack b+1+3 (or 2+4)
+!Parry
+!25
+!
+|-
+![[Low Parry (Nina)|Low Parry]]
+!d/b (or d)+1+3 (or 2+4)
+!Parry
+!-
+!
+|}
+
+===[[Backhand Slap Combo]]===
+{| class="wikitable sortable" id="backhand slap combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Backhand Slap]]
+!qcf+1+2
+!Front
+!15
+!2
+|-
+![[Seoi Gyaku Juji-Gatame|Arm Snap]]
+!During Backhand Slap 3, 4, 3, 1+2
+!Front
+!30
+!1+2
+|-
+![[Triple Slaps]]
+!During Backhand Slap 2, 3, 4, 2, 2
+!Front
+!30
+!2
+|-
+![[Neck Crusher]]
+!During Triple Slaps 1, 3+4, 1, 2, 1+2
+!Front
+!35
+!1
+|-
+![[Leg Stretch Arm Lock]]
+!During Triple Slaps 1, 2, 4, 3, 1+2+3
+!Front
+!45
+!2
+|-
+![[Betrayer]]
+!qcb+1+4
+!Front
+!15
+!
+|-
+![[Twisted Nightmare]]
+!During Betrayer 2, 1, 1+2, 1+2+3
+!Front
+!28
+!2
+|-
+![[Neck Crusher]]
+!During Twisted Nightmare 1, 3+4, 1, 2, 1+2
+!Front
+!35
+!1
+|-
+![[Leg Stretch Arm Lock]]
+!During Twisted Nightmare 1, 2, 4, 3, 1+2+3
+!Front
+!45
+!2
+|-
+![[Arm Break]]
+!During Betrayer (or Backhand Slap) 1, 3, 2, 1
+!Front
+!20
+!1
+|-
+![[Double Arm Break]]
+!During Arm Break 3, 1, 4, 1+2, 1+2
+!Front
+!25
+!1+2
+|-
+![[Falling Arm Break]]
+!During Arm Break 2, 1, 3, 4, 1+2
+!Front
+!25
+!2
+|}
+
+===[[Crab Hold Combo]]===
+{| class="wikitable sortable" id="crab hold combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Crab Hold]]
+!qcf+3+4
+!Front
+!15
+!1
+|-
+![[Commando Arm Lock]]
+!During Crab Hold 3+4, 3, 4, 1+2
+!Front
+!35
+!1
+|-
+![[Heel Hold]]
+!During Crab Hold 3+4, 4, 2, 1+2
+!Front
+!20
+!2
+|-
+![[Leaping Heel Hold]]
+!f, f, f+3 (or u/f+3+4)
+!Front
+!20, 20
+!2
+|-
+![[Double Snap]]
+!During Heel Hold 3, 1, 4, 2+4
+!Front
+!35
+!1
+|-
+![[Double Heel Hold (Nina)|Double Heel Hold]]
+!During Heel Hold 1, 3, 2+4, 3+4, 1+2
+!Front
+!45
+!1+2
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Left Right Combo]]
+!1, 2
+!4, 10
+!High, high
+!
+|-
+![[Biting Snake]]
+!1, 2, 1, 4
+!4, 10, 6, 10
+!High, high, high, low
+!RC
+|-
+![[One Two Spike Combo 1]]
+!1, 2, 3, 3, 2
+!4, 10, 20, 10, 10
+!High, high, high, low, mid
+!JG
+|-
+![[One Two Spike Combo 2]]
+!1, 2, 3, 3, 4
+!4, 10, 20, 10, 15
+!High, high, high, low, high
+!
+|-
+![[One Two Spike Combo 3]]
+!1, 2, 3, 3, d+4
+!4, 10, 20, 10, 7
+!High, high, high, low, low
+!
+|-
+![[One Two Left High Right High]]
+!1, 2, 3, 4
+!4, 10, 20, 15
+!High, high, high, high
+!
+|-
+![[Bermuda Triangle]]
+!1, 2, 4
+!4, 10, 15
+!High, high, high
+!
+|-
+![[Double Explosion 1]]
+!1, 2, f+1+2
+!4, 10, 20
+!High, high, mid
+!
+|-
+![[Double Explosion 2]]
+!1, 2, 1, 2, f+1+2
+!4, 10, 6, 6, 20
+!High, high, high, high, mid
+!
+|-
+![[Jail Crusher to Uppercut]]
+!1, 2, d+3, 2
+!4, 10, 10, 10
+!High, high, low, mid
+!JG
+|-
+![[Jail Crusher]]
+!1, 2, d+3, 4
+!4, 10, 10, 15
+!High, high, low, high
+!
+|-
+![[Right Left Combo]]
+!2, 1
+!10, 6
+!High, high
+!
+|-
+![[Biting Snake (Short)]]
+!2, 1, 4
+!10, 6, 8
+!High, high, low
+!RC
+|-
+![[Double Smash]]
+!2, 3
+!10, 20
+!High, high
+!
+|-
+![[PK Rush 1]]
+!2, 3, 3, 2
+!10, 20, 10, 10
+!High, high, low, mid
+!
+|-
+![[PK Rush 2]]
+!2, 3, 3, 4
+!10, 20, 10, 15
+!High, high, low, mid
+!
+|-
+![[PK Rush 3]]
+!2, 3, 3, d+4
+!10, 20, 10, 7
+!High, high, low, low
+!
+|-
+![[PK Rush 4]]
+!2, 3, 4
+!10, 20, 15
+!High, high, high
+!
+|-
+![[Jab Roundhouse (Nina Williams)|Jab Roundhouse]]
+!2, 4
+!10, 15
+!High, high
+!
+|-
+![[Double Explosion (Short)]]
+!2, f+1+2
+!4, 20
+!High, mid
+!
+|-
+![[Jab Sweep]]
+!2, d+3
+!10, 10
+!High, low
+!
+|-
+![[PDK Combo to Right Uppercut]]
+!2, d+3, 2
+!10, 10, 10
+!High, low, mid
+!JG
+|-
+![[PDK Combo to Right High Kick]]
+!2, d+3, 4
+!10, 10, 15
+!High, low, high
+!
+|-
+![[Spike Combo to Right Uppercut]]
+!3, 3, 2
+!25, 10, 10
+!High, low, mid
+!JG
+|-
+![[Spike Combo to Right High Kick]]
+!3, 3, 4
+!25, 10, 15
+!High, low, high
+!
+|-
+![[Spike Combo to Right Low Kick]]
+!3, 3, d+4
+!25, 10, 7
+!High, low, low
+!
+|-
+![[Head Ringer]]
+!3, 4
+!25, 15
+!High, high
+!
+|-
+![[Right High to Left Spin Low Kick]]
+!4, 3
+!15, 15
+!High, low
+!
+|-
+![[Blonde to Right Uppercut]]
+!4, 3, 2
+!15, 15, 10
+!High, low, mid
+!JG
+|-
+![[Blonde to Right High Kick]]
+!4, 3, 4
+!15, 15, 15
+!High, low, high
+!
+|-
+![[Blonde to Right Low Kick]]
+!4, 3, d+4
+!15, 15, 7
+!High, low, low
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Blonde Bomb]]
+!f+1+2
+!20
+!Mid
+!
+|-
+![[Uppercut To Jab|Uppercut to Jab]]
+!d/f+1, 2
+!10, 15
+!Mid, high
+!
+|-
+![[Leg Slicer Combo]]
+!d/f+3, 1, 2
+!10, 10, 6
+!Mid, high, high
+!
+|-
+![[Assault Bomb]]
+!d/f+3, 1, 2, f+1+2
+!10, 10, 6, 20
+!Mid, high, high, mid
+!
+|-
+![[Creeping Snake]]
+!d/f+3, 2, 1, 4
+!10, 12, 15, 10
+!Mid, high, high, low
+!
+|-
+![[Creeping Snake to Left High Kick]]
+!d/f+3, 2, 3
+!10, 12, 20
+!Mid, high, high
+!
+|-
+![[Creeping Snake to Right High Kick]]
+!d/f+3, 2, 4
+!10, 12, 15
+!Mid, high, high
+!
+|-
+![[Creeping Snake to Left Low Kick]]
+!d/f+3, 2, d+3
+!10, 12, 10
+!Mid, high, low
+!RC
+|-
+![[Creeping Snake to Left Low Right Uppercut]]
+!d/f+3, 2, d+3, 2
+!10, 15, 10, 15
+!Mid, high, low, mid
+!
+|-
+![[Creep Rush 1]]
+!d/f+3, 2, 3, 3, 2
+!10, 12, 20, 10, 15
+!Mid, high, high, low, mid
+!
+|-
+![[Creep Rush 2]]
+!d/f+3, 2, 3, 3, 4
+!10, 12, 20, 10, 15
+!Mid, high, high, low, high
+!
+|-
+![[Creep Rush 3]]
+!d/f+3, 2, 3, 3, d+4
+!10, 12, 20, 10, 7
+!Mid, high, high, low, low
+!
+|-
+![[Creep Rush 4]]
+!d/f+3, 2, 3, 4
+!10, 12, 20, 15
+!Mid, high, high, high
+!
+|-
+![[Creeping Snake to Left Low Right High Kick]]
+!d/f+3, 2, d+3, 4
+!10, 15, 10, 10
+!Mid, high, low, high
+!
+|-
+![[Flash Kick to Blonde Bomb]]
+!d/f+3, 3, 3, 1, 2, f+1+2
+!10, 6, 8, 10, 5, 20
+!Mid, high, high, high, high, mid
+!
+|-
+![[Flash Kick to Left Low Kick]]
+!d/f+3, 3, 3, 3
+!10, 6, 8, 10
+!Mid, high, high, low
+!
+|-
+![[Flash Kicks]]
+!d/f+3, 3, 3, 4
+!10, 6, 8, 15
+!Mid, high, high, high
+!
+|-
+![[Left Middle to Right High Kick]]
+!d/f+3, 4
+!10, 15
+!Mid, high
+!
+|-
+![[Ray Hands]]
+!d/f+1+2
+!6, 8
+!Mid, mid
+!MS FScco
+|-
+![[Jab To Mid Kick|Jab to Mid Kick]]
+!d+1, 4
+!5, 10
+!Mid, mid
+!
+|-
+![[Toe Kick (Nina)|Toe Kick]]
+!d+2, 4
+!8, 10
+!Mid, mid
+!
+|-
+![[Left Spin Low Kick to Right Uppercut|Left Spin Low Kick to Right Upper]]
+!d+3, 2
+!10, 10
+!Low, mid
+!JG
+|-
+![[Left Spin Low Kick to High Right Kick|Sit Spin to High Right Kick]]
+!d+3, 4
+!10, 15
+!Low, high
+!
+|-
+![[L&R Low Kick]]
+!d+3, d+4
+!10, 10
+!Low, low
+!
+|-
+![[Right Low Kick to Back Spin Chop]]
+!d+4, 1
+!10, 15
+!Mid, high
+!
+|-
+![[Helping Hand]]
+!d/b+1
+!10
+!Mid
+!
+|-
+![[Right Backhand Body Blow]]
+!d/b+2
+!20
+!Mid
+!FS
+|-
+![[Slicer]]
+!d/b+4
+!7
+!Low
+!
+|-
+![[Geyser Cannon Combo]]
+!d/b+4, 3
+!7, 21
+!Low, mid
+!JG
+|-
+![[Power Charge]]
+!d/b+1+2 (u, u to cancel)
+!95
+!!
+!
+|-
+![[Geyser Cannon]]
+!d/b+3+4 (or d, d/b+3)
+!25
+!Mid
+!'''JG'''
+|-
+![[Left Backhand Body Blow]]
+!b+1
+!15
+!High
+!CF
+|-
+![[Slap]]
+!b+2
+!15
+!High
+!
+|-
+![[Double Slap]]
+!b+2, 2
+!15, 18
+!High, high
+!
+|-
+![[Catapult Kick]]
+!u/f (or u or u/b)+3
+!20
+!Mid
+!
+|-
+![[Can Opener]]
+!u/f+4, 3, 4
+!20, 10, 14
+!High, low, high
+!
+|-
+![[Hopping Low Kick to Right Uppercut]]
+!u/f, N, d+3, 2
+!25, 10
+!Low, mid
+!JG
+|-
+![[Hopping Low Kick to Left Mid Kick]]
+!u/f, N, d+3, 3
+!25, 15
+!Low, mid
+!
+|-
+![[Hopping Low Kick to Right High Kick]]
+!u/f, N, d+3, 4
+!25, 15
+!Low, high
+!
+|-
+![[Assassin's Dagger (Nina)|Assassin Dagger]]
+!f, f+1
+!14
+!High
+!OS
+|-
+![[Quick Panther Claw]]
+!f, f+2
+!15
+!Mid
+!SH
+|-
+![[Panther Claw]]
+!f, F+2
+!21
+!Mid
+!SH
+|-
+![[Bad Habit]]
+!f, f+3
+!25
+!Mid
+!MS DSc
+|-
+![[Kneel Kick]]
+!f, f+4
+!20
+!Mid
+!
+|-
+![[Shut Up]]
+!d, d/f+2
+!24
+!Mid
+!JG
+|-
+![[Rolling Dash]]
+!qcf
+!-
+!-
+!
+|-
+![[Evil Mist]]
+!qcf, D/B+2+3
+!0
+!!
+!
+|-
+![[Reverse Rolling Dash]]
+!qcb
+!-
+!-
+!
+|-
+![[Wipe The Floor|Wipe the Floor]]
+!d, d/f+4
+!15
+!Low
+!BS RC
+|-
+![[Running Jump Kick]]
+!f, f, f+3
+!20
+!Mid
+!
+|-
+![[Palm Uppercut]]
+!WS+2
+!10
+!Mid
+!
+|-
+![[Spider Knee]]
+!WS+3
+!15
+!Mid
+!JGc
+|-
+![[Snakeshot]]
+!SS+1
+!15
+!Mid
+!
+|-
+![[Snakeshot to Rolling Dash]]
+!SS+1, F
+!15
+!Mid
+!
+|-
+![[Snakeshot to Reverse Rolling Dash]]
+!SS+1, B
+!15
+!Mid
+!
+|-
+![[Double Shot]]
+!S+1, 2
+!15, 15
+!Mid, mid
+!
+|-
+![[Lift Shot]]
+!SS+2
+!15
+!Mid
+!GB JGc
+|-
+![[Heel Slicer]]
+!SS+4
+!10
+!Low
+!BS KS
+|-
+![[Spiral Explosion]]
+!SS+1+2
+!20
+!Mid
+!
+|-
+![[Twisted Mind]]
+!(With opponent down) d+3+4
+!16
+!Low
+!
+|}
+==10 Hit Combos==
+{| class="wikitable sortable" id="10 hit combos" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Nina and Anna)|1, 2, 1, 2, 3, 3, 2, 1, 2, 4]]
+!90
+!hhhhhlhhhh
+|-
+![[10 Hit Combo 2 (Nina and Anna)|d/f+1, 2, 1, 2, 3, 3, 2, 1, 2, 4]]
+!101
+!mhhhhlhhhh
+|-
+![[10 Hit Combo 3 (Nina Williams)|1, 2, 1, 2, 3, 3, 2, 1, 4, 3]]
+!84
+!hhhhhlhhlm
+|-
+![[10 Hit Combo 4 (Nina Williams)|d/f+1, 2, 1, 2, 3, 3, 2, 1, 4, 3]]
+!95
+!mhhhhlhhlm
+|-
+![[10 Hit Combo 5 (Nina Williams)|1, 2, 1, 2, 4, 3, 4, 2, 4, 3]]
+!85
+!hhhhhllmlm
+|-
+![[10 Hit Combo 6 (Nina Williams)|d/f+1, 2, 1, 2, 4, 3, 4, 2, 4, 3]]
+!96
+!mhhhhllmlm
+|}
+[[Category:Moves Lists]]
+[[Category:Nina Williams Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

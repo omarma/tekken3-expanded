@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / 'workspace/ttt1-import'
-SRC = WORK / 'movelists'
+SRC = ROOT / 'tools/data/wiki'                 # texte des pages du wiki, dans le depot
 # Resultats mesures (suivis par git, rien de la ROM : notations et noms du
 # wiki, delais, indices de coups) ; les essais en jeu restent sous workspace/.
 OUT = ROOT / 'tools/data/combos'

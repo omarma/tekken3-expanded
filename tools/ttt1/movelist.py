@@ -7,8 +7,9 @@ format de la liste de Tekken 3, que le runtime pose dans le tampon du joueur.
 
   python3 tools/ttt1/movelist.py [--fetch] [<cle> ...]
 
---fetch telecharge d'abord le texte wiki des pages (API MediaWiki, par curl)
-dans workspace/ttt1-import/movelists/<cle>.wiki. Sortie :
+Le texte wiki des pages est dans le depot, tools/data/wiki/<cle>.wiki (voir
+son README : source et licence). --fetch le telecharge de nouveau (API
+MediaWiki, par curl), pour le mettre a jour ; le setup ne s'en sert pas. Sortie :
 workspace/ttt1-import/<cle>/guest/<Nom>-TTT1-movelist.bin, puis
 tools/ttt1_stage_roster.py la recopie avec l'invite.
 
@@ -25,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / 'workspace/ttt1-import'
-SRC = WORK / 'movelists'
+SRC = ROOT / 'tools/data/wiki'                 # texte des pages du wiki, dans le depot
 BUFFER = 0x1A0                       # octets par joueur, compte compris
 NAME_MAX = 29                        # une ligne
 ICONS_MAX = 9                        # largeur d'une ligne de commande
@@ -151,7 +152,7 @@ def main():
         for donor in table.get(key, {}).get('donors', []) if key in args else []:
             if donor not in PAGES: continue
             try:
-                if '--fetch' in sys.argv or not (SRC / f'{donor}.wiki').is_file(): fetch(donor)
+                if '--fetch' in sys.argv: fetch(donor)
                 data, total, skipped = build(donor)
             except (KeyError, ValueError) as e:
                 print(f'{key}@{donor} : pas de liste ({e!r})'); continue
@@ -160,7 +161,7 @@ def main():
                 (guest / f'{key.capitalize()}@{donor.capitalize()}-TTT1-movelist.bin').write_bytes(data)
                 print(f'{key}@{donor:10s} {data[0]:2d} entrees sur {total} lisibles')
         if key not in PAGES: continue
-        if '--fetch' in sys.argv or not (SRC / f'{key}.wiki').is_file(): fetch(key)
+        if '--fetch' in sys.argv: fetch(key)
         data, total, skipped = build(key)
         guest = WORK / key / 'guest'
         if not guest.is_dir(): print(f'{key} : pas importe, ignore'); continue
