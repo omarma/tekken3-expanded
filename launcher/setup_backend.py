@@ -244,6 +244,15 @@ def validate_files(disc,ttt,include_ttt1):
         except (ValueError,zipfile.BadZipFile,OSError) as error:
             log_line(str(error));raise SetupError('The arcade ZIP does not match the supported set. The TTT1 characters need tektagt (World C1), non-merged.') from error
 
+# tekken3.zip's program ROMs, TET2/VER.E1 (tet2vere1.2e, .2j), by CRC as MAME
+# finds them: sets from older MAME versions give the same chips other names.
+TEKKEN3_PROGRAM={0x7ded5461,0x25c96e1e}
+
+def tekken3_supported(path):
+    try:
+        with zipfile.ZipFile(path) as z:return TEKKEN3_PROGRAM<={i.CRC for i in z.infolist()}
+    except (OSError,zipfile.BadZipFile):return False
+
 def build_game(toolchain,env,include_ttt1):
     cmake=toolchain/'bin/cmake.exe' if toolchain else shutil.which('cmake')
     emit(message='Preparing the game to build',detail='First setup can take several minutes.')
@@ -274,6 +283,12 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
         'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),'jin_red':jin_red})
     if disc.is_file():disc=single_bin(disc)
     validate_files(disc,ttt,include_ttt1)
+    # Optional: an unsupported tekken3.zip only costs the arcade difficulty
+    # levels, checked now rather than failing the import an hour later.
+    if tekken3 and not tekken3_supported(tekken3):
+        log_line(f'{tekken3}: no TET2/VER.E1 program ROMs, arcade difficulty levels skipped')
+        emit(message='Skipping the arcade difficulty levels',detail='Your tekken3.zip is not the TET2/VER.E1 set (see the README). Setup goes on without them.')
+        tekken3=None
     if include_ttt1:
         for module in ('PIL','numpy'):
             try:__import__(module)
