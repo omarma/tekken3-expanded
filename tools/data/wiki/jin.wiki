@@ -1,0 +1,502 @@
+'''Jin Kazama/Tekken Tag Tournament Movelist''' is a list of all the moves that [[Jin Kazama]] can perform in [[Tekken Tag Tournament]].
+
+==Movelist==
+
+=== Throws ===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Double High Sweep]]
+!1+3
+!Front
+!30
+!1
+!
+|-
+![[Over the Shoulder Reverse]]
+!2+4
+!Front
+!30
+!2
+!
+|-
+![[Shoulder Flip]]
+!1+3 (or 2+4)
+!Left
+!43
+!1
+!
+|-
+![[Over the Limit]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+!
+|-
+![[Chicken Butcher]]
+!1+3 (or 2+4)
+!Back
+!60
+!
+!
+|-
+![[White Mountain|Wrist Chuck Slam]]
+!d/f+2+3
+!Front
+!35
+!2
+!
+|-
+![[Stonehead]]
+!f, f+1+2
+!Front
+!33
+!1+2
+!#1
+|-
+![[Omen Stonehead]]
+!f, f+1+2
+!Front
+!37
+!1+2
+!#1
+|-
+![[Complicated Wire]]
+!d, d/b, b+1+3
+!Front
+!35
+!1
+!
+|-
+![[Ultimate Tackle]]
+!d (or d/b)+1+2
+!Front
+!5
+!1+2
+!
+|-
+![[Ultimate Punch]]
+!During Tackle 2, 1, 2, 1, 2
+!Front
+!5, 5, 5, 5, 5
+!1 or 2
+!
+|-
+![[Ultimate Punch]] to [[Cross Arm Lock]]
+!During Tackle 2, 1, 2, 1+2
+!Front
+!5, 5, 5, 25
+!1 or 2
+! 
+|-
+![[Cross Arm Lock]]
+!During Tackle 1+2
+!Front
+!25
+!
+!
+|-
+![[Double Face Kick|Reverse Throw]]
+!Back to the opponent, 1+3 (or 2+4)
+!Front
+!30
+!
+!
+|-
+![[Attack Reversal]]
+!Synchro with the opponent's attack, b+1+3 (or b+2+4)
+!Back towards enemy
+!Varies
+!
+!
+|}
+
+# Literally, back must be turned to opponent. 
+# 1 Can be tech rolled immediately after.
+
+===Moves===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" | Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Flash Punch Combo]]
+!1, 1, 2
+!6, 8, 18
+!High, high, mid
+!KND
+|-
+![[Left Right Combo]]
+!1, 2
+!6, 10
+!High, high
+!
+|-
+![[Demon Slayer (Mishima)|Demon Slayer]]
+!1, 2, 2
+!6, 10, 18
+!High, high, high
+!
+|-
+![[Shoot The Works|Shoot the Works]]
+!1, 2, 3, 4
+!6, 10, 25, 24
+!High, high, mid, mid
+!KND
+|-
+![[Shoot The Works Upper|Shoot the Works Upper]]
+!1, 2, 3, f+4
+!6, 10, 25 ,8
+!High, high, mid, mid
+!KND
+|-
+![[One Two Knee]]
+!1, 2, 4
+!6, 10, 12
+!High, high, mid
+!
+|-
+![[Demon Backhand Spin]]
+!2, 2
+!10, 21
+!High, high
+!
+|-
+![[Back Spin Kick]]
+!4
+!30
+!High
+!KND
+|-
+![[Demon Scissors]]
+![4~3]
+!25
+!Mid
+!KND
+|-
+![[Three Ring Circus]]
+!1+4, 2, 4
+!5, 10, 10, 21
+!Mid, high, high, mid
+!KND
+|-
+![[Three Ring Circus Combo|3 Ring Circus Combo]]
+!1+4, 2,d+4
+!5, 10, 10, 14
+!Mid, high, high, low
+!BS,KND
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+! -
+!
+|-
+![[893P]]
+!f+2
+!18
+!Mid
+!MS
+|-
+![[893P Knee Kick]]
+!f+2, 4
+!18, 10
+!Mid, mid
+!
+|-
+![[Spinning High Kick]]
+!f+3
+!30
+!High
+!KND
+|-
+![[Knee Kick]]
+!f+4
+!12
+!Mid
+!
+|-
+![[Twin Lancer]]
+!d/f+1, 2
+!10, 16
+!Mid, mid
+!
+|-
+![[Tsunami Kick]]
+!d/f+4, 4
+!10, 16
+!Mid, mid
+!
+|-
+![[Double Lift Kick (Kazama)|Double Lift Kick]]
+!d+3+4
+!5, 20
+!Mid, high
+!JG
+|-
+![[Corpse Thrust]]
+!d/b+1
+!24
+!Mid
+!KND
+|-
+![[Parting Wave]]
+!b+1, D/F
+!15
+!Mid
+!MS
+|-
+![[Uraken]]
+!b+2
+!12
+!High
+!
+|-
+![[Back Fist to Side High Kick]]
+!b+2, 3
+!12, 21
+!High, high
+!
+|-
+![[Hell Scraper]]
+!b+2, 4, 2, 1, 2
+!12, 10, 10, 10, 24
+!High, high mid, mid, mid
+!
+|-
+![[Demon Steel Pedal]]
+!b+4
+!21
+!Mid
+!KSc
+|-
+![[Left Splits Kick]]
+!f, F+3
+!23
+!Mid
+!KND
+|-
+![[Force]]
+!b+1+2
+!-
+!-
+!
+|-
+![[Omen]]
+!During Force, 2, 2, 3 (in team with Heihachi Mishima)
+!-
+!-
+!#2
+|-
+![[Omen 7 Hit Combo]]
+!1, 2, 2, 3, 2, 4, 3
+!3, 4, 5, 13, 4, 4, 21
+!High, high, high, high, high, mid, high
+!KND
+|-
+![[Omen Corpse Hitter|Omen to Corpse Hitter]]
+!1+2
+!28
+!Mid
+!KS,GB,BS
+|-
+![[Omen to Dragon Uppercut]]
+!f, N, d, d/f+1
+!31
+!Mid
+!KND
+|-
+![[Omen Rising Uppercut|Omen to Rising Uppercut]]
+!f, N, d, d/f+2 (press at the same time)
+!21
+!Mid
+!JG,GB,BS
+|-
+![[Omen to Hell Brusher]]
+!f, N, d, d/f+4
+!15
+!Low
+!KND,BS
+|-
+![[Omen to Hell Brusher Heel Cutter|Omen Roundhouse to Triple Spin Kick]]
+!f, N, d, d/f+4, 4, 4
+!15, 12, 10
+!Low, mid, mid
+!BS,KND
+|-
+![[Lightning Uppercut]]
+!b+1+4
+!40
+!!
+!KND,#4
+|-
+![[Lightning Screw Uppercut]]
+!B+1+4
+!80
+!!
+!KND
+|-
+![[Rising Sun]]
+!u/f (or u)+4, 4
+!25, ?
+!Mid, low
+!
+|-
+![[Roundhouse to Triple Spin Kicks|Roundhouse to Triple Spin Kick]]
+!u/f (or u)+4, 4, 4, 4
+!25, ?, 9, 12
+!Mid, low, low, mid
+!BS,#3
+|-
+![[High Pounce]]
+!u/f (or u or u/b) +2+4
+!34
+!Mid
+!GB
+|-
+![[Demon's Paw]]
+!f, f+2
+!27
+!Mid
+!KND
+|-
+![[Demon God Fist|Heavy Body Blow]]
+!b, f+2
+!18
+!Mid
+!KSc
+|-
+![[Laser Cannon]]
+!b, f+2, 1, 2
+!18, 14, 24
+!Mid, mid, mid
+!KND
+|-
+![[Laser Scraper]]
+!b, f+2, 1, d/f+2
+!18, 14, 15
+!Mid, mid, mid
+!JG
+|-
+![[Dragon Uppercut (Mishima)|Dragon Uppercut]]
+!f, N, d, d/f+1
+!29
+!Mid
+!KND,#1
+|-
+![[Dragon Uppercut to Middle Kick]]
+!f, N, d, d/f+1, 3
+!29, 20
+!Mid, mid
+!KND
+|-
+![[Dragon Uppercut to Spinning Low Kick]]
+!f, N, d, d/f+1, 4
+!29, 12
+!Mid, low
+!KND,BS
+|-
+![[Wind God Fist|Rising Uppercut]]
+!f, N, d, d/f+2
+!25
+!High
+!JG
+|-
+![[Electric Wind Godfist]]
+!f, N, d, d/f+2 (press at the same time)
+!25
+!High
+!GB,JG
+|-
+![[Spinning Demon]]
+!f, N, d, d/f+4, 4
+!22, 12
+!Low, mid
+!KND,BS
+|-
+![[Leaping Sidekick|Leaping Side Kick]]
+!f, f, f+3
+!30
+!Mid
+!KND,GB
+|-
+![[Twin Pistons (Jin)|Twin Pistons]]
+!WS+1, 2
+!10, 15
+!Mid, mid
+!JG
+|-
+![[Crouching Uppercut (Jin)|Uppercut]]
+!WS+2
+! 18
+! Mid
+!JG
+|-
+![[Tsunami Kick]]
+!WS+4, 4
+!13, 18
+!Mid, mid
+!
+|-
+![[Demon Slayer (Kazama)|Tooth Fairy]]
+!SS+2
+!16
+!Mid
+!JG
+|}
+
+#When it is not clean hit damage is 29 and opponent is not knocked down
+#When any attack that is exclusive to the omen stance is performed, the user will take small damage
+#Using u+4,4,4,4 instead of the former command will delay the BS property until the third kick
+#Lightning Uppercut can be changed into Lightning Screw Uppercut by holding Back during its spin animation, but before the punch<br />
+
+==10 Hit Combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Jin and Devil Jin)|3, 2, 4, 3, 1+4, 2, 2, 1, 2]]
+!115
+!hhmhlhhmmm
+|-
+![[10 Hit Combo 2 (Jin and Devil Jin)|3, 2, 4, 3, 1+4, 2, 1]]
+!91
+!hhmhlhhm
+|-
+! [[10 Hit Combo 3 (Jin and Devil Jin)|b+2, 4, 4, 4, 4, 2, 1+4, 2, 1]]
+!98
+!hhmlmmlhhm
+|-
+! [[10 Hit Combo 4 (Jin and Devil Jin)|b+2, 4, 4, 4, 4, 2, 1+4, 2, d+3+4]]
+!103
+!hhmlmmlhhlh
+|-
+![[Mishima Style 10 Hit Combo|f, f, N, 2, 1, 2, 2, 3, 4, 4, 1, 2, 1]]
+!93
+!hhhhmmlhmm
+|-
+![[10 Hit Combo 2 (Kazuya Mishima)|f, f+2, 1, 2, 2, 3, 4, 4, 3, 2, 1]]
+!110
+!hhhhmmllm!
+|-
+![[10 Hit Combo 3 (Kazuya Mishima)|f, f, N, 2, 1, 4, 4, 2, 4, 3, 2, 1]]
+!99
+!hhmmlmlm!
+|}
+
+== See Also==
+
+*[[Jin Kazama]]
+
+[[Category:Moves Lists]]
+[[Category:Jin Kazama Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

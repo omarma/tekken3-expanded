@@ -181,13 +181,18 @@ def _place_exact(gs, limit=300000):
     left = [i for i in range(len(gs)) if i not in where]
     slack = W * H - sum(gs[i]['w'] * gs[i]['h'] for i in range(len(gs)))
     if slack < 0: return None
-    nodes = [0]
+    nodes = [0]; full = (1 << W) - 1
     def first_free():
-        for x in range(W):
-            bit = 1 << x
-            for y in range(H):
-                if not grid.rows[y] & bit: return x, y
-        return None
+        # Premiere colonne ou une case est libre (bit a 0 dans le ET des
+        # lignes), puis sa premiere case libre : le meme ordre que de balayer
+        # colonne par colonne, sans tester les W x H cases une a une.
+        busy = full
+        for r in grid.rows: busy &= r
+        cols = ~busy & full
+        if not cols: return None
+        x = (cols & -cols).bit_length() - 1; bit = 1 << x
+        for y in range(H):
+            if not grid.rows[y] & bit: return x, y
     def run_down(x, y):
         bit = 1 << x; n = 0
         while y + n < H and not grid.rows[y + n] & bit: n += 1

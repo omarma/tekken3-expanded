@@ -104,15 +104,74 @@ def sources(args):
         for k, data in regions.items(): (TTT1 / (k.replace(':', '_') + '.bin')).write_bytes(data)
 
 
-def mame(lua, env, cwd, debug=False, seconds=120):
+def mame(lua, env, cwd, debug=False, seconds=120, at=None):
+    """Capture MAME. at : sauvegarde d'etat (STATE_POINTS) d'ou repartir au lieu
+    de redemarrer la borne ; sans elle, ou si la capture echoue depuis elle, depuis
+    le demarrage. Rend True si la capture est partie de la sauvegarde."""
+    name = at and state(at)
+    if name:
+        try:
+            _mame(lua, {**env, 'TTT1_FRAME0': str(STATE_POINTS[name][1])}, cwd, debug, seconds, name)
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired): pass
+    _mame(lua, env, cwd, debug, seconds)
+    return False
+
+
+def _mame(lua, env, cwd, debug=False, seconds=120, load=None):
     for d in ('nvram', 'cfg', 'snap'): (cwd / d).mkdir(exist_ok=True)
     subprocess.run([MAME, 'tektagt', *(('-debug', '-debugger', 'none') if debug else ()),
                     '-rompath', str(ROMS), '-video', 'none', '-sound', 'none',
                     '-nothrottle', '-skip_gameinfo', '-autoboot_script', str(lua), '-autoboot_delay', '0',
                     '-nvram_directory', 'nvram', '-cfg_directory', 'cfg', '-snapshot_directory', 'snap',
+                    '-state_directory', str(STATES), *(('-state', load) if load else ()),
                     '-seconds_to_run', str(seconds)],
                    cwd=cwd, env={**os.environ, **env, **BACKGROUND}, check=True, timeout=600,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# Sauvegardes d'etat : chaque capture redemarrait la borne (environ 30 s
+# emulees jusqu'a la selection). La borne est amenee une fois, par le script de
+# capture lui-meme, jusqu'a la trame ou les captures commencent a differer, et
+# y est sauvegardee ; les captures repartent de la (TTT1_FRAME0), a l'identique.
+# Faites ici, depuis la ROM de l'utilisateur, jamais livrees : un etat contient
+# la memoire du jeu. nom -> (script, trame, variables) :
+#   select : les scripts de selection, d'interface et de coup fort ne font
+#            qu'ouvrir les options (UNLOCK) jusqu'a 1699 ;
+#   voice  : l'oracle des voix, avant sa premiere demande (1900) ; les lignes
+#            qu'il a deja ecrites sont gardees (prefix.csv).
+STATES = WORK / 'states'
+STATE_POINTS = {'select': ('tools/ttt1_select_probe.lua', 1699, {}),
+                'voice': ('tools/ttt1_voice_oracle.lua', 1899, dict(TTT1_VOICE_IDS='', TTT1_OUT='prefix.csv'))}
+
+
+def state(name):
+    """Nom de la sauvegarde, faite au premier besoin ; None si MAME n'a pas pu."""
+    sta = STATES / 'tektagt' / f'{name}.sta'
+    if sta.is_file(): return name
+    script, at, env = STATE_POINTS[name]
+    with tempfile.TemporaryDirectory(dir=WORK) as tmp:
+        tmp = Path(tmp)
+        lua = tmp / 'save.lua'
+        lua.write_text(f'dofile([[{ROOT / script}]])\nlocal n = 0\n'
+                       f'ttt1_save = emu.add_machine_frame_notifier(function()\n    n = n + 1\n'
+                       f'    if n == {at} then manager.machine:save("{name}") end\n'
+                       f'    if n == {at} + 2 then manager.machine:exit() end\nend)\n')
+        try:
+            subprocess.run([MAME, 'tektagt', '-rompath', str(ROMS), '-video', 'none', '-sound', 'none',
+                            '-nothrottle', '-skip_gameinfo', '-autoboot_script', str(lua), '-autoboot_delay', '0',
+                            '-nvram_directory', 'nvram', '-cfg_directory', 'cfg', '-state_directory', 'sta',
+                            '-seconds_to_run', '120'],
+                           cwd=tmp, env={**os.environ, **env, **BACKGROUND}, check=True, timeout=600,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired): return None
+        made = tmp / 'sta/tektagt' / f'{name}.sta'
+        if not made.is_file(): return None
+        sta.parent.mkdir(parents=True, exist_ok=True)
+        extra = tmp / env['TTT1_OUT'] if 'TTT1_OUT' in env else None
+        if extra and extra.is_file(): shutil.copyfile(extra, STATES / f'{name}-{extra.name}')
+        os.replace(made, sta)                          # d'un bloc : les imports paralleles la lisent
+    return name
 
 
 def forced_index(entry):
@@ -133,7 +192,7 @@ def capture_select(key, entry):
         forced = entry.get('force_moveset')
         if forced is not None: env['TTT1_MOVESET'] = str(forced)
         env.update(forced_index(entry))
-        mame(ROOT / 'tools/ttt1_select_probe.lua', env, tmp, debug=forced is not None or 'TTT1_INDEX' in env)
+        mame(ROOT / 'tools/ttt1_select_probe.lua', env, tmp, debug=forced is not None or 'TTT1_INDEX' in env, at='select')
         tag = 'confirm' if entry.get('confirm') else 'hover'
         shutil.copyfile(tmp / f'probe-{tag}-ram.bin', ram)
         shots = sorted((tmp / 'snap/tektagt').glob('*.png'))
@@ -158,23 +217,32 @@ def capture_oracle(key, ram, profile):
     ids = list(voices.sound_table(ram.read_bytes(), profile)[1])
     if not ids: return csv                             # pas de voix : pas d'oracle
     with tempfile.TemporaryDirectory(dir=WORK) as tmp:
-        mame(ROOT / 'tools/ttt1_voice_oracle.lua',
-             dict(TTT1_VOICE_IDS=','.join(map(str, sorted(set(ids)))), TTT1_OUT=str(csv)), Path(tmp))
+        if mame(ROOT / 'tools/ttt1_voice_oracle.lua',
+                dict(TTT1_VOICE_IDS=','.join(map(str, sorted(set(ids)))), TTT1_OUT=str(csv)), Path(tmp), at='voice'):
+            rows = csv.read_text().splitlines(keepends=True)[1:]
+            csv.write_text((STATES / 'voice-prefix.csv').read_text() + ''.join(rows))
     print(f'oracle des voix -> {csv.name} ({len(set(ids))} identifiants)')
     return csv
 
 
-def capture_sfx_oracle(ram):
+SFX_USED = ROOT / 'tools/data/ttt1_sfx_used.json'
+
+
+def capture_sfx_oracle(ram, need):
     """Sons hors voix TTT1, enregistres une fois pour tous les personnages
     (tools/ttt1_sfx_oracle.lua, tools/ttt1/sfx.py). Chaque son dans un MAME
     neuf : en serie, le pilote garde un etat d'un son a l'autre et en coupe
     ou en allonge certains (le fouet de Lee, 0x7072 : 0,12 s au lieu de
-    0,82 s). Cache captures/sfx-oracle/<index>.wav|csv."""
+    0,82 s). Cache captures/sfx-oracle/<index>.wav|csv. Seuls les sons que
+    les invites utilisent (SFX_USED, plus need, ceux de cet invite) : 65 des
+    220 de la table ; chacun ne depend que de son propre enregistrement."""
     import sfx
     from concurrent.futures import ThreadPoolExecutor
     folder = CAPTURES / 'sfx-oracle'; folder.mkdir(parents=True, exist_ok=True)
     jobs = [(f'{i}', dict(TTT1_SFX=f'{i}:{d}:{p}')) for i, (d, p) in enumerate(sfx.table(ram.read_bytes())) if i and d]
     jobs += [(f'{i}', dict(TTT1_RAW=f'{i}:{slot}:{word}')) for i, (slot, word) in sfx.RAW.items()]
+    wanted = set(need) | set(json.loads(SFX_USED.read_text())['indexes'])
+    jobs = [j for j in jobs if int(j[0]) in wanted]
     def one(job):
         stem, env = job
         wav, csv = folder / f'{stem}.wav', folder / f'{stem}.csv'
@@ -312,8 +380,8 @@ def voices(ram, keys, oracle, out, name):
 
 def sounds(ram, indexes, profile, out, name):
     import sfx
-    recorded = sfx.cut_all(capture_sfx_oracle(ram))
     announced = sfx.name_index(ram.read_bytes(), profile)
+    recorded = sfx.cut_all(capture_sfx_oracle(ram, set(indexes) | {announced}))
     if announced in recorded:
         pcm, info = recorded[announced]
         recorded[sfx.NAME] = (pcm, dict(info, index=sfx.NAME, name_of_index=announced))
@@ -343,7 +411,7 @@ def capture_ui(key, entry):
     folder.mkdir(parents=True, exist_ok=True)
     env = dict(TTT1_PATH=entry.get('path', ''), **forced_index(entry))
     if entry.get('confirm'): env['TTT1_CONFIRM'] = entry['confirm']
-    mame(ROOT / 'tools/ttt1_ui_capture.lua', env, folder, debug='TTT1_INDEX' in env)
+    mame(ROOT / 'tools/ttt1_ui_capture.lua', env, folder, debug='TTT1_INDEX' in env, at='select')
     print(f'images d interface TTT1 -> {folder.name}')
     return folder
 
@@ -356,7 +424,7 @@ def capture_final_portrait(key):
     folder = CAPTURES / f'{key}-final'
     if not (folder / 'ui-uploads.csv').exists():
         folder.mkdir(parents=True, exist_ok=True)
-        # Huit stages gagnes au premier coup : environ 8 000 images.
+        # Le premier combat gagne au premier coup mene au stage final : environ 2 900 images.
         mame(ROOT / 'tools/ttt1_final_stage_capture.lua', {}, folder, seconds=600)
         print(f'chargement du stage final TTT1 -> {folder.name}')
     rows = list(csv.DictReader(open(folder / 'ui-uploads.csv')))
@@ -377,7 +445,7 @@ def hit_effect(key, entry, out, name, work):
             tmp = Path(tmp)
             env = dict(TTT1_PATH=entry.get('path', ''), **forced_index(entry))
             if entry.get('confirm'): env['TTT1_CONFIRM'] = entry['confirm']
-            mame(ROOT / 'tools/ttt1_hit_effect_capture.lua', env, tmp, debug='TTT1_INDEX' in env)
+            mame(ROOT / 'tools/ttt1_hit_effect_capture.lua', env, tmp, debug='TTT1_INDEX' in env, at='select')
             shutil.copyfile(tmp / 'hit-vram.bin', vram)
             shots = sorted((tmp / 'snap/tektagt').glob('*.png'))
             if shots: shutil.copyfile(shots[-1], CAPTURES / f'{key}-hit.png')

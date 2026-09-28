@@ -125,7 +125,29 @@ def thumb_tile(thumb, w, h):
     return t.crop((x0, y0, x0 + w, y0 + round(vh))).resize((w, h), Image.LANCZOS)
 
 
+# Cadrages deja trouves par thumb_search, par empreinte des deux images : la
+# ROM est verifiee puce par puce, donc les captures -- et le cadrage -- sont les
+# memes chez tout le monde. Des nombres seulement, aucune donnee du jeu.
+KNOWN_BOXES = Path(__file__).resolve().parents[1] / 'data/ttt1_thumb_boxes.json'
+
+
+def image_key(*images):
+    import hashlib
+    h = hashlib.sha256()
+    for im in images: h.update(repr((im.mode, im.size)).encode()); h.update(im.tobytes())
+    return h.hexdigest()
+
+
 def thumb_box(portrait, thumb):
+    """thumb_search, sans refaire la recherche pour des images deja vues."""
+    import json
+    known = json.loads(KNOWN_BOXES.read_text()) if KNOWN_BOXES.is_file() else {}
+    hit = known.get(image_key(portrait, thumb))
+    if hit: return hit[0], hit[1], tuple(hit[2])
+    return thumb_search(portrait, thumb)
+
+
+def thumb_search(portrait, thumb):
     """Cadrage de la vignette de grille TTT1 dans le grand portrait de chargement.
 
     Meme rendu, mais en miroir et a demi-resolution verticale : on cherche le

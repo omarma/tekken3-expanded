@@ -1,0 +1,276 @@
+'''Kazuya Mishima/Tekken Tag Tournament Movelist''' is a list of all the moves that [[Kazuya Mishima]] can perform in [[Tekken Tag Tournament]].
+
+==Throws==
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Double Face Kick]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Hip Throw]]
+!2+4
+!Front
+!28
+!2
+|-
+![[Steel Pedal Drop]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Skull Smash]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Reverse Neck Throw]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Stonehead]]
+!f, f+1+2
+!Front
+!33
+!1+2
+|-
+![[Ultimate Tackle]]
+!d (or d/b)+1+2
+!Front
+!5
+!1+2
+|-
+![[Ultimate Punch]]
+!During Tackle 2, 1, 2, 1
+!Front
+!5, 5, 5, 5, 5
+!1 or 2
+|-
+![[Double Face Kick|Reverse Throw]]
+!Back to the opponent, 1+3 (or 2+4)
+!Front
+!30
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Flash Punch Combo]]
+!1, 1, 2
+!5, 8, 18
+!High, high, mid
+!KND
+|-
+![[Left Right Combo]]
+!1, 2
+!5, 10
+!High, high
+!
+|-
+![[Demon Slayer (Mishima)|Demon Slayer]]
+!1, 2, 2
+!5, 10, 18
+!High, high, high
+!
+|-
+![[Twin Fang Stature Smash]]
+!1, 2, 4
+!5, 10, 17
+! High, high, low
+!
+|-
+![[Demon Backhand Spin]]
+!2, 2
+!12, 21
+!High, high
+!
+|-
+![[Demon Scissors]]
+![4~3]
+!25
+!Mid, mid
+!KND
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Soul Thrust]]
+!f+2
+!30
+! Mid
+!MS,KNDc
+|-
+![[Right Splits Kick]]
+!f+4
+!27
+!Mid
+!
+|-
+![[Glorious Demon God Fist]]
+!f+1+2
+!26
+!Mid
+!KS
+|-
+![[Entrails Smash]]
+!d/f+1
+!17
+!Mid
+!MS
+|-
+![[Abolishing Fist]]
+!d/f+2
+!31
+!Mid
+!MS,KSc
+|-
+![[Heel Drop]]
+!d/f+4, 4
+!10, 18
+!Mid, mid
+!
+|-
+![[Stature Smash]]
+!d/b+4
+!17
+!l
+!
+|-
+![[Lightning Uppercut]]
+!b+1+4
+!40
+!!
+!KND
+|-
+![[Lightning Screw Uppercut]]
+!B+1+4
+!80
+!!
+!KND
+|-
+![[Rising Sun]]
+!u/f (or u)+4, 4
+!25, ?
+!Mid, low
+!KND
+|-
+![[Roundhouse to Triple Spin Kicks|Roundhouse to Triple Spin Kick]]
+!u/f (or u)+4, 4, 4, 4
+!25, ?, 9, 12
+!Mid, low, low, mid
+!KND
+|-
+![[Left Splits Kick]]
+!f, f+3
+!23
+!Mid
+!KND
+|-
+![[Mist Step (Kazuya)|Mist Step]]
+!f, N
+!-
+!-
+!
+|-
+![[Dragon Uppercut (Mishima)|Dragon Uppercut]]
+!f, N, d, d/f+1
+!29
+!Mid
+!#1 KND
+|-
+![[Dragon Uppercut to Middle Kick]]
+!f, N, d, d/f+1, 3
+!29, 20
+!Mid, mid
+!#1 KND
+|-
+![[Dragon Uppercut to Spinning Low Kick]]
+!f, N, d, d/f+1, 4
+!29, 12
+!Mid, low
+!#1 KND
+|-
+![[Wind God Fist|Rising Uppercut]]
+!f, N, d, d/f+2
+!25
+!Mid
+!JG
+|-
+![[Spinning Demon (Kazuya Mishima)|Spinning Demon]]
+!f, N, d, d/f+4, 4
+!15, 9
+!Low, low
+!JG
+|-
+![[Leaping Sidekick]]
+!f, f, f+3
+!30
+!Mid
+!KND
+|-
+![[Twin Pistons (Kazuya)|Twin Pistons]]
+!WS+1, 2
+!12, 15
+!Mid, mid
+!JG
+|-
+![[Demon God Fist]]
+!WS+2
+!37
+!Mid
+!CF
+|-
+![[Tsunami Kick]]
+!WS+4, 4
+!13, 18
+!Mid, mid
+!
+|}
+
+# When it is not a clean hit damage is 29 and opponent is not knocked down.
+
+==10 hit combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Mishima Style 10 Hit Combo|f, f, N, 2, 1, 2, 2, 3, 4, 4, 1, 2, 1]]
+!93
+!hhhhmmlhmm
+|-
+![[10 Hit Combo 2 (Kazuya Mishima)|f, f+2, 1, 2, 2, 3, 4, 4, 3, 2, 1]]
+!110
+!hhhhmmllm!
+|-
+![[10 Hit Combo 3 (Kazuya Mishima)|f, f, N, 2, 1, 4, 4, 2, 4, 3, 2, 1]]
+!99
+!hhmmmmlm!
+|}
+
+==See Also==
+
+*[[Kazuya Mishima]]
+
+[[Category:Moves Lists]]
+[[Category:Kazuya Mishima Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

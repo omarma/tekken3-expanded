@@ -51,7 +51,7 @@ local function dump(tag)
         space:read_u16(KEY + 0x12), space:read_u16(KEY + 0x14)))
 end
 
-local frame = 0
+local frame = tonumber(os.getenv("TTT1_FRAME0") or "0")   -- apres -state : trame de la sauvegarde
 ttt1_select_probe = emu.add_machine_frame_notifier(function()
     frame = frame + 1
     space:write_u32(UNLOCK, 0xffffffff)

@@ -28,6 +28,10 @@ from https://github.com/mamedev/mame/releases/tag/mame0289, retaining its
 license files. Corresponding MAME source is available at that release/tag.
 MAME binaries and ROMs are not embedded in this ZIP.
 
+The move lists in `tools/data/wiki/` are text from the Tekken wiki
+(https://tekken.fandom.com), by its contributors, under CC BY-SA 3.0; the pages
+and their links are listed in `tools/data/wiki/README.md`.
+
 Original Tekken models, motion data, portraits, voices, game executables and
 music are not included. The importer derives the needed assets from files
 the user provides locally. Original game rights are not licensed by this project.

@@ -1,0 +1,291 @@
+'''Wang Jinrei/Tekken Tag Tournament Movelist''' is a list of the moves that [[Wang Jinrei]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Moves List==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" | Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Headlock Toss]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Body Slam (Wang Jinrei)|Body Slam]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Crushing the Dragon]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Golden Mountain]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Reverse Neck Throw]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Waning Moon]]
+!d/f, d/f+2+4
+!Front
+!35
+!1+2
+|-
+![[Headlock Toss|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!30
+!
+|-
+![[Attack Reversal]]
+!Synchro with the opponent's attack b+1+3 (or b+2+4)
+!Front
+!30
+!
+|-
+
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[G-Clef Cannon]]
+!1, 1, 1
+!10, 5, 21
+!High, mid, mid
+!
+|-
+![[Spin Behind]]
+!2, b (shot must hit head-on)
+!12
+!High
+!
+|-
+![[Behind Back Suplex|Behind the Back Suplex]]
+!During Spin Behind 1+2
+!45
+!-
+!
+|-
+![[Spinning Kicks Slash Uppercut|Triple Spin Razor]]
+!4, 4, 1
+!20, 12, 10
+!High, low, mid
+!
+|-
+![[Triple Spinning Kick|Triple Spin Kicks]]
+!4, 4, 4
+!20, 12, 23
+!High, low, high
+!
+|-
+![[Triple Spinning Low Kick|Triple Spin Low]]
+!4, 4, d+4
+!20, 12, 10
+!High, low, low
+!
+|-
+![[Mountain Splitter]]
+!1+2
+!27
+!Mid
+!MS KNDc
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Power Punch]]
+!f+2
+!21
+!Mid
+!
+|-
+![[Rising Heaven Kick]]
+!f+4
+!23
+!Mid
+!
+|-
+![[Slow Power Punch]]
+!d/f+2
+!10
+!Mid
+!
+|-
+![[Slow Power Punch Combo]]
+!d/f+2, 1
+!10, 21
+!Mid, mid
+!JG
+|-
+![[Front Snap Kick|Snap Kick]]
+!d/f+3
+!17
+!Mid
+!
+|-
+![[Double Palm Thrust]]
+!f, f+1+2 
+!20
+!Mid
+!
+|-
+![[Medium Power Punch]]
+!d/f+1+2
+!28
+!Mid
+!
+|-
+![[Dragon Thrust]]
+!d/f+1+3+4
+!35
+!High
+!
+|-
+![[Sweep]]
+!d+4
+!10
+!Low
+!
+|-
+![[Razor's Edge|Sweep to Razor's Edge]]
+!d+4, 1
+!10, 10
+!Low, mid
+!
+|-
+![[Sweep Head Kick|Sweep to High Kick]]
+!d+4, 4
+!10,23
+!Low, high
+!
+|-
+![[Sweep to Low Kick]]
+!d+4, d+4
+!10, 10
+!Low, low
+!
+|-
+![[False Lift]]
+!d/b+2
+!21
+!Mid
+!JG
+|-
+![[Tiger Mountain]]
+!d/b+4, 2
+!10, 21
+!Low, mid
+!
+|-
+![[Dragon Power Punch]]
+!b+1+2
+!100
+!(!)
+!KND
+|-
+![[Foot Stomp]]
+!u/f+3+4
+!35
+!Mid
+!
+|-
+![[Heavy Uppercut]]
+!b, b+1
+!70
+!(!)
+!
+|-
+![[Heavy Power Punch]]
+!qcf+2
+!30
+!Mid
+!
+|-
+![[Leaping Sidekick|Leaping Side Kick]]
+!f, f, f+3
+!36
+!Mid
+!
+|-
+![[Tequila Sunrise]]
+!WS+2
+!15
+!Mid
+!
+|-
+![[Tequila Sunrise Combo]]
+!WS+2, 1, 1
+!15, 10, 21
+!Mid, mid, mid
+!
+|-
+![[Skyscraper Kick|Skyscaper Kick]]
+!WS+4
+!15
+!Mid
+!
+|-
+![[Spinning Sweep]]
+!FC+d/f+4
+!20
+!Low
+!
+|-
+![[Spinning Sweep Combo]]
+!FC+d/f+4, 3
+!12, 15
+!Low, mid
+!
+|-
+![[Street Sweeper|Parting Sweep]]
+!SS+4
+!16
+!Low
+!PLDc
+|-
+![[Horse Tamer]]
+!SS+1+2
+!22
+!Mid
+!MS DSc GB
+|-
+|}
+
+==10 hit combo==
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Michelle, Wang, Julia and Jaycee)|2, 1, 1, 2, 3, 3, 3, 4, 4, 1]]
+!84
+!hmmhhlmhhm
+|-
+|}
+[[Category:Wang Jinrei Moves]]
+[[Category:Moves Lists]]
+[[Category:Tekken Tag Tournament Move Lists]]
