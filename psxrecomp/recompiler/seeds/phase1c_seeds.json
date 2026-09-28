@@ -1,0 +1,22 @@
+{
+  "schema": "psxrecomp-v4 phase1c seeds v1",
+  "seeds": [
+    {
+      "address": "0xBFC00000",
+      "label": "reset_vector",
+      "rationale": "MIPS R3000A reset vector; first instruction executed after power-on"
+    },
+    {
+      "address": "0xBFC00180",
+      "label": "general_exception_bev1",
+      "rationale": "BEV=1 general exception vector; active during early BIOS init before BEV is cleared"
+    }
+  ],
+  "excluded": [
+    {
+      "address": "0xBFC00100",
+      "label": "utlb_miss_bev1",
+      "rationale": "R3000 UTLB-miss vector when BEV=1. PS1 R3000A has no TLB; address is never executed. Bytes at 0xBFC00108 are the ASCII string 'Sony Computer Entertainment Inc.' — walking from here produces garbage opcodes. Proven invalid by Phase 1b inventory walker."
+    }
+  ]
+}

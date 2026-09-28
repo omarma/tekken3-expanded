@@ -1,0 +1,287 @@
+{
+ "key": "armorking",
+ "combos": [
+  {
+   "name": "10 Hit Combo 1",
+   "command": "1, 2, 1, 1, 2, 4, 4, 4, 1, 3",
+   "ten": true,
+   "gaps": [
+    1,
+    4,
+    6,
+    21,
+    22,
+    15,
+    17,
+    25,
+    25,
+    12
+   ],
+   "moves": [
+    170,
+    171,
+    226,
+    263,
+    264,
+    265,
+    266,
+    267,
+    268,
+    269
+   ],
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     4
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     6
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     21
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     22
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     15
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     17
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     25
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     25
+    ],
+    [
+     4,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "One Two Uppercut",
+   "command": "1, 2, 1",
+   "ten": false,
+   "gaps": [
+    1,
+    4,
+    12
+   ],
+   "moves": [
+    170,
+    171,
+    226
+   ],
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     4
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "u/f, N, 3+4, 4, 4",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "FC d/f+4, 4, 4",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "d+3+4, 4, 4",
+   "ten": false,
+   "gaps": [
+    2,
+    12,
+    12
+   ],
+   "moves": [
+    225,
+    237,
+    239
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     4,
+     3
+    ],
+    [
+     6,
+     4,
+     4
+    ],
+    [
+     0,
+     0,
+     2
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "FC d/f+4, 4, 4, 4",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "d+3+4, 4, 4, 4",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  }
+ ]
+}

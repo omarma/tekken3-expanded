@@ -1,0 +1,263 @@
+﻿/*
+ * debug_server.h -- TCP debug server for PSX recomp v4
+ *
+ * Non-blocking TCP server on localhost (default port 4370).
+ * JSON-over-newline protocol, polled once per vblank.
+ * Includes a 36000-frame ring buffer for retroactive state queries.
+ *
+ * Same public API names as nesrecomp/snesrecomp debug servers
+ * so TCP.md and DEBUG.md documentation is reusable across projects.
+ */
+#ifndef PSXRECOMP_DEBUG_SERVER_H
+#define PSXRECOMP_DEBUG_SERVER_H
+
+#include <stdint.h>
+#include <stdio.h>
+
+#include "cpu_state.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ---- Ring buffer frame record ---- */
+
+#define FRAME_HISTORY_CAP 36000   /* ~10 min @ 60fps */
+#define MAX_FRAME_DIFFS   32
+#define RAM_SNAPSHOT_REGIONS 4
+#define RAM_SNAPSHOT_SIZE    128
+
+typedef struct {
+    uint16_t addr;
+    uint8_t  mine;
+    uint8_t  theirs;
+} FrameDiffEntry;
+
+typedef struct {
+    uint32_t frame_number;
+    int      verify_pass;           /* 1=pass, 0=fail, -1=not checked */
+    int      diff_count;
+
+    /* ---- MIPS CPU state ---- */
+    uint32_t gpr[32];
+    uint32_t hi, lo;
+    uint32_t cop0_sr;
+    uint32_t cop0_cause;
+    uint32_t cop0_epc;
+
+    /* ---- Interrupt state ---- */
+    uint32_t i_stat;
+    uint32_t i_mask;
+
+    /* ---- GPU display state ---- */
+    uint16_t display_area_x, display_area_y;
+    uint16_t display_w, display_h;
+    uint8_t  display_disabled;
+
+    /* ---- SIO state ---- */
+    uint16_t pad_buttons;
+    uint16_t sio_stat;
+    uint16_t sio_ctrl;
+
+    /* ---- Timing ---- */
+    uint32_t dispatch_count;
+    uint64_t total_dispatches;
+
+    /* ---- Game-specific (filled by hook) ---- */
+    uint8_t  game_data[32];
+
+    /* ---- Last function name ---- */
+    char     last_func[32];
+
+    /* ---- Configurable RAM snapshot regions ---- */
+    uint32_t snapshot_addr[RAM_SNAPSHOT_REGIONS];
+    uint8_t  snapshot_data[RAM_SNAPSHOT_REGIONS][RAM_SNAPSHOT_SIZE];
+
+    /* ---- Divergence diffs (verify mode) ---- */
+    FrameDiffEntry diffs[MAX_FRAME_DIFFS];
+} PSXFrameRecord;
+
+/* ---- Public API (same names as NES version) ---- */
+
+/* Initialize the server. Call once at startup.
+ * port=0 uses the default (4370). */
+void debug_server_init(int port);
+
+/* Current listener status for heartbeat diagnostics. error is the platform
+ * socket error captured by init, or 0 when the listener is active. */
+void debug_server_get_status(int *listening, int *port, int *error);
+
+/* Poll for incoming connections and commands. Non-blocking.
+ * Call once per vblank. */
+void debug_server_poll(void);
+
+/* FMV quiet mode suppresses high-frequency trace rings while MDEC video is
+ * active. The TCP command pump stays live; expensive per-dispatch/per-frame
+ * recording backs off so debug builds can still play FMVs at speed. */
+void debug_server_set_fmv_quiet(int quiet);
+int  debug_server_fmv_quiet(void);
+
+/* TCP serve-stall telemetry: cumulative main-thread ms spent inside
+ * bounded TCP sends, and clients dropped for exceeding the send budget.
+ * Surfaced in the freeze heartbeat / wedge dumps so a TCP-throttled run
+ * is never misattributed to a guest-side stall. */
+uint64_t debug_server_get_tcp_stall_ms(void);
+uint32_t debug_server_get_tcp_drops(void);
+
+/* Record the current frame's state into the ring buffer.
+ * Call after vblank processing. */
+void debug_server_record_frame(void);
+
+/* Block while paused, polling TCP + SDL events.
+ * Call from vblank callback before frame processing. */
+void debug_server_wait_if_paused(void);
+
+/* Graceful shutdown. Call at exit. */
+void debug_server_shutdown(void);
+
+/* Check if a TCP client is connected. */
+int debug_server_is_connected(void);
+
+/* ---- Tier 1 reverse debugger: write trace ---- */
+
+/* Current dispatch target — set by psx_dispatch() before each call.
+ * Captured by the write-trace hook for function attribution. */
+extern uint32_t g_debug_current_func_addr;
+
+/* Multi-range write-trace check.  Called from memory.c write paths.
+ * Iterates up to 8 configurable address ranges; records matching
+ * writes into the 1M-entry ring buffer with function + frame attribution. */
+void debug_server_trace_write_check(uint32_t phys, uint32_t old_val,
+                                    uint32_t new_val, uint8_t width);
+
+/* MMIO write trace — separate ring buffer for 0x1F801xxx writes. */
+void debug_server_trace_mmio_write(uint32_t addr, uint32_t val, uint8_t width);
+
+/* Dispatch trace — record every function dispatched. */
+void debug_server_trace_dispatch(uint32_t func_addr);
+void debug_server_trace_dispatch_return(uint32_t func_addr, CPUState *cpu);
+
+/* Direct-call entry hook — emitted by the recompiler at the top of every
+ * generated function. Release (PSX_NO_DEBUG_TOOLS): inlined in cpu_state.h
+ * (stamp g_psx_last_fn_entry). Debug builds use the out-of-line ring path. */
+extern volatile uint32_t g_psx_last_fn_entry;
+#ifndef PSX_NO_DEBUG_TOOLS
+void debug_server_log_call_entry(uint32_t func_addr);
+#endif
+void debug_server_log_call_entry_cpu(uint32_t func_addr, CPUState *cpu);
+/* Addressable stub for overlay CPS callbacks (always out-of-line). */
+void debug_server_log_call_entry_fn(uint32_t func_addr);
+
+/* Last store instruction PC — set by the recompiler before every memory
+ * store (sb/sh/sw/swl/swr/swc2).  Read by SIO/MMIO write handlers to
+ * attribute the writing instruction without needing a full call-stack
+ * walk.  Stale across non-store instructions but every store updates it. */
+extern uint32_t g_debug_last_store_pc;
+
+/* SIO write PC tracer ring — records (pc, addr, value, byte_seq) for every
+ * write to SIO_DATA / SIO_CTRL / SIO_STAT.  Always-on; pulled via TCP cmd
+ * "sio_pc_trace". */
+void debug_server_log_sio_write(uint32_t addr, uint32_t value, uint8_t width);
+
+/* Targeted generated-PC probe ring used for narrow control-flow diagnostics. */
+void debug_server_log_probe(uint32_t pc, CPUState *cpu);
+
+/* RestoreState / exception longjmp tracer. Records nonlocal exception
+ * control-flow events that can skip normal function epilogues. */
+void debug_server_log_restore_event(uint32_t kind, uint32_t target_pc, uint32_t jmp_val);
+
+/* BIOS ChangeThread / TCB context tracer. Records runtime thread switches
+ * and the saved register block belonging to the selected TCB. */
+void debug_server_log_thread_event(uint32_t kind, CPUState *cpu,
+                                   uint32_t current_tcb,
+                                   uint32_t target_tcb,
+                                   uint32_t target_pc);
+void debug_server_log_thread_event_ex(uint32_t kind, CPUState *cpu,
+                                      uint32_t current_tcb,
+                                      uint32_t target_tcb,
+                                      uint32_t target_pc,
+                                      uintptr_t current_fiber,
+                                      uintptr_t target_fiber);
+
+/* Dirty-RAM dispatch break.  Used by the dynamic-code interpreter to pause
+ * immediately when dispatch enters a configured address range, before a hot
+ * loop can overwrite the trace rings. */
+int debug_server_dirty_break_maybe_pause(uint32_t target, CPUState *cpu);
+
+/* ---- Watchpoint notifications ---- */
+
+void debug_server_check_watchpoints(void);
+
+/* ---- Input override ---- */
+
+/* Returns >= 0 if the debug server wants to override pad input,
+ * -1 if no override is active. Value is PS1 16-bit button mask. */
+int debug_server_get_input_override(void);
+/* Port 2 buttons injected by the debug server, or -1. */
+int debug_server_get_input_override_p2(void);
+
+/* Optional analog-stick override set alongside set_input (lx/ly/rx/ry,
+ * 0..255, 0x80 = centre). Returns 1 and fills st[lx,ly,rx,ry] when armed,
+ * 0 when the injection is buttons-only. */
+int debug_server_get_axis_override(unsigned char st[4]);
+
+/* TCP-controlled turbo mode. When enabled the frontend skips presentation and
+ * wall-clock pacing at vblank, matching the keyboard TAB turbo path. */
+int debug_server_turbo_enabled(void);
+
+/* TCP-controlled turbo mode. When enabled the frontend skips presentation and
+ * wall-clock pacing at vblank, matching the keyboard TAB turbo path. */
+int debug_server_turbo_enabled(void);
+
+/* ---- Send helpers (for extensions) ---- */
+
+/* Set the CPU state pointer for register queries. Call after CPU init. */
+void debug_server_set_cpu(CPUState *cpu);
+
+/* Global CPU pointer — set by debug_server_set_cpu(). Available for
+ * hardware simulation modules that need to read CPU state (e.g. GPU
+ * capturing stack values during A0 uploads). */
+extern CPUState *debug_cpu_ptr;
+
+void debug_server_send_line(const char *json);
+void debug_server_send_fmt(const char *fmt, ...);
+
+/* ---- Freeze auto-dump accessors ----
+ *
+ * Called from the freeze_heartbeat thread (NOT from TCP). Each function
+ * writes a JSON array `[entry1,entry2,...]` of the newest `max_count`
+ * entries from its ring directly to the given FILE*. Caller wraps with
+ * the field name (e.g. "wtrace_all":[ ... ]).
+ *
+ * Thread-safety: best-effort. The heartbeat thread fires these only
+ * after detecting a main-thread stall, so concurrent writers are rare,
+ * but a wedged loop that still touches RAM could tear an entry near the
+ * ring head. Forensic value is in the bulk of older entries which are
+ * stable. */
+void debug_server_freeze_dump_wtrace_all_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_wtrace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_mmio_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_frame_history_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_sio_pc_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_thread_trace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_restore_trace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_irq_check_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_first_zero_restore_json(FILE *f);
+void debug_server_freeze_dump_entryint_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_cdrom_state_json(FILE *f);
+void debug_server_freeze_dump_cdrom_trace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_cdrom_sector_history_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_dma_state_json(FILE *f);
+void debug_server_freeze_dump_dma_trace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_exception_trace_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_thread_ctx_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_fn_entry_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_dirty_block_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_dirty_insn_json(FILE *f, uint32_t max_count);
+void debug_server_freeze_dump_evcb_json(FILE *f, uint32_t max_count);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PSXRECOMP_DEBUG_SERVER_H */

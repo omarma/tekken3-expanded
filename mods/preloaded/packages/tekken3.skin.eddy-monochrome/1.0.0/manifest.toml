@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.eddy-monochrome"
+version = "1.0.0"
+name = "Eddy Monochrome"
+author = "Tekken3Recomp"
+description = "Black-and-white primary outfit with black hair. Original Eddy model and gameplay. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "eddy-monochrome"
+name = "Eddy Monochrome"
+description = "Adds Eddy Monochrome to Eddy's L1 gallery alongside Eddy's original outfits and Tiger Jackson. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "eddy-monochrome"
+id = "tekken3.eddy-monochrome"

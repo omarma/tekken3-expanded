@@ -1,0 +1,156 @@
+# Autofilled by tools/new_project_layout/probe_disc.py from your legal dump.
+# Review before shipping. Runtime quirks / overlay seeds still need hand work.
+
+[game]
+name = "Tekken 3"
+id = "SLUS-00402"
+players = 2
+exe = "disc/SLUS_004.02"
+disc = "disc/Tekken 3 (USA).cue"
+load_address = "0x80010000"
+entry_pc = "0x80079C70"
+text_size = "0x00121000"
+stack_base = "0x801FFFF0"
+
+# Digests are for data Track 01 (first BINARY FILE / TRACK 01).
+[prepare_disc]
+out_dir = "disc"
+bin_name = "Tekken 3 (USA) (Track 1).bin"
+cue_name = "Tekken 3 (USA).cue"
+boot_exe = "SLUS_004.02"
+known_sizes = [632532768]
+known_md5 = [
+  "42c63a4674f569de7b1be95d7332cde2",
+]
+known_sha1 = [
+  "68f32a8657376cb4d4504c160fd5e8ae4a4f18d6",
+]
+
+[recompiler]
+seeds = "seeds/ghidra_funcs.txt"
+out_dir = "generated"
+strict = true
+
+[runtime]
+window_title = "Tekken 3 Recompiled"
+memcard_dir = "saves"
+idle_skip = true
+
+# Development overlay pipeline. Runtime-written/BNS code executes through the
+# safe interpreter on its first visit, is captured beside the executable, then
+# compiled asynchronously into the executable's versioned native DLL cache.
+# `gcc` is selected explicitly because this workspace's bundled compiler is not
+# on the normal process PATH (the `auto` tier would otherwise choose TCC).
+overlay_cache = true
+overlay_backend = "gcc"
+# Release ships the captured native overlay cache precompiled. Compiling a new
+# DLL while the opening movie is decoding causes visible frame-time spikes, so
+# runtime auto-compilation stays off; unseen overlays safely use the interpreter.
+
+[video]
+renderer = "opengl"
+aspect_ratio = "16:9"
+supersampling = 3
+antialiasing = true
+texture_filtering = "nearest"
+perspective_texturing = true
+geometry_correction = false
+
+# Scene policy for the optional True Widescreen package.  The plugin chooses
+# 16:9 before the renderer starts; when the package is disabled the 4:3 path is
+# an exact identity. Character select and versus/loading have exact packet
+# fingerprints and native 16:9 UI layouts, as do the main menu and Team Battle
+# selector. Unrecognized menus use the canonical 4:3 path.
+[widescreen]
+native_wide = true
+full_2d = false
+gte_game_mode = true
+nw_2d_edge_fill = false
+clear_reveal = true
+# Keep the actual projection unchanged. The True Widescreen package's optional
+# wide-fights camera variant widens horizontal auto-fit in regular battles;
+# vertical fit, movement, collision and stage bounds remain original.
+camera_zoom_num = 1
+camera_zoom_den = 1
+# The background is revealed by the visibility-cone and clip sites below.
+# Keep the final rectangle/sprite layer untouched so menus and the HUD retain
+# their authored layout; the original stage sections supply the side coverage.
+nw_phase_backdrop = false
+nw_ui_stretch_min_ot = 0
+nw_backdrop = false
+nw_flat_backdrop = false
+# Gameplay is fully represented in the native-wide sidecar. Present it directly
+# instead of splicing the canonical 4:3 centre back over it; that splice leaves
+# a visible vertical boundary where the two independently rasterized views meet.
+nw_full_mirror = true
+# Do not independently relocate HUD corners: the complete late UI layer is
+# scaled as one coordinate space instead of moving fragments by packet address.
+nw_hud_corners = false
+offer = false
+offer_ultrawide = false
+
+# Tekken's shared world-render funnels reject every projected vertex outside a
+# 368x480 screen before it reaches GP0.  Native-wide extends the horizontal
+# viewport, so widen only the proven X tests.  4:3 supplies a zero margin and
+# remains an exact identity.
+[widescreen.cull]
+auto_screen_x = false
+screen_w_imms = ["0x170"]
+screen_h_imms = ["0x1E0"]
+# Cull only outside the actual wide viewport; no unbounded background overdraw.
+background_guard_pixels = 0
+# The first shared quad funnel loads its 480-line bound into a register, so it
+# cannot satisfy the generic immediate-pair detector.  These guarded SLTIU
+# sites are the four X vertices in that funnel and the equivalent four in its
+# sibling funnel; generation fails loudly if any complete word changes.
+screen_x_expected = 0x2C420170
+screen_x_sites = [
+  "0x80049438", "0x80049454", "0x80049470", "0x8004948C",
+  "0x80049D84", "0x80049DA0", "0x80049DBC", "0x80049DD4",
+]
+# func_8006CC28 clips the separately projected background against the PS1's
+# signed [0,368) viewport. Widen its left keep branches and right-edge subtracts
+# to the runtime's virtual [-margin,368+margin) 16:9 viewport. These sites only
+# change visibility; packet coordinates and normal stage scale are untouched.
+bltz_sites = [
+  "0x8006CD18", "0x8006CD20", "0x8006CD28", "0x8006CD30",
+  "0x8006CE20", "0x8006CE28", "0x8006CE30",
+  "0x8006CF58", "0x8006CF60", "0x8006CF68", "0x8006CF70",
+]
+right_sub_sites = [
+  "0x8006CD40", "0x8006CD48", "0x8006CD50", "0x8006CD58",
+  "0x8006CE40", "0x8006CE48", "0x8006CE50",
+  "0x8006CF80", "0x8006CF88", "0x8006CF90", "0x8006CF98",
+]
+# Do not turn on the generic signature scan for this title: Tekken's unrelated
+# 2D rectangle constructor at 0x80076FC0 also contains a 369x481 clamp and would
+# be misclassified.  The explicit world-funnel sites above avoid that mutation.
+
+# The visibility routine at 0x8006D95C halves these full apertures before
+# walking the ORIGINAL 6x6 section map. Widen its cone, not the section grid:
+# wrapping 36 descriptors into a 10x10 grid duplicates entire stage sections.
+[[widescreen.cull.angle]]
+address = "0x8006D1C4"
+expected = "0x24040258"
+full_angle = true
+
+[[widescreen.cull.angle]]
+address = "0x8006D24C"
+expected = "0x2404030C"
+full_angle = true
+
+[widescreen.backdrop]
+# Tags identify stage packets for overflow rejection only. Their geometry is
+# projected once and is never expanded again at the canonical screen edges.
+packet_tag_sites = ["0x8006CDD0", "0x8006CEB8", "0x8006CFF0"]
+
+[controller]
+default_mode = "digital"
+
+# Online mount gate: digests + track count + optional TOC fingerprint
+# (see docs/NETPLAY.md).
+multitap_analog = true
+[netplay]
+require_cue = true
+required_tracks = 3
+required_disc_fp = "d6179326b7eaaccf6de7e1f6bda382be57ee87221f9425dc9401639171f56c19"

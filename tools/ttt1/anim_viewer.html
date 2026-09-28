@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Animations TTT1</title>
+<style>
+:root{--bg:#f6f6f4;--panel:#fff;--ink:#1c1c1e;--mute:#6d6d72;--line:#e1e1de;--acc:#2f6fdb;
+--tag:#b04a1c;--notag:#1f8a4c;--unk:#8a7a1f;--loss:#8a3fb0}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141416;--panel:#1e1e21;--ink:#ededf1;--mute:#9b9ba3;--line:#323237;--acc:#6f9cff;--tag:#e0784a;--notag:#4cc47f;--unk:#d6c35a;--loss:#c38ae6}}
+:root[data-theme=dark]{--bg:#141416;--panel:#1e1e21;--ink:#ededf1;--mute:#9b9ba3;--line:#323237;--acc:#6f9cff;--tag:#e0784a;--notag:#4cc47f;--unk:#d6c35a;--loss:#c38ae6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+header{padding:12px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+@media (min-width:761px){header{position:sticky;top:0;z-index:2}}
+h1{font-size:17px;margin:0}
+.sub{color:var(--mute);font-size:12px;margin-top:2px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+button.on{background:var(--ink);color:var(--bg)}
+main{display:grid;grid-template-columns:minmax(300px,520px) 1fr;gap:12px;padding:12px 16px;max-width:1200px;margin:0 auto}
+@media (max-width:760px){main{grid-template-columns:1fr;padding:10px}}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;position:sticky;top:96px;align-self:start}
+@media (max-width:760px){.stage{position:static}}
+canvas{width:100%;aspect-ratio:3/4;max-height:62vh;display:block;border-radius:8px;background:var(--bg);touch-action:none}
+.ctl{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.ctl input[type=range]{flex:1;min-width:120px}
+.now{font-size:13px;margin-top:8px}
+.now b{font-variant-numeric:tabular-nums}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.item.sel{outline:2px solid var(--acc)}
+.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;color:#fff}
+.b-tag{background:var(--tag)}.b-pas{background:var(--notag)}.b-inc{background:var(--unk)}.b-loss{background:var(--loss)}.b-conv{background:var(--mute)}
+.conf{height:6px;border-radius:3px;background:var(--line);flex:1;min-width:60px;max-width:140px;overflow:hidden}
+.conf i{display:block;height:100%;background:var(--ink);opacity:.55}
+.meta{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+.why{font-size:13px;margin-top:4px}
+.inc{font-size:12px;color:var(--mute);margin-top:4px}
+.inc code{color:var(--ink)}
+.count{color:var(--mute);font-size:13px;margin:0 0 6px}
+</style>
+</head>
+<body>
+<header>
+<h1>Animations TTT1 des invités</h1>
+<div class="sub">Modèle converti, animations TTT1 d'origine. Page locale avec des données du jeu : ne pas la publier. La racine reste centrée (déplacement non appliqué).</div>
+<div class="bar">
+<select id="char"></select>
+<button data-f="manquante" class="on">Manquantes</button>
+<button data-f="gardee avec perte">Gardées avec perte</button>
+</div>
+</header>
+<main>
+<section class="stage">
+<canvas id="cv" width="600" height="800"></canvas>
+<div class="ctl">
+<button id="play">Pause</button>
+<button id="prev">◀︎</button><button id="next">▶︎</button>
+<input id="frame" type="range" min="0" max="0" value="0">
+<select id="speed"><option value="1">×1</option><option value="0.5">×½</option><option value="0.25">×¼</option></select>
+</div>
+<div class="now" id="now">Choisis une animation.</div>
+</section>
+<section>
+<p class="count" id="count"></p>
+<div class="list" id="list"></div>
+</section>
+</main>
+<script>
+const DATA=/*DATA*/null;
+const SIN=(()=>{const b=atob(DATA.sin);const v=new Int16Array(b.length/2);for(let i=0;i<v.length;i++)v[i]=(b.charCodeAt(2*i)|(b.charCodeAt(2*i+1)<<8))<<16>>16;return v})();
+const P2R=[0,1,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,23,24];
+const PART_BONE=[0,1,11,12,13,14,15,16,17,3,4,5,6,7,8,9,10,2,18,19,20,21];
+const ROW_PARENT={1:0,3:0,5:3,6:5,7:6,8:3,9:8,10:9,11:1,12:11,13:12,14:13,15:1,16:15,17:16,18:17,19:1};
+const GROUP_COLOR=r=>r===19||r===20?[214,178,146]:r<=4?[160,128,96]:r<=10?[76,116,196]:r<=18?[196,146,112]:[196,76,126];   // tete, tronc, jambes, bras, accessoires
+function sn(off){return SIN[off>>1]}
+function rotation(a,neg){const s=[],c=[];for(let i=0;i<3;i++){let x=a[i]&0xffff;if(neg&&i<2)x=(-x)&0xffff;const o=(x>>3)&0x1ffe;s.push(sn(o));c.push(sn(o+0x800))}
+const m=(p,q)=>(p*q)>>12;const A=m(c[0],c[2]),B=m(c[0],s[2]),D=m(s[0],c[2]),E=m(s[0],s[2]);
+return [[m(c[1],c[2]),m(D,s[1])-B,E+m(A,s[1])],[m(c[1],s[2]),A+m(E,s[1]),m(B,s[1])-D],[-s[1],m(s[0],c[1]),m(c[0],c[1])]].map(r=>r.map(v=>v/4096))}
+const mm=(A,B)=>A.map((r,i)=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+const mv=(A,v)=>[0,1,2].map(i=>A[i][0]*v[0]+A[i][1]*v[1]+A[i][2]*v[2]);
+function world(ch,pose){const loc=[];for(let b=0;b<18;b++){const R=rotation(pose.slice(3+b*3,6+b*3),true);if(b===0){R[1]=R[1].map(v=>-v);R[2]=R[2].map(v=>-v)}loc.push(R)}
+const W={0:[loc[0],[0,0,0]]};const ri=ch.rowinfo;
+function get(r){if(W[r])return W[r];const w=ri[r];let res;
+if(r in ROW_PARENT){const [Rp,Tp]=get(ROW_PARENT[r]);const b=PART_BONE[P2R.indexOf(r)];const o=mv(Rp,w.pos);res=[mm(Rp,loc[b]),[Tp[0]+o[0],Tp[1]+o[1],Tp[2]+o[2]]]}
+else if(r===2||r===4||r===20)res=get({2:1,4:3,20:19}[r]);
+else if(r>=21&&r<=24){const [Rp,Tp]=get(P2R[w.parent]||0);const o=mv(Rp,w.pos);res=[mm(Rp,rotation(w.rot,false)),[Tp[0]+o[0],Tp[1]+o[1],Tp[2]+o[2]]]}
+else if(r===25||r===26)res=get(P2R[w.parent]||0);else res=W[0];
+W[r]=res;return res}
+for(const r in ri)get(+r);return W}
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let ch=null,entry=null,frames=[],fi=0,playing=true,yaw=0.6,pitch=0.1,zoom=1,filter='manquante',acc=0,last=0;
+function decodeClip(b64){const b=atob(b64);const n=b.length/2/57;const out=[];for(let f=0;f<n;f++){const p=new Array(57);for(let k=0;k<57;k++){const i=(f*57+k)*2;p[k]=b.charCodeAt(i)|(b.charCodeAt(i+1)<<8)}out.push(p)}return out}
+function draw(){const w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);if(!ch||!frames.length)return;
+const W=world(ch,frames[fi]);const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+const view=p=>{let x=p[0]*cy-p[2]*sy,z=p[0]*sy+p[2]*cy;let y=p[1]*cp-z*sp;z=p[1]*sp+z*cp;return [x,y,z]};
+const s=0.33*zoom*w/600,ox=w/2,oy=h*0.46;const tris=[];
+for(const r in ch.rows){const {slots,tris:T}=ch.rows[r];const P=slots.map(sl=>{if(!sl)return null;const [R,Tt]=W[sl[0]]||W[0];const q=mv(R,[sl[1],sl[2],sl[3]]);return view([q[0]+Tt[0],q[1]+Tt[1],q[2]+Tt[2]])});
+const col=GROUP_COLOR(+r);
+for(const t of T){const a=P[t[0]],b=P[t[1]],c=P[t[2]];if(!a||!b||!c)continue;
+const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const nl=Math.hypot(nx,ny,nz)||1;const l=Math.abs((nx*0.3-ny*0.6-nz*0.75)/nl);
+tris.push([(a[2]+b[2]+c[2])/3,a,b,c,col,0.35+0.65*l])}}
+tris.sort((p,q)=>q[0]-p[0]);
+for(const [,a,b,c,col,l] of tris){ctx.fillStyle=`rgb(${col[0]*l|0},${col[1]*l|0},${col[2]*l|0})`;ctx.beginPath();ctx.moveTo(ox+a[0]*s,oy+a[1]*s);ctx.lineTo(ox+b[0]*s,oy+b[1]*s);ctx.lineTo(ox+c[0]*s,oy+c[1]*s);ctx.closePath();ctx.fill()}}
+function tick(t){const dt=last?t-last:0;last=t;if(playing&&frames.length){acc+=dt*(+speed.value);while(acc>=1000/30){acc-=1000/30;fi=(fi+1)%frames.length}frame.value=fi;now()}draw();requestAnimationFrame(tick)}
+function now(){if(!entry)return;document.getElementById('now').innerHTML=`<b>${entry.address}</b> · animation <b>0x${entry.clip.toString(16)}</b> · image <b>${fi+1}</b> / ${frames.length}`}
+function badge(e){if(e.status==='convertie')return '<span class="badge b-conv">convertie</span>';if(e.status==='gardee avec perte')return '<span class="badge b-loss">gardée avec perte</span>';
+const k=e.verdict==='tag'?'b-tag':e.verdict==='pas tag'?'b-pas':'b-inc';return `<span class="badge ${k}">${e.verdict}</span><span class="meta">${e.confidence} %</span><span class="conf"><i style="width:${e.confidence}%"></i></span>`}
+function renderList(){const L=document.getElementById('list');const items=ch.entries.filter(e=>e.status===filter);
+items.sort((a,b)=>(b.confidence||0)-(a.confidence||0));
+document.getElementById('count').textContent=`${items.length} animation(s)`;
+L.innerHTML=items.map((e,i)=>`<div class="item" data-i="${ch.entries.indexOf(e)}"><div class="top">${badge(e)}<span class="meta">${e.address} · ${e.frames} images · alias ${e.aliases.join(', ')||'-'}</span></div>
+${e.why?`<div class="why">${e.why}</div>`:''}${e.notes.map(n=>`<div class="why">${n}</div>`).join('')}
+${e.incoming.length?`<div class="inc">${e.incoming.map(x=>`<div>depuis ${x.source}${x.source_kept?'':' (non converti)'} : <code>${x.cmd}</code>${x.reason&&x.reason!=='conservee'?' — '+x.reason:''}</div>`).join('')}</div>`:''}</div>`).join('');
+L.querySelectorAll('.item').forEach(el=>el.onclick=()=>{L.querySelectorAll('.item').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');pick(ch.entries[+el.dataset.i]);window.innerWidth<760&&cv.scrollIntoView({behavior:'smooth'})});
+if(items.length)pick(items[0]),L.firstElementChild.classList.add('sel')}
+function pick(e){entry=e;const c=ch.clips[e.clip];frames=c?decodeClip(c):[];fi=0;frame.max=Math.max(0,frames.length-1);frame.value=0;now()}
+const sel=document.getElementById('char');DATA.chars.forEach((c,i)=>sel.add(new Option(c.label,i)));
+sel.onchange=()=>{ch=DATA.chars[+sel.value];renderList()};
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-f]').forEach(x=>x.classList.remove('on'));b.classList.add('on');filter=b.dataset.f;renderList()});
+const play=document.getElementById('play'),frame=document.getElementById('frame'),speed=document.getElementById('speed');
+play.onclick=()=>{playing=!playing;play.textContent=playing?'Pause':'Lecture'};
+document.getElementById('prev').onclick=()=>{playing=false;play.textContent='Lecture';fi=(fi-1+frames.length)%frames.length;frame.value=fi;now()};
+document.getElementById('next').onclick=()=>{playing=false;play.textContent='Lecture';fi=(fi+1)%frames.length;frame.value=fi;now()};
+frame.oninput=()=>{fi=+frame.value;now()};
+let drag=null;cv.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY,yaw,pitch];cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;yaw=drag[2]+(e.clientX-drag[0])*0.01;pitch=Math.max(-1.2,Math.min(1.2,drag[3]+(e.clientY-drag[1])*0.01))});
+cv.addEventListener('pointerup',()=>drag=null);cv.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(0.4,Math.min(3,zoom*(e.deltaY<0?1.1:0.9)))},{passive:false});
+ch=DATA.chars[0];renderList();requestAnimationFrame(tick);
+</script>
+</body>
+</html>

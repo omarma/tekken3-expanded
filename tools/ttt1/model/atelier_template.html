@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Jin / Kazuya</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e2e2e0;--hl:#fff3c4;
+--tronc:#8a6d3b;--tete:#7b4fb0;--brasA:#2f7fd1;--brasB:#18a0a8;--jambeA:#d1602f;--jambeB:#c7a01c;--extra:#d0306f;--vide:#bdbdbd}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338;--hl:#4a4020}}
+:root[data-theme=dark]{--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338;--hl:#4a4020}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,sans-serif}
+header{padding:16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:18px;margin:0 0 4px}.sub{color:var(--mute);font-size:13px}
+nav{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+nav button{border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:6px 12px;border-radius:6px;cursor:pointer}
+nav button.on{background:var(--ink);color:var(--bg)}
+main{padding:16px}.view{display:none}.view.on{display:block}
+.cols{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:12px;overflow-x:auto}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:220px}
+.col h2{font-size:14px;margin:0 0 2px}.col .meta{color:var(--mute);font-size:12px;margin-bottom:8px}
+.chip{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:5px;margin:2px 0;cursor:default;font-size:12px}
+.chip .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.chip .n{font-variant-numeric:tabular-nums;color:var(--mute);width:22px}
+.chip .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .bar{height:6px;border-radius:3px;background:var(--mute);opacity:.5}
+.chip.off{opacity:.35}.chip.hl{background:var(--hl)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--mute)}
+.legend span{display:flex;align-items:center;gap:4px}.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.tip{font-size:12px;color:var(--mute);margin:0 0 10px;max-width:900px}
+.row3d{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+canvas{background:var(--panel);border:1px solid var(--line);border-radius:8px;touch-action:none;max-width:100%}
+.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+select,label{font-size:13px;color:var(--ink)}select{background:var(--panel);border:1px solid var(--line);padding:4px;border-radius:5px}
+.info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;min-width:260px;flex:1}
+.info table{border-collapse:collapse;width:100%}.info td{padding:2px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.stack{display:flex;height:26px;border-radius:5px;overflow:hidden;margin:4px 0 14px}
+.stack div{height:100%}
+@media (max-width:700px){.cols{grid-template-columns:repeat(5,230px)}}
+a{color:inherit}
+</style>
+</head>
+<body>
+<header>
+<h1>Atelier Jin / Kazuya</h1>
+<div class="sub">Cinq modèles : Jin arcade, Jin PS1, Jin TTT1, Kazuya TTT1 et Kazuya converti au format PS1. Page locale : elle contient des données du jeu, ne pas la publier. Rendu texturé : <a href="modele.html">Modèle texturé</a>.</div>
+<nav>
+<button data-v="sk" class="on">Squelettes</button>
+<button data-v="p3">Pièce en 3D</button>
+<button data-v="sz">Où partent les octets</button>
+</nav>
+</header>
+<main>
+<section id="sk" class="view on">
+<p class="tip">Chaque pastille est une ligne du modèle. La barre indique le nombre de sommets propres à la pièce, le chiffre à droite les sommets empruntés à d'autres pièces (soudure de la peau). Dans la colonne « Kazuya — converti PS1 », « ← n » donne la ligne TTT1 d'origine. Survolez une pièce pour allumer son équivalent dans les autres versions. Les lignes grisées sont vides.</p>
+<div class="legend" id="legend"></div>
+<div class="cols" id="cols"></div>
+</section>
+<section id="p3" class="view">
+<div class="ctl">
+<label>Pièce <select id="piece"></select></label>
+<label><input type="checkbox" id="fix" checked> Aligner chaque version sur Jin PS1 (meilleur changement d'axes, pièce par pièce)</label>
+</div>
+<p class="tip">Chaque couleur est une version. Positions locales à l'os (bloc de positions), sans animation ; pour l'arcade, dont ce format n'est pas décodé, ce sont les normales. Là où les points se superposent, c'est le même sommet. Glisser pour tourner, molette pour zoomer.</p>
+<div class="row3d"><canvas id="cv" width="560" height="460"></canvas><div class="info" id="pinfo"></div></div>
+</section>
+<section id="sz" class="view">
+<p class="tip">Taille totale de chaque modèle, répartie par région du corps. La cible PS1 est de 26 364 octets : c'est la taille que doit respecter Kazuya converti pour prendre la place de Jin.</p>
+<div id="stacks"></div>
+</section>
+</main>
+<script src="data.js"></script>
+<script>
+const M=window.MODELS.models;
+const G={tronc:'Tronc',tete:'Tête',brasA:'Bras A',brasB:'Bras B',jambeA:'Jambe A',jambeB:'Jambe B',extra:'Os en plus (Kazuya)',vide:'Vide'};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue('--'+n).trim();
+// Correspondance ligne -> (groupe, clef d'equivalence). A = cote z>0 dans le repere T3.
+function ttt(r){
+  if(r<=6)return['tronc','tronc-'+r];
+  if(r<=9)return['jambeA','jambeA-'+(r-7)]; if(r<=12)return['jambeB','jambeB-'+(r-10)];
+  if(r<=16)return['brasA','brasA-'+(r-13)]; if(r<=20)return['brasB','brasB-'+(r-17)];
+  if(r<=23)return['tete','tete-'+(r-21)]; return['extra','extra-'+r];
+}
+const MAP=[
+  r=>r<=1?['tronc','tronc-'+r]:r==2?['tete','tete-0']:r<=6?['brasA','brasA-'+(r-3)]:r<=10?['brasB','brasB-'+(r-7)]:r==11?['tronc','bassin']:r<=14?['jambeA','jambeA-'+(r-12)]:r<=17?['jambeB','jambeB-'+(r-15)]:['vide','x'],
+  r=>r<=1?['tronc','tronc-'+r]:r<=4?['tronc',r==3?'bassin':'tronc-'+r]:r<=7?['jambeA','jambeA-'+(r-5)]:r<=10?['jambeB','jambeB-'+(r-8)]:r<=14?['brasA','brasA-'+(r-11)]:r<=18?['brasB','brasB-'+(r-15)]:r<=20?['tete','tete-'+(r-19)]:['vide','x'],
+  ttt,ttt,
+  r=>{const t=M[4].rows[r].src; return (t==null||t===undefined)?['vide','x']:ttt(t)}];
+const NAMES={'jambeA-0':'hanche','jambeA-1':'cuisse','jambeA-2':'tibia','brasA-0':'épaule','brasA-1':'bras','brasA-2':'avant-bras','brasA-3':'main','tete-0':'tête','tete-1':'tête 2','tete-2':'tête 3','bassin':'bassin'};
+const nm=k=>{if(!k)return'';const s=k.replace(/B-/,'A-');return NAMES[s]||k.replace(/-/,' ')};
+const col=(m,i)=>{const r=m.rows[i];if(!r.active)return['vide','x'];return MAP[M.indexOf(m)](i)};
+// Legende
+document.getElementById('legend').innerHTML=Object.keys(G).map(g=>`<span><i style="background:var(--${g})"></i>${G[g]}</span>`).join('');
+// Squelettes
+const cols=document.getElementById('cols');
+M.forEach((m,mi)=>{
+  const act=m.rows.filter(r=>r.active).length;
+  const c=document.createElement('div');c.className='col';
+  c.innerHTML=`<h2>${m.name}</h2><div class="meta">${m.rows.length} lignes, ${act} actives · ${m.bytes.toLocaleString('fr')} o · échelle ${m.scale}</div>`;
+  m.rows.forEach((r,i)=>{
+    const [g,k]=col(m,i);const d=document.createElement('div');
+    d.className='chip'+(r.active?'':' off');d.dataset.k=r.active?k:'';
+    const len=Math.round(Math.hypot(...r.bone));const rot=r.rot.some(x=>x)?' ⟳':'';
+    d.title=`ligne ${r.row} · os (${r.bone.join(', ')}) · parent ${r.parent} · rotation (${r.rot.join(', ')})\nblocs a/b/c/d/e : ${Object.values(r.sizes).join(' / ')} o\n${r.verts.length} sommets propres, ${r.g1.length+r.g2.length} empruntés · ${r.normals} normales · ${r.prims} polygones${r.src!=null?' · ligne TTT1 '+r.src:''}`;
+    d.innerHTML=`<span class="n">${r.row}</span><span class="dot" style="background:var(--${g})"></span><span class="lbl">${r.active?nm(k)+(len?' · '+len:'')+rot+(r.src!=null?' ← '+r.src:''):'—'}</span>`+
+      (r.active?`<span class="bar" style="width:${Math.min(70,r.verts.length*1.2)}px"></span><span class="n" style="width:26px;text-align:right">${r.g1.length+r.g2.length||''}</span>`:'');
+    c.appendChild(d);
+  });
+  cols.appendChild(c);
+});
+cols.addEventListener('mouseover',e=>{const k=e.target.closest('.chip')?.dataset.k;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('hl',!!k&&x.dataset.k===k))});
+// Nav
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button,.view').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById(b.dataset.v).classList.add('on');draw()});
+// Pieces
+const keys=[...new Set(M.flatMap(m=>m.rows.map((r,i)=>r.active?col(m,i)[1]:null)).filter(Boolean))];
+const order=['tronc','bassin','tete','brasA','brasB','jambeA','jambeB','extra'];
+keys.sort((a,b)=>order.findIndex(o=>a.startsWith(o))-order.findIndex(o=>b.startsWith(o))||a.localeCompare(b));
+const sel=document.getElementById('piece');
+sel.innerHTML=keys.map(k=>`<option value="${k}">${k.replace(/(brasA|brasB|jambeA|jambeB|tete|tronc|extra)-?/,(s,g)=>(G[g]||'')+' · ')}${nm(k)!==k?' ('+nm(k)+')':''}</option>`).join('');
+sel.value='brasB-0';
+const PC=['#d1602f','#2f7fd1','#18a0a8','#d0306f','#8a5cd6'];
+let yaw=.6,pitch=.35,zoom=1;
+function draw(){
+  const cv=document.getElementById('cv'),x=cv.getContext('2d');const W=cv.width,H=cv.height;x.clearRect(0,0,W,H);
+  const k=sel.value,fix=document.getElementById('fix').checked;const sets=[];
+  M.forEach((m,mi)=>m.rows.forEach((r,i)=>{if(r.active&&col(m,i)[1]===k){
+    sets.push({mi,row:i,r,pts:r.verts.map(v=>v.slice()),tf:'—'})}}));
+  const ref=sets.find(s=>s.mi==1);
+  if(fix&&ref){const S=new Set(ref.pts.map(p=>p.join(',')));
+    const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],sg=[];for(const a of[1,-1])for(const b of[1,-1])for(const c of[1,-1])sg.push([a,b,c]);
+    sets.forEach(s=>{if(s===ref)return;let bst=[-1];for(const p of perms)for(const g of sg){const q=s.pts.map(v=>[g[0]*v[p[0]],g[1]*v[p[1]],g[2]*v[p[2]]]);const n=q.filter(v=>S.has(v.join(','))).length;if(n>bst[0])bst=[n,q,p,g]}
+      if(bst[0]>0){s.pts=bst[1];const L='xyz';s.tf=bst[2].map((k,j)=>(bst[3][j]<0?'−':'')+L[k]).join(' ')}else s.tf='aucune'})}
+  let mx=1;sets.forEach(s=>s.pts.forEach(p=>mx=Math.max(mx,...p.map(Math.abs))));
+  const sc=Math.min(W,H)*.42/mx*zoom,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const pr=p=>{const X=p[0]*cy-p[2]*sy,Z=p[0]*sy+p[2]*cy,Y=p[1]*cp-Z*sp;return[W/2+X*sc,H/2+Y*sc]};
+  x.strokeStyle=css('line');x.lineWidth=1;[[mx,0,0],[0,mx,0],[0,0,mx]].forEach((a,i)=>{const o=pr([0,0,0]),e=pr(a);x.beginPath();x.moveTo(...o);x.lineTo(...e);x.stroke();x.fillStyle=css('mute');x.font='11px system-ui';x.fillText('xyz'[i],e[0]+3,e[1])});
+  sets.forEach((s,j)=>{x.fillStyle=PC[s.mi];s.pts.forEach(p=>{const[a,b]=pr(p);x.beginPath();x.arc(a,b,j==0?6:3.5,0,7);x.globalAlpha=j==0?.45:.95;x.fill()});x.globalAlpha=1});
+  // correspondance exacte
+  const key=p=>p.join(',');const inter=(A,B)=>{const s=new Set(A.pts.map(key));return B.pts.filter(p=>s.has(key(p))).length};
+  let h=`<table><tr><td></td><td>ligne</td><td>sommets</td><td>empruntés</td><td>os</td><td>axes</td></tr>`;
+  sets.forEach(s=>h+=`<tr><td><span style="color:${PC[s.mi]}">●</span> ${M[s.mi].name}</td><td>${s.row}</td><td>${s.pts.length}</td><td>${s.r.g1.length+s.r.g2.length}</td><td>${s.r.bone.join(', ')}</td><td>${s.tf}</td></tr>`);
+  h+='</table><p><b>Sommets identiques</b> (mêmes x, y, z) :</p><table>';
+  for(let a=0;a<sets.length;a++)for(let b=a+1;b<sets.length;b++)h+=`<tr><td>${M[sets[a].mi].name} ↔ ${M[sets[b].mi].name}</td><td>${inter(sets[a],sets[b])}</td></tr>`;
+  h+='</table>';if(!sets.length)h='Aucune version ne porte cette pièce.';
+  document.getElementById('pinfo').innerHTML=h;
+}
+sel.onchange=draw;document.getElementById('fix').onchange=draw;
+const cv=document.getElementById('cv');let drag=null;
+cv.onpointerdown=e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.01;pitch+=(e.clientY-drag[1])*.01;drag=[e.clientX,e.clientY];draw()};
+cv.onpointerup=()=>drag=null;cv.onwheel=e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:.9;draw()};
+// Tailles
+const st=document.getElementById('stacks');
+M.forEach((m,mi)=>{const tot={};m.rows.forEach((r,i)=>{const g=col(m,i)[0];tot[g]=(tot[g]||0)+Object.values(r.sizes).reduce((a,b)=>a+b,0)});
+  const mxb=Math.max(...M.map(x=>x.bytes));
+  st.innerHTML+=`<div><b>${m.name}</b> — ${m.bytes.toLocaleString('fr')} o<div class="stack" style="width:${m.bytes/mxb*100}%">${Object.entries(tot).filter(e=>e[1]).map(([g,v])=>`<div title="${G[g]} : ${v.toLocaleString('fr')} o" style="width:${v/m.bytes*100}%;background:var(--${g})"></div>`).join('')}</div></div>`});
+st.innerHTML+=`<div class="legend">${Object.keys(G).map(g=>`<span><i style="background:var(--${g})"></i>${G[g]}</span>`).join('')}</div>`;
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,479 @@
+{
+  "character": 10,
+  "model": 20,
+  "record": 153,
+  "source_sha256": "0d1bd2a871bf6a3b368750ab107d420f0351d1554a202f7e6bf6f99fa2034594",
+  "authored_art_sha256": "13943d6d6891fc146ea92a1a902d4025de21b5dc963d5a3c6ca8d21544b03eeb",
+  "atlas_size": [
+    1152,
+    1152
+  ],
+  "preserved_tiles": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    9,
+    10,
+    16,
+    17,
+    18,
+    19,
+    23,
+    24,
+    25,
+    27,
+    29,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60
+  ],
+  "tiles": [
+    {
+      "player": 1,
+      "tile": 7,
+      "source_cell": 7,
+      "rect": [
+        400,
+        64,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ],
+      "depth": 1
+    },
+    {
+      "player": 1,
+      "tile": 8,
+      "source_cell": 8,
+      "rect": [
+        400,
+        112,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ],
+      "depth": 1
+    },
+    {
+      "player": 1,
+      "tile": 11,
+      "source_cell": 11,
+      "rect": [
+        400,
+        160,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ],
+      "depth": 1
+    },
+    {
+      "player": 1,
+      "tile": 12,
+      "source_cell": 12,
+      "rect": [
+        416,
+        0,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ],
+      "depth": 1
+    },
+    {
+      "player": 1,
+      "tile": 13,
+      "source_cell": 13,
+      "rect": [
+        420,
+        216,
+        2,
+        8
+      ],
+      "clut": [
+        0,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 14,
+      "source_cell": 14,
+      "rect": [
+        384,
+        192,
+        8,
+        32
+      ],
+      "clut": [
+        96,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 15,
+      "source_cell": 15,
+      "rect": [
+        416,
+        208,
+        4,
+        16
+      ],
+      "clut": [
+        80,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 20,
+      "source_cell": 20,
+      "rect": [
+        420,
+        80,
+        4,
+        32
+      ],
+      "clut": [
+        144,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 21,
+      "source_cell": 21,
+      "rect": [
+        392,
+        192,
+        8,
+        32
+      ],
+      "clut": [
+        160,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 22,
+      "source_cell": 22,
+      "rect": [
+        400,
+        208,
+        8,
+        16
+      ],
+      "clut": [
+        176,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 26,
+      "source_cell": 11,
+      "rect": [
+        420,
+        112,
+        4,
+        32
+      ],
+      "clut": [
+        224,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 28,
+      "source_cell": 28,
+      "rect": [
+        420,
+        160,
+        4,
+        16
+      ],
+      "clut": [
+        240,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 1,
+      "tile": 30,
+      "source_cell": 22,
+      "rect": [
+        424,
+        64,
+        4,
+        8
+      ],
+      "clut": [
+        208,
+        505
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 7,
+      "source_cell": 7,
+      "rect": [
+        400,
+        320,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ],
+      "depth": 1
+    },
+    {
+      "player": 2,
+      "tile": 8,
+      "source_cell": 8,
+      "rect": [
+        400,
+        368,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ],
+      "depth": 1
+    },
+    {
+      "player": 2,
+      "tile": 11,
+      "source_cell": 11,
+      "rect": [
+        400,
+        416,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ],
+      "depth": 1
+    },
+    {
+      "player": 2,
+      "tile": 12,
+      "source_cell": 12,
+      "rect": [
+        416,
+        256,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ],
+      "depth": 1
+    },
+    {
+      "player": 2,
+      "tile": 13,
+      "source_cell": 13,
+      "rect": [
+        420,
+        472,
+        2,
+        8
+      ],
+      "clut": [
+        0,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 14,
+      "source_cell": 14,
+      "rect": [
+        384,
+        448,
+        8,
+        32
+      ],
+      "clut": [
+        96,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 15,
+      "source_cell": 15,
+      "rect": [
+        416,
+        464,
+        4,
+        16
+      ],
+      "clut": [
+        80,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 20,
+      "source_cell": 20,
+      "rect": [
+        420,
+        336,
+        4,
+        32
+      ],
+      "clut": [
+        144,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 21,
+      "source_cell": 21,
+      "rect": [
+        392,
+        448,
+        8,
+        32
+      ],
+      "clut": [
+        160,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 22,
+      "source_cell": 22,
+      "rect": [
+        400,
+        464,
+        8,
+        16
+      ],
+      "clut": [
+        176,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 26,
+      "source_cell": 11,
+      "rect": [
+        420,
+        368,
+        4,
+        32
+      ],
+      "clut": [
+        224,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 28,
+      "source_cell": 28,
+      "rect": [
+        420,
+        416,
+        4,
+        16
+      ],
+      "clut": [
+        240,
+        509
+      ],
+      "depth": 0
+    },
+    {
+      "player": 2,
+      "tile": 30,
+      "source_cell": 22,
+      "rect": [
+        424,
+        320,
+        4,
+        8
+      ],
+      "clut": [
+        208,
+        509
+      ],
+      "depth": 0
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+format_version = 5
+id = "tekken3.enhancement.true-widescreen"
+version = "1.0.0"
+name = "True Widescreen"
+author = "Tekken3Recomp"
+description = "Native 16:9 framing with a wider 3D view and non-stretched, aspect-aware 2D scenes."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "true-widescreen"
+name = "True 16:9 Widescreen"
+description = "Adds real horizontal view in 3D scenes. Keeps the original stage sections and reveals them through a wider camera visibility cone. Disable for exact original 4:3."
+group = "Visual Enhancements"
+default_enabled = true
+
+[[plugin]]
+feature = "true-widescreen"
+id = "tekken3.true-widescreen"
+
+[[plugin]]
+feature = "true-widescreen"
+id = "tekken3.fight-camera"
+
+[[option]]
+feature = "true-widescreen"
+id = "wide-fights"
+label = "Wider fight framing (experimental)"
+description = "Lets regular fights use the wider view before the camera pulls back. Turn off to restore the original fight framing."
+type = "boolean"
+default = "true"
+
+# Guarded full-aperture visibility hooks are declared in game.toml. The original
+# section grid and guest code pages remain unchanged.

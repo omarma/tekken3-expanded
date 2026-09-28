@@ -1,0 +1,3242 @@
+{
+  "schema": "psxrecomp phase2 seeds",
+  "source": "gen_bios_seeds_from_elf.py over openbios.elf, shell.elf + 5 empirical seeds from openbios_dispatch_miss.json",
+  "seed_count": 647,
+  "seeds": [
+    {
+      "address": "0xBFC00000",
+      "label": "elf_entry_openbios_elf",
+      "rationale": "ELF entry point (e_entry) of openbios.elf"
+    },
+    {
+      "address": "0xBFC00084",
+      "label": "exit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00144",
+      "label": "main",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0019C",
+      "label": "init_main_thread",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC001AC",
+      "label": "_boot",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0039C",
+      "label": "buComputeSectorChecksum",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC003C4",
+      "label": "buVerifySectorChecksum",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC003F8",
+      "label": "buValidateEntryAndCorrect",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00514",
+      "label": "filterInner",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00520",
+      "label": "filterFirst",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0052C",
+      "label": "buReallocateBrokenSectorAndRetry",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC006C8",
+      "label": "buFormat",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00894",
+      "label": "buInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00C48",
+      "label": "initBackupUnit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00CFC",
+      "label": "cardInfo",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00D60",
+      "label": "buWriteTOCInternal.isra.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00E98",
+      "label": "buFinishAndTrigger",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00EE0",
+      "label": "buLowLevelOpCompleted",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC00F8C",
+      "label": "code_ptr_BFC00F8C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC00FB0",
+      "label": "code_ptr_BFC00FB0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC00FB8",
+      "label": "code_ptr_BFC00FB8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC010C4",
+      "label": "code_ptr_BFC010C4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC010D0",
+      "label": "code_ptr_BFC010D0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC01124",
+      "label": "code_ptr_BFC01124",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC011E0",
+      "label": "code_ptr_BFC011E0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC0153C",
+      "label": "code_ptr_BFC0153C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC01570",
+      "label": "buLowLevelOpError1",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC015E0",
+      "label": "buLowLevelOpError2",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01650",
+      "label": "buLowLevelOpError3",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC016C0",
+      "label": "buReadTOC",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0175C",
+      "label": "buWriteTOC",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC017C0",
+      "label": "buSetAutoFormat",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC017D0",
+      "label": "dev_bu_close",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01830",
+      "label": "buDevInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC019B4",
+      "label": "dev_bu_format",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01A44",
+      "label": "dev_bu_undelete",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01A84",
+      "label": "buNextFileInternal",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01BC4",
+      "label": "dev_bu_open",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC01EEC",
+      "label": "dev_bu_erase",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02144",
+      "label": "dev_bu_nextFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02258",
+      "label": "dev_bu_firstFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC023C8",
+      "label": "dev_bu_rename",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02554",
+      "label": "dev_bu_deinit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02594",
+      "label": "buRelativeToAbsoluteSector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC025EC",
+      "label": "buGetReallocated",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02640",
+      "label": "dev_bu_read",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC029A4",
+      "label": "dev_bu_write",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02DD8",
+      "label": "addMemoryCardDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02DEC",
+      "label": "deinitCDRom",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02E70",
+      "label": "initializeCDRomHandlersAndEvents",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC02FB8",
+      "label": "initCDRom",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03000",
+      "label": "cdromBlockGetStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC030BC",
+      "label": "addCDRomDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC030D0",
+      "label": "strcat.isra.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0310C",
+      "label": "findDirectoryEntryForFilename",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03404",
+      "label": "cdromReadPathTable",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC035B4",
+      "label": "dev_cd_open",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC036E0",
+      "label": "dev_cd_read",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC037F0",
+      "label": "dev_cd_nextFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC038FC",
+      "label": "dev_cd_firstFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03A30",
+      "label": "dev_cd_chdir",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03A78",
+      "label": "cdromBlockReading",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03CEC",
+      "label": "getLastCDRomError",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03D0C",
+      "label": "setCDRomIRQAutoAck",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03D28",
+      "label": "enqueueCDRomHandlers",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03DA0",
+      "label": "dequeueCDRomHandlers",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03DE0",
+      "label": "Krom2Offset",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03E70",
+      "label": "Krom2RawAdd",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03F00",
+      "label": "firstFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03FB0",
+      "label": "nextFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC03FD4",
+      "label": "format",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04080",
+      "label": "setupFileIO",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0414C",
+      "label": "getDeviceStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0415C",
+      "label": "setDeviceStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04168",
+      "label": "printInstalledDevices",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC041D0",
+      "label": "findDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04270",
+      "label": "removeDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04304",
+      "label": "getFileFromHandle",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04330",
+      "label": "ioabortraw",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04348",
+      "label": "ioAbortWithMsg",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04374",
+      "label": "findEmptyFile",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC043D0",
+      "label": "splitFilepathAndFindDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC044D0",
+      "label": "cdevscan",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04538",
+      "label": "psxexit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0459C",
+      "label": "isFileConsole",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC045E0",
+      "label": "addDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04668",
+      "label": "xprintfcallback",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC046C0",
+      "label": "psxopen",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04790",
+      "label": "psxlseek",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04840",
+      "label": "psxread",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04974",
+      "label": "psxwrite",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04AA8",
+      "label": "psxclose",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04B2C",
+      "label": "reopenStdio",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04B84",
+      "label": "installStdIo",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04C0C",
+      "label": "psxioctl",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04CBC",
+      "label": "psxgetc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04CF0",
+      "label": "psxputc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04D1C",
+      "label": "psxputchar",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04DA0",
+      "label": "psxgetchar",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04DCC",
+      "label": "psxgets",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04F1C",
+      "label": "psxputs",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04F64",
+      "label": "psxprintf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC04FA4",
+      "label": "psxrename",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC050DC",
+      "label": "psxerase",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05190",
+      "label": "GPU_send",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC051A0",
+      "label": "GPU_abort",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC051CC",
+      "label": "GPU_timeout",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC051F8",
+      "label": "GPU_dw",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC052E4",
+      "label": "GPU_getStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC052F4",
+      "label": "GPU_sync",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC053C4",
+      "label": "GPU_mem2vram",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05474",
+      "label": "GPU_cw",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC054A0",
+      "label": "GPU_cwb",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC054F4",
+      "label": "GPU_sendPackets",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05578",
+      "label": "initEvents",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05600",
+      "label": "getFreeEvCBSlot",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05648",
+      "label": "openEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC056B4",
+      "label": "enableEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC056EC",
+      "label": "disableEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05724",
+      "label": "closeEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0574C",
+      "label": "testEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0578C",
+      "label": "waitEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC057F0",
+      "label": "flushCache",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05858",
+      "label": "toupper",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05878",
+      "label": "tolower",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05894",
+      "label": "memchr",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC058C8",
+      "label": "strcat",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0590C",
+      "label": "strcpy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05930",
+      "label": "strncpy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0596C",
+      "label": "strchr",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0599C",
+      "label": "strrchr",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC059CC",
+      "label": "strlen",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC059F4",
+      "label": "strncat",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05A44",
+      "label": "strcmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05A68",
+      "label": "strncmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05AA4",
+      "label": "strstr",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05AFC",
+      "label": "installHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B24",
+      "label": "installKernelHandlers",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B64",
+      "label": "installExceptionHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B74",
+      "label": "setDefaultExceptionJmpBuf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B88",
+      "label": "setExceptionJmpBuf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B94",
+      "label": "clearFileError",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05B9C",
+      "label": "getOpenBiosApiVersionImpl",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05BA4",
+      "label": "getOpenBiosBuildIdImpl",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05BB0",
+      "label": "getB0table",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05BD8",
+      "label": "getC0table",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05C00",
+      "label": "atoi",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05C0C",
+      "label": "atol",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05C14",
+      "label": "patchA0table",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05C8C",
+      "label": "unimplemented",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05E10",
+      "label": "copyDataAndInitializeBSS",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05E54",
+      "label": "copyA0table",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05E6C",
+      "label": "psxdummy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05E74",
+      "label": "psxtodigit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05EC4",
+      "label": "psxabs",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05ED4",
+      "label": "psxatob",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05F08",
+      "label": "psxstrpbrk",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05F48",
+      "label": "psxstrspn",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC05FA8",
+      "label": "psxstrcspn",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06008",
+      "label": "psxstrtok",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0604C",
+      "label": "psxbcopy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06084",
+      "label": "psxbzero",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC060C4",
+      "label": "psxbcmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC060E4",
+      "label": "psxrand",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06110",
+      "label": "psxsrand",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0611C",
+      "label": "psxlsearch",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06180",
+      "label": "psxbsearch",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06220",
+      "label": "getSystemInfo",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06248",
+      "label": "code_ptr_BFC06248",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06254",
+      "label": "code_ptr_BFC06254",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06260",
+      "label": "code_ptr_BFC06260",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06270",
+      "label": "code_ptr_BFC06270",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06278",
+      "label": "code_ptr_BFC06278",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06288",
+      "label": "code_ptr_BFC06288",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06290",
+      "label": "code_ptr_BFC06290",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC06298",
+      "label": "code_ptr_BFC06298",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC062A0",
+      "label": "code_ptr_BFC062A0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC062A8",
+      "label": "setMemSize",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06324",
+      "label": "readHeader",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0637C",
+      "label": "loadExeHeader",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC063E4",
+      "label": "loadExe",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0648C",
+      "label": "loadAndExec",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06634",
+      "label": "exec",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC066B0",
+      "label": "psxsetjmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC066EC",
+      "label": "psxlongjmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06728",
+      "label": "initThreads",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06834",
+      "label": "getFreeTCBslot",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0688C",
+      "label": "openThread",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC068F8",
+      "label": "closeThread",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06924",
+      "label": "changeThread",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06950",
+      "label": "exceptionVector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06960",
+      "label": "A0Vector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06970",
+      "label": "B0Vector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06980",
+      "label": "C0Vector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06990",
+      "label": "romsyscall_printf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0699C",
+      "label": "isspace",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC069B8",
+      "label": "strncmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC069F4",
+      "label": "muteSpu",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06A10",
+      "label": "fatal",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06A38",
+      "label": "initHandlersArray.constprop.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06A8C",
+      "label": "strcpy.isra.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06AA8",
+      "label": "strcat.isra.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06AE4",
+      "label": "findWordItem.constprop.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06C54",
+      "label": "gameMainThunk",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC06C7C",
+      "label": "boot",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07390",
+      "label": "bootThunk",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC073E0",
+      "label": "setConfiguration",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC073F8",
+      "label": "getConfiguration",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07424",
+      "label": "drawSplashScreen",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0742C",
+      "label": "runExp1PreHook",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07484",
+      "label": "runExp1PostHook",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC074DC",
+      "label": "startShell",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07578",
+      "label": "mcResetStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07604",
+      "label": "mcWaitForStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0767C",
+      "label": "mcWaitForStatusAndReturnIndex",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07704",
+      "label": "patch_remove_ChgclrPAD",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07714",
+      "label": "patch_disable_slotChangeOnAbort",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07724",
+      "label": "patch_send_pad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07734",
+      "label": "patch_startPad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07744",
+      "label": "patch_stopPad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07750",
+      "label": "mcAllowNewCard",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07760",
+      "label": "mcReadSector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07808",
+      "label": "mcWriteSector",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC078B0",
+      "label": "cardInfoInternal",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07944",
+      "label": "mcGetLastDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07968",
+      "label": "dev_tty_init",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC079C8",
+      "label": "dev_tty_open",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07A24",
+      "label": "ttyGetChar",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07A74",
+      "label": "dev_tty_action",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07CA4",
+      "label": "dev_tty_ioctl",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07D94",
+      "label": "addConsoleDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07DA8",
+      "label": "addDummyConsoleDevice",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07DBC",
+      "label": "patch_hash",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC07E84",
+      "label": "patch_hook",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08060",
+      "label": "clear_card_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08068",
+      "label": "custom_handler_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08070",
+      "label": "initgun_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08078",
+      "label": "patch_card_info_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0809C",
+      "label": "patch_card_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC080A4",
+      "label": "patch_card_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC080AC",
+      "label": "patch_card2_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC080D0",
+      "label": "patch_card2_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC080F4",
+      "label": "patch_gte_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC080FC",
+      "label": "patch_gte_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08104",
+      "label": "patch_gte_3_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0810C",
+      "label": "patch_pad_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0817C",
+      "label": "patch_pad_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC081EC",
+      "label": "patch_pad_3_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08220",
+      "label": "remove_ChgclrPAD_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08254",
+      "label": "remove_ChgclrPAD_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08288",
+      "label": "send_pad_1_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC082DC",
+      "label": "send_pad_2_execute",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08330",
+      "label": "BoardConsoleInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08338",
+      "label": "BoardConsolePuts",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08360",
+      "label": "BoardConsolePutc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08370",
+      "label": "BoardEarlyInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08378",
+      "label": "BoardInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08380",
+      "label": "BoardLateInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08388",
+      "label": "BoardShutdown",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08390",
+      "label": "BoardExceptionHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08398",
+      "label": "cpu_early_init",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC083A0",
+      "label": "cpu_init",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC083A8",
+      "label": "cpu_late_init",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC083B0",
+      "label": "__sinit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC083B8",
+      "label": "libc_init",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08478",
+      "label": "qsort",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC085D8",
+      "label": "memcpy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08604",
+      "label": "memmove",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08674",
+      "label": "memcmp",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC086C4",
+      "label": "memset",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC086E8",
+      "label": "strtol",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC088F0",
+      "label": "vxprintf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC08C58",
+      "label": "code_ptr_BFC08C58",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08C9C",
+      "label": "code_ptr_BFC08C9C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08F38",
+      "label": "code_ptr_BFC08F38",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08F4C",
+      "label": "code_ptr_BFC08F4C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08F64",
+      "label": "code_ptr_BFC08F64",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08F80",
+      "label": "code_ptr_BFC08F80",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC08FD4",
+      "label": "code_ptr_BFC08FD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC09028",
+      "label": "code_ptr_BFC09028",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC09108",
+      "label": "_exit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC0912C",
+      "label": "_ucsdk_start",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC09198",
+      "label": "dbgput",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC091E0",
+      "label": "dbgput.constprop.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC091EC",
+      "label": "osDbgPrintf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC095F8",
+      "label": "osDbgPrintf_rodata_guard",
+      "rationale": "Hard-cap osDbgPrintf (0xBFC091EC) before embedded rodata/pointer table; emit walked into SPECIAL 0x3C data and stubbed the whole function (FAIL-FAST rematch OpenBIOS boot)."
+    },
+    {
+      "address": "0xBFC0A500",
+      "label": "elf_entry_shell_elf",
+      "rationale": "ELF entry point (e_entry) of shell.elf"
+    },
+    {
+      "address": "0xBFC0A564",
+      "label": "main",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B160",
+      "label": "memset",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B184",
+      "label": "startDmaOneSector",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B218",
+      "label": "initCD",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B250",
+      "label": "isCDError",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B280",
+      "label": "isCDSuccess",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B298",
+      "label": "isCDAudio",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B2B0",
+      "label": "checkCD",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B378",
+      "label": "code_ptr_BFC0B378",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B39C",
+      "label": "miss_BFC0B39C",
+      "rationale": "empirical dispatch-miss seed merged from openbios_dispatch_miss.json"
+    },
+    {
+      "address": "0xBFC0B3E0",
+      "label": "miss_BFC0B3E0",
+      "rationale": "empirical dispatch-miss seed merged from openbios_dispatch_miss.json"
+    },
+    {
+      "address": "0xBFC0B410",
+      "label": "miss_BFC0B410",
+      "rationale": "empirical dispatch-miss seed merged from openbios_dispatch_miss.json"
+    },
+    {
+      "address": "0xBFC0B484",
+      "label": "code_ptr_BFC0B484",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B4D0",
+      "label": "code_ptr_BFC0B4D0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B514",
+      "label": "code_ptr_BFC0B514",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B538",
+      "label": "code_ptr_BFC0B538",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B558",
+      "label": "code_ptr_BFC0B558",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B594",
+      "label": "code_ptr_BFC0B594",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B760",
+      "label": "code_ptr_BFC0B760",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B7A0",
+      "label": "code_ptr_BFC0B7A0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B7D4",
+      "label": "code_ptr_BFC0B7D4",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B7EC",
+      "label": "code_ptr_BFC0B7EC",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B810",
+      "label": "code_ptr_BFC0B810",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B844",
+      "label": "code_ptr_BFC0B844",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B868",
+      "label": "code_ptr_BFC0B868",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B880",
+      "label": "code_ptr_BFC0B880",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B888",
+      "label": "code_ptr_BFC0B888",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0B8CC",
+      "label": "generateCosTable",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B928",
+      "label": "waitGPU",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0B94C",
+      "label": "flip",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BAA8",
+      "label": "waitVSync",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BB94",
+      "label": "initGPU",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BC24",
+      "label": "orientation",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BC88",
+      "label": "compare",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BD6C",
+      "label": "qsort",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0BEAC",
+      "label": "convexHull",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C0DC",
+      "label": "sendGPUVertex",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C110",
+      "label": "startLerp",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C2AC",
+      "label": "idle",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C2C8",
+      "label": "lerpC.isra.0",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C354",
+      "label": "dCos",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C3C0",
+      "label": "generateRotationMatrix3D",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C4A8",
+      "label": "multiplyMatrix3D",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C828",
+      "label": "scaleMatrix3D",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0C970",
+      "label": "matrixVertexMul3D",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CAB0",
+      "label": "matrixVertexMul3Dz",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CB20",
+      "label": "dDiv",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CC40",
+      "label": "initSPU",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CC98",
+      "label": "checkSPU",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CD74",
+      "label": "uninitSPU",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CD8C",
+      "label": "spuSchedulePing",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CDEC",
+      "label": "spuScheduleIdle",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CE20",
+      "label": "spuScheduleOutro",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CE78",
+      "label": "spuScheduleError",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CE9C",
+      "label": "SPUInit",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CF14",
+      "label": "SPUResetVoice",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CF50",
+      "label": "SPUSetVoiceVolume",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CF90",
+      "label": "SPUWaitIdle",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0CFC0",
+      "label": "MOD_SetBPM",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D024",
+      "label": "MOD_UpdateEffect",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D070",
+      "label": "miss_BFC0D070",
+      "rationale": "empirical dispatch-miss seed merged from openbios_dispatch_miss.json"
+    },
+    {
+      "address": "0xBFC0D08C",
+      "label": "miss_BFC0D08C",
+      "rationale": "empirical dispatch-miss seed merged from openbios_dispatch_miss.json"
+    },
+    {
+      "address": "0xBFC0D0A4",
+      "label": "code_ptr_BFC0D0A4",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D11C",
+      "label": "code_ptr_BFC0D11C",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D174",
+      "label": "code_ptr_BFC0D174",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D198",
+      "label": "code_ptr_BFC0D198",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D1B8",
+      "label": "code_ptr_BFC0D1B8",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D214",
+      "label": "code_ptr_BFC0D214",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D29C",
+      "label": "code_ptr_BFC0D29C",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D2F8",
+      "label": "code_ptr_BFC0D2F8",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D3A8",
+      "label": "code_ptr_BFC0D3A8",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D4A0",
+      "label": "code_ptr_BFC0D4A0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D4DC",
+      "label": "code_ptr_BFC0D4DC",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0D588",
+      "label": "SPUUploadInstruments.constprop.0",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D624",
+      "label": "MOD_Check",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D698",
+      "label": "loadInternal",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D884",
+      "label": "MOD_Load",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D88C",
+      "label": "MOD_Silence",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0D8C4",
+      "label": "MOD_Poll",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC0DD00",
+      "label": "code_ptr_BFC0DD00",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DD34",
+      "label": "code_ptr_BFC0DD34",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DD48",
+      "label": "code_ptr_BFC0DD48",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DD84",
+      "label": "code_ptr_BFC0DD84",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DDC0",
+      "label": "code_ptr_BFC0DDC0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DDD0",
+      "label": "code_ptr_BFC0DDD0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DDF0",
+      "label": "code_ptr_BFC0DDF0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DE50",
+      "label": "code_ptr_BFC0DE50",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DE70",
+      "label": "code_ptr_BFC0DE70",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DEA0",
+      "label": "code_ptr_BFC0DEA0",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DEF4",
+      "label": "code_ptr_BFC0DEF4",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DF00",
+      "label": "code_ptr_BFC0DF00",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DF18",
+      "label": "code_ptr_BFC0DF18",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DF30",
+      "label": "code_ptr_BFC0DF30",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DF68",
+      "label": "code_ptr_BFC0DF68",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DF80",
+      "label": "code_ptr_BFC0DF80",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DFAC",
+      "label": "code_ptr_BFC0DFAC",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DFD4",
+      "label": "code_ptr_BFC0DFD4",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0DFDC",
+      "label": "code_ptr_BFC0DFDC",
+      "rationale": "code pointer in a data section of shell.elf"
+    },
+    {
+      "address": "0xBFC0E050",
+      "label": "ramsyscall_printf",
+      "rationale": "ELF STT_FUNC symbol from shell.elf"
+    },
+    {
+      "address": "0xBFC1E514",
+      "label": "fastMemset",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E6CC",
+      "label": "cdromUndeliverAllExceptAckAndRdy",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E6E0",
+      "label": "code_ptr_BFC1E6E0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E748",
+      "label": "cdromUndeliverAll",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7D4",
+      "label": "code_ptr_BFC1E7D4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7DC",
+      "label": "code_ptr_BFC1E7DC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7E4",
+      "label": "initiateDMA",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7E8",
+      "label": "code_ptr_BFC1E7E8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7F0",
+      "label": "code_ptr_BFC1E7F0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E7F4",
+      "label": "code_ptr_BFC1E7F4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E80C",
+      "label": "code_ptr_BFC1E80C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E810",
+      "label": "code_ptr_BFC1E810",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E814",
+      "label": "code_ptr_BFC1E814",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E834",
+      "label": "code_ptr_BFC1E834",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E848",
+      "label": "code_ptr_BFC1E848",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1E8CC",
+      "label": "genericErrorState",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E91C",
+      "label": "demuteAck",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E94C",
+      "label": "cdromDMAVerifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1E9E8",
+      "label": "cdromIOHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1EA24",
+      "label": "cdromDMAHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1EA60",
+      "label": "cdromIOVerifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1EB50",
+      "label": "code_ptr_BFC1EB50",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBD4",
+      "label": "code_ptr_BFC1EBD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBD8",
+      "label": "code_ptr_BFC1EBD8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBDC",
+      "label": "code_ptr_BFC1EBDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBE8",
+      "label": "code_ptr_BFC1EBE8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBEC",
+      "label": "code_ptr_BFC1EBEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBF0",
+      "label": "code_ptr_BFC1EBF0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EBF8",
+      "label": "code_ptr_BFC1EBF8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC0C",
+      "label": "code_ptr_BFC1EC0C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC10",
+      "label": "code_ptr_BFC1EC10",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC14",
+      "label": "code_ptr_BFC1EC14",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC20",
+      "label": "code_ptr_BFC1EC20",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC30",
+      "label": "code_ptr_BFC1EC30",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC34",
+      "label": "code_ptr_BFC1EC34",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC44",
+      "label": "code_ptr_BFC1EC44",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EC94",
+      "label": "code_ptr_BFC1EC94",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1ECA0",
+      "label": "code_ptr_BFC1ECA0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1ECD4",
+      "label": "code_ptr_BFC1ECD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1ECDC",
+      "label": "code_ptr_BFC1ECDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EDC4",
+      "label": "code_ptr_BFC1EDC4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EED4",
+      "label": "code_ptr_BFC1EED4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EEE4",
+      "label": "code_ptr_BFC1EEE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EEFC",
+      "label": "code_ptr_BFC1EEFC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EF04",
+      "label": "code_ptr_BFC1EF04",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EF14",
+      "label": "code_ptr_BFC1EF14",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EF24",
+      "label": "code_ptr_BFC1EF24",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EF34",
+      "label": "code_ptr_BFC1EF34",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFC4",
+      "label": "code_ptr_BFC1EFC4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFCC",
+      "label": "code_ptr_BFC1EFCC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFD4",
+      "label": "code_ptr_BFC1EFD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFD8",
+      "label": "code_ptr_BFC1EFD8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFDC",
+      "label": "code_ptr_BFC1EFDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFE4",
+      "label": "code_ptr_BFC1EFE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFEC",
+      "label": "code_ptr_BFC1EFEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFF0",
+      "label": "code_ptr_BFC1EFF0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1EFF4",
+      "label": "code_ptr_BFC1EFF4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F004",
+      "label": "code_ptr_BFC1F004",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F010",
+      "label": "code_ptr_BFC1F010",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F014",
+      "label": "code_ptr_BFC1F014",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F034",
+      "label": "code_ptr_BFC1F034",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F0C4",
+      "label": "code_ptr_BFC1F0C4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F0FC",
+      "label": "code_ptr_BFC1F0FC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F1F0",
+      "label": "code_ptr_BFC1F1F0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F290",
+      "label": "cdromSeekL",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F36C",
+      "label": "cdromGetStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F3C8",
+      "label": "cdromRead",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F3F0",
+      "label": "code_ptr_BFC1F3F0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F408",
+      "label": "code_ptr_BFC1F408",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F49C",
+      "label": "cdromSetMode",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F510",
+      "label": "resetAllCDRomIRQs",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F54C",
+      "label": "enableAllCDRomIRQs",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F568",
+      "label": "cdromInnerInit",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F6B8",
+      "label": "IRQVerifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7D4",
+      "label": "code_ptr_BFC1F7D4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7D8",
+      "label": "code_ptr_BFC1F7D8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7DC",
+      "label": "code_ptr_BFC1F7DC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7E0",
+      "label": "code_ptr_BFC1F7E0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7E4",
+      "label": "code_ptr_BFC1F7E4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7E8",
+      "label": "code_ptr_BFC1F7E8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7EC",
+      "label": "code_ptr_BFC1F7EC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F7F4",
+      "label": "code_ptr_BFC1F7F4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F804",
+      "label": "code_ptr_BFC1F804",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F808",
+      "label": "code_ptr_BFC1F808",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F80C",
+      "label": "code_ptr_BFC1F80C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F814",
+      "label": "code_ptr_BFC1F814",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F818",
+      "label": "code_ptr_BFC1F818",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F81C",
+      "label": "code_ptr_BFC1F81C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F824",
+      "label": "code_ptr_BFC1F824",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F834",
+      "label": "code_ptr_BFC1F834",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F844",
+      "label": "code_ptr_BFC1F844",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F84C",
+      "label": "code_ptr_BFC1F84C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1F854",
+      "label": "code_ptr_BFC1F854",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FA48",
+      "label": "T3verifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FAA0",
+      "label": "T2verifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FAF8",
+      "label": "T1verifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FB50",
+      "label": "T0verifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBA4",
+      "label": "T3handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBD4",
+      "label": "code_ptr_BFC1FBD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBD8",
+      "label": "T2handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBE8",
+      "label": "code_ptr_BFC1FBE8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBEC",
+      "label": "code_ptr_BFC1FBEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FBF0",
+      "label": "code_ptr_BFC1FBF0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC08",
+      "label": "code_ptr_BFC1FC08",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC0C",
+      "label": "T1handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC18",
+      "label": "code_ptr_BFC1FC18",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC1C",
+      "label": "code_ptr_BFC1FC1C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC20",
+      "label": "code_ptr_BFC1FC20",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC2C",
+      "label": "code_ptr_BFC1FC2C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC40",
+      "label": "T0handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC44",
+      "label": "code_ptr_BFC1FC44",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC4C",
+      "label": "code_ptr_BFC1FC4C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC74",
+      "label": "enqueueIrqHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FC9C",
+      "label": "setIrqAutoAck",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FCB4",
+      "label": "enqueueRCntIrqs",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FD58",
+      "label": "setTimerAutoAck",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FD74",
+      "label": "getTimer",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FD98",
+      "label": "initTimer",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FDF8",
+      "label": "enableTimerIRQ",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FE2C",
+      "label": "disableTimerIRQ",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FE60",
+      "label": "restartTimer",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FE8C",
+      "label": "sysEnqIntRP",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FEB0",
+      "label": "sysDeqIntRP",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FF40",
+      "label": "syscallVerifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFD4",
+      "label": "code_ptr_BFC1FFD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFD8",
+      "label": "code_ptr_BFC1FFD8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFDC",
+      "label": "code_ptr_BFC1FFDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFE0",
+      "label": "code_ptr_BFC1FFE0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFE4",
+      "label": "code_ptr_BFC1FFE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFE8",
+      "label": "code_ptr_BFC1FFE8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC1FFF4",
+      "label": "code_ptr_BFC1FFF4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20004",
+      "label": "code_ptr_BFC20004",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20010",
+      "label": "code_ptr_BFC20010",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20014",
+      "label": "code_ptr_BFC20014",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20018",
+      "label": "code_ptr_BFC20018",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2002C",
+      "label": "code_ptr_BFC2002C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20034",
+      "label": "code_ptr_BFC20034",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20044",
+      "label": "code_ptr_BFC20044",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20050",
+      "label": "enqueueSyscallHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2005C",
+      "label": "multi_malloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20184",
+      "label": "multi_free",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC202DC",
+      "label": "multi_realloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC204F4",
+      "label": "code_ptr_BFC204F4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20554",
+      "label": "user_malloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2055C",
+      "label": "user_free",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20564",
+      "label": "user_realloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2056C",
+      "label": "user_initheap",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2059C",
+      "label": "kern_malloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC205A4",
+      "label": "kern_free",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC205AC",
+      "label": "kern_realloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC205B4",
+      "label": "kern_initheap",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC205E4",
+      "label": "deliverEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC206B8",
+      "label": "undeliverEvent",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20730",
+      "label": "wrapper_calloc",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20770",
+      "label": "getCop0CauseAndEPC",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20780",
+      "label": "exceptionHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC207E4",
+      "label": "code_ptr_BFC207E4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20940",
+      "label": "code_ptr_BFC20940",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC209A0",
+      "label": "returnFromException",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20A54",
+      "label": "A0Handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20A74",
+      "label": "B0Handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20A94",
+      "label": "C0Handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20AB4",
+      "label": "OBHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20AD0",
+      "label": "unimplementedThunk",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20AE8",
+      "label": "ramsyscall_printf",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20AF4",
+      "label": "busyloop",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20B30",
+      "label": "mcReadHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20B80",
+      "label": "code_ptr_BFC20B80",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20BEC",
+      "label": "code_ptr_BFC20BEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20C20",
+      "label": "code_ptr_BFC20C20",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20CCC",
+      "label": "code_ptr_BFC20CCC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20D00",
+      "label": "code_ptr_BFC20D00",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20D34",
+      "label": "code_ptr_BFC20D34",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20D48",
+      "label": "code_ptr_BFC20D48",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20D5C",
+      "label": "code_ptr_BFC20D5C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20D8C",
+      "label": "code_ptr_BFC20D8C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20DA0",
+      "label": "code_ptr_BFC20DA0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20DFC",
+      "label": "code_ptr_BFC20DFC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20E48",
+      "label": "code_ptr_BFC20E48",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20EA4",
+      "label": "code_ptr_BFC20EA4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20F18",
+      "label": "mcWriteHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC20F70",
+      "label": "code_ptr_BFC20F70",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FD4",
+      "label": "code_ptr_BFC20FD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FD8",
+      "label": "code_ptr_BFC20FD8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FDC",
+      "label": "code_ptr_BFC20FDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FE0",
+      "label": "code_ptr_BFC20FE0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FE4",
+      "label": "code_ptr_BFC20FE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FE8",
+      "label": "code_ptr_BFC20FE8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC20FEC",
+      "label": "code_ptr_BFC20FEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21004",
+      "label": "code_ptr_BFC21004",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21014",
+      "label": "code_ptr_BFC21014",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2101C",
+      "label": "code_ptr_BFC2101C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21020",
+      "label": "code_ptr_BFC21020",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2102C",
+      "label": "code_ptr_BFC2102C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21034",
+      "label": "code_ptr_BFC21034",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21044",
+      "label": "code_ptr_BFC21044",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2104C",
+      "label": "code_ptr_BFC2104C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC210C0",
+      "label": "code_ptr_BFC210C0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC210F4",
+      "label": "code_ptr_BFC210F4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21104",
+      "label": "code_ptr_BFC21104",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2113C",
+      "label": "code_ptr_BFC2113C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21190",
+      "label": "code_ptr_BFC21190",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC211B8",
+      "label": "code_ptr_BFC211B8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC211CC",
+      "label": "code_ptr_BFC211CC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC211FC",
+      "label": "code_ptr_BFC211FC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC212E0",
+      "label": "mcInfoHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC214E0",
+      "label": "getCardStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC214F8",
+      "label": "waitCardStatus",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC21528",
+      "label": "exceptionHandlerCardFastTrack",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC216AC",
+      "label": "mcVerifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC216F0",
+      "label": "sio0Verifier",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2171C",
+      "label": "padAbort",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC21794",
+      "label": "setupSIO0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC217E4",
+      "label": "code_ptr_BFC217E4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21808",
+      "label": "mcHandler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2180C",
+      "label": "code_ptr_BFC2180C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21844",
+      "label": "code_ptr_BFC21844",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2190C",
+      "label": "code_ptr_BFC2190C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21A04",
+      "label": "code_ptr_BFC21A04",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21A20",
+      "label": "readPad.isra.0",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC21BD4",
+      "label": "code_ptr_BFC21BD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21BDC",
+      "label": "code_ptr_BFC21BDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21BE4",
+      "label": "code_ptr_BFC21BE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21BEC",
+      "label": "code_ptr_BFC21BEC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21BFC",
+      "label": "code_ptr_BFC21BFC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C04",
+      "label": "code_ptr_BFC21C04",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C0C",
+      "label": "code_ptr_BFC21C0C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C14",
+      "label": "code_ptr_BFC21C14",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C1C",
+      "label": "code_ptr_BFC21C1C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C20",
+      "label": "code_ptr_BFC21C20",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C34",
+      "label": "code_ptr_BFC21C34",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21C44",
+      "label": "code_ptr_BFC21C44",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21E20",
+      "label": "code_ptr_BFC21E20",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21E40",
+      "label": "sio0Handler",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC21FD4",
+      "label": "code_ptr_BFC21FD4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21FD8",
+      "label": "code_ptr_BFC21FD8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21FDC",
+      "label": "code_ptr_BFC21FDC",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21FE0",
+      "label": "code_ptr_BFC21FE0",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21FE4",
+      "label": "code_ptr_BFC21FE4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC21FF4",
+      "label": "code_ptr_BFC21FF4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22004",
+      "label": "code_ptr_BFC22004",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22014",
+      "label": "code_ptr_BFC22014",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22020",
+      "label": "code_ptr_BFC22020",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22034",
+      "label": "code_ptr_BFC22034",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22074",
+      "label": "setSIO0AutoAck",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22084",
+      "label": "patch_setPadOutputData",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22098",
+      "label": "initPad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2218C",
+      "label": "startPad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22208",
+      "label": "stopPad",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2224C",
+      "label": "initCard",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22330",
+      "label": "startCard",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC223B0",
+      "label": "stopCard",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC223E8",
+      "label": "code_ptr_BFC223E8",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC223FC",
+      "label": "alterUserPadData",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC2240C",
+      "label": "code_ptr_BFC2240C",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC22414",
+      "label": "code_ptr_BFC22414",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC2249C",
+      "label": "initPadHighLevel",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22578",
+      "label": "readPadHighLevel",
+      "rationale": "ELF STT_FUNC symbol from openbios.elf"
+    },
+    {
+      "address": "0xBFC22674",
+      "label": "code_ptr_BFC22674",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC227D4",
+      "label": "code_ptr_BFC227D4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    },
+    {
+      "address": "0xBFC227E4",
+      "label": "code_ptr_BFC227E4",
+      "rationale": "code pointer in a data section of openbios.elf"
+    }
+  ]
+}

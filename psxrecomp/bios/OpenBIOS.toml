@@ -1,0 +1,126 @@
+# bios/OpenBIOS.toml — BIOS build profile for PCSX-Redux OpenBIOS.
+#
+# OpenBIOS is the PCSX-Redux project's from-scratch, MIT-licensed PS1 BIOS
+# (https://github.com/grumpycoders/pcsx-redux, src/mips/openbios). MIT means
+# the image is REDISTRIBUTABLE: a game verified against it ships its BIOS
+# with the build and the player supplies only a disc (redistributable=true
+# below removes the whole BIOS-selection surface at runtime).
+#
+# Pinned build (bios/openbios.bin + the ELFs the seeds derive from):
+#   pcsx-redux  55fbf0468345acfbe5512628a3be5c0cfe3f22e7
+#   uC-sdk      69e06871824e2d62069487a7426ded09090ceb69
+#   toolchain   g++-mipsel-none-elf (GCC 16.1.0, static.grumpycoder.net build)
+#   build       make -C src/mips/openbios PREFIX=mipsel-none-elf FORMAT=elf32-littlemips
+# Regenerating seeds after a re-pin (--extra is REQUIRED to keep the 5
+# empirically-discovered dispatch-miss seeds; without it they are silently
+# dropped and the regenerated set has 641 entries, not 646):
+#   tools/gen_bios_seeds_from_elf.py --profile bios/OpenBIOS.toml \
+#     --elf .../openbios.elf --elf .../shell.elf \
+#     --extra recompiler/seeds/openbios_dispatch_miss.json \
+#     --out recompiler/seeds/openbios_elf_seeds.json
+#
+# The address model below was established by direct disassembly of the boot
+# path (reset vector -> copy loops), each copy confirmed twice (boot + the
+# warm-restart path reloading lengths from ROM constants; the shell length
+# additionally confirmed by the blob's own self-relocation constants).
+
+[program]
+name         = "PCSX-Redux OpenBIOS"
+id           = "OPENBIOS"
+rom          = "bios/openbios.bin"
+load_address = "0xBFC00000"
+entry_pc     = "0xBFC00000"
+text_size    = "0x80000"
+
+[program.image]
+sha256          = "fabe498fbf224e4721f12f31b6f5fe0659205e341dc4e5c5f91b9bd1a1011c57"
+license         = "MIT"
+redistributable = true
+
+[recompiler]
+seeds    = "recompiler/seeds/openbios_elf_seeds.json"
+out_dir  = "generated"
+out_stem = "OpenBIOS"
+strict   = true
+
+# OpenBIOS's boot-time bulk code copies. Windows are BYTE-PROVEN against
+# openbios.elf (readelf -lW program headers give the .data LMA; the embedded
+# shell blob was located by content search; both ranges memcmp-verified
+# ELF-content == image-content — an earlier hand-disassembly of the copy
+# routines mis-read both source offsets by 0xB8/0x2C0-class deltas, which
+# emitted every shell/ramtext function from shifted bytes):
+#  - kernel .data (VMA 0x500, WAX — code+data): LMA 0xBFC1E4D4, FileSiz
+#    0x46A0, copied to RAM 0x500 at boot. Byte-verbatim -> kernel_bless.
+#  - shell blob (objcopy of shell.elf, linked at 0x80030000): embedded in
+#    .rodata at ROM 0xA500, size 0x13D44, copied to RAM 0x80030000. The
+#    first-crash a1=0xBFC1E244 was exactly this blob's END pointer mid-copy.
+# NOT modeled, by design:
+#  - the 4x16-byte vector stubs copied to RAM 0x80/0xA0/0xB0/0xC0
+#    (runtime-written trampolines -> dirty-RAM interp territory, rule 18);
+#  - the RAM->RAM A0-table move (0x4844 -> 0x200): nothing dispatches TO the
+#    table, discovery gets entries from ELF symbols, and runtime dispatch
+#    keys on the actual jump targets.
+[recompiler.address_model]
+normalize_mask = "0x1FFFFFFF"
+
+[[recompiler.address_model.copy]]
+name         = "Kernel ramtext"
+rom_lo       = "0x1FC1E4D4"
+rom_hi       = "0x1FC22B74"
+ram_lo       = "0x00000500"
+runtime_base = "0x00000500"
+dispatch_key = "ram"
+kernel_bless = true
+
+[[recompiler.address_model.copy]]
+name         = "Shell"
+rom_lo       = "0x1FC0A500"
+rom_hi       = "0x1FC1E244"
+ram_lo       = "0x00030000"
+runtime_base = "0x80030000"
+dispatch_key = "rom"
+kernel_bless = false
+
+# No [[recompiler.install_slots]]: none identified yet. Runtime-installed
+# stubs fall to the dirty-RAM interpreter, which is correct (just slower)
+# until a slot is identified and added.
+
+# HLE anchors: only the boot-skip anchor is exported. deliver_event_ret is
+# deliberately ABSENT (0) until the B0 event services are validated against
+# this kernel's EvCB behavior (they are believed compatible — OpenBIOS
+# reimplements the documented kernel ABI, EvCB anchor 0x120/0x124, TCB
+# 0x108/0x110 — but believed is not verified). Absent = the kernel-call HLE
+# tier is STRUCTURALLY UNAVAILABLE here and config/env cannot force it on.
+#
+# That refusal is scoped to kernel calls ONLY. The boot-skip is a separate axis
+# gated on shell_entry_phys alone and works under pure LLE, so `bios_hle` (and
+# the deprecated `fast_boot` alias) skips the boot animation and goes straight
+# to the game on THIS image exactly as it does on retail SCPH-1001 — the flag
+# means one thing on every BIOS. Both axes are decided in one pure place,
+# psx_bios_hle_plan() (runtime/include/bios_hle_plan.h), which exists because
+# deriving the boot-skip from the anchor-gated call tier silently took the skip
+# away on this image (fixed 2026-07-27).
+#
+# shell_entry_phys was verified against the generated C (2026-07-23):
+#  - startShell (ELF symbol, ROM 0xBFC074DC) ends `lui $t9,0x8003; jr $t9`
+#    (0xBFC07534/38) — a TAIL jump to the RAM shell copy at 0x80030000
+#    that goes through the dispatch trampoline, where the hook fires on
+#    the pre-normalize phys 0x00030000;
+#  - $ra at that point is the jal link 0xBFC06EA8 (startShell restores its
+#    stack before the tail jump), so the intercept's resume-at-$ra lands
+#    exactly at the shell call's continuation;
+#  - that continuation OVERWRITES $v0 immediately (addiu $v0,$zero,8 — a
+#    boot-progress POST byte), so the intercept's v0=0 is never observed,
+#    and the boot proceeds unconditionally to the SYSTEM.CNF/EXE load
+#    (gameMainThunk), exactly the retail LoadRunShell contract the skip
+#    models. The shell's own animation (waitVSync/flip/convexHull in
+#    shell.elf) is the only thing skipped.
+[recompiler.runtime_exports]
+shell_entry_phys = "0x00030000"
+
+# No [runtime] block: a BIOS profile states facts about an image, never runtime
+# preferences, and load_bios_config rejects one outright. This file used to end
+# with `[runtime] bios_hle = false`, which nothing read — the recompiler parsed
+# it into a field with no consumers. Runtime options live in game.toml /
+# settings.toml; per-image HLE capability is expressed by which anchors
+# [recompiler.runtime_exports] above does and does not export.

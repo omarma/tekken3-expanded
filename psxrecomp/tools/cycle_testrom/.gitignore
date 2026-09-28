@@ -1,0 +1,15 @@
+# Regenerable build artifacts (produced by gen_testrom.py / psxrecomp-game).
+cycle_testrom.exe
+*.anchors.json
+generated/
+
+# Synthetic boot disc — LOCAL ONLY, never commit/push.
+# disc/license_data.dat is the PlayStation license region extracted from a disc
+# the developer OWNS (via dumpsxiso). It is copyrighted Sony data: do NOT commit,
+# do NOT redistribute. Each developer extracts their own from a disc they own
+# (see README "Boot disc"). The built .bin/.cue embed it, so they are ignored too.
+disc/license_data.dat
+disc/*.bin
+disc/*.cue
+build/
+psx_freeze_heartbeat.json

@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.visual.forest-hd"
+version = "1.0.0"
+name = "Yoshimitsu Forest HD"
+author = "Tekken3Recomp"
+description = "Detailed forest panorama and moss ground using host GPU textures. Requires OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "forest-hd"
+name = "HD Forest Background and Ground"
+description = "Remasters Yoshimitsu's forest with new background and moss textures. Restart after changing."
+group = "Visual Enhancements"
+default_enabled = true
+
+[[plugin]]
+feature = "forest-hd"
+id = "tekken3.forest-hd"

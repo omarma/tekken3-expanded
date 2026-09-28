@@ -1,0 +1,491 @@
+{
+  "source_sha256": "0ee953f0f6bd7c95d09ca9afc6a79d12f6e5c7e79ae5e503d442d3b6d4667a36",
+  "generated_art_sha256": "192f58732bfd3b765b5c65ee20d9ce6d1ccb3e65acd6f1cb13669dc13867eedf",
+  "atlas_size": [
+    1152,
+    1152
+  ],
+  "base_texture_bytes": 5308416,
+  "tiles": [
+    {
+      "player": 1,
+      "tile": 1,
+      "atlas_cell": 0,
+      "depth": 1,
+      "rect": [
+        416,
+        192,
+        16,
+        32
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 7,
+      "atlas_cell": 1,
+      "depth": 0,
+      "rect": [
+        432,
+        64,
+        8,
+        16
+      ],
+      "clut": [
+        48,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 8,
+      "atlas_cell": 2,
+      "depth": 1,
+      "rect": [
+        400,
+        0,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 9,
+      "atlas_cell": 3,
+      "depth": 1,
+      "rect": [
+        384,
+        192,
+        32,
+        32
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 10,
+      "atlas_cell": 4,
+      "depth": 1,
+      "rect": [
+        424,
+        0,
+        16,
+        32
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 11,
+      "atlas_cell": 5,
+      "depth": 0,
+      "rect": [
+        424,
+        32,
+        8,
+        32
+      ],
+      "clut": [
+        64,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 12,
+      "atlas_cell": 6,
+      "depth": 0,
+      "rect": [
+        416,
+        0,
+        8,
+        64
+      ],
+      "clut": [
+        80,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 13,
+      "atlas_cell": 7,
+      "depth": 0,
+      "rect": [
+        424,
+        64,
+        8,
+        32
+      ],
+      "clut": [
+        64,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 14,
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        432,
+        80,
+        8,
+        16
+      ],
+      "clut": [
+        96,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 15,
+      "atlas_cell": 9,
+      "depth": 0,
+      "rect": [
+        432,
+        96,
+        2,
+        16
+      ],
+      "clut": [
+        112,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 16,
+      "atlas_cell": 10,
+      "depth": 0,
+      "rect": [
+        432,
+        32,
+        4,
+        32
+      ],
+      "clut": [
+        128,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 18,
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        432,
+        160,
+        2,
+        8
+      ],
+      "clut": [
+        160,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 20,
+      "atlas_cell": 13,
+      "depth": 1,
+      "rect": [
+        400,
+        64,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 21,
+      "atlas_cell": 14,
+      "depth": 0,
+      "rect": [
+        424,
+        96,
+        8,
+        32
+      ],
+      "clut": [
+        192,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 23,
+      "atlas_cell": 15,
+      "depth": 0,
+      "rect": [
+        420,
+        128,
+        8,
+        64
+      ],
+      "clut": [
+        224,
+        505
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 1,
+      "atlas_cell": 0,
+      "depth": 1,
+      "rect": [
+        416,
+        448,
+        16,
+        32
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 7,
+      "atlas_cell": 1,
+      "depth": 0,
+      "rect": [
+        432,
+        320,
+        8,
+        16
+      ],
+      "clut": [
+        48,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 8,
+      "atlas_cell": 2,
+      "depth": 1,
+      "rect": [
+        400,
+        256,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 9,
+      "atlas_cell": 3,
+      "depth": 1,
+      "rect": [
+        384,
+        448,
+        32,
+        32
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 10,
+      "atlas_cell": 4,
+      "depth": 1,
+      "rect": [
+        424,
+        256,
+        16,
+        32
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 11,
+      "atlas_cell": 5,
+      "depth": 0,
+      "rect": [
+        424,
+        288,
+        8,
+        32
+      ],
+      "clut": [
+        64,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 12,
+      "atlas_cell": 6,
+      "depth": 0,
+      "rect": [
+        416,
+        256,
+        8,
+        64
+      ],
+      "clut": [
+        80,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 13,
+      "atlas_cell": 7,
+      "depth": 0,
+      "rect": [
+        424,
+        320,
+        8,
+        32
+      ],
+      "clut": [
+        64,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 14,
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        432,
+        336,
+        8,
+        16
+      ],
+      "clut": [
+        96,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 15,
+      "atlas_cell": 9,
+      "depth": 0,
+      "rect": [
+        432,
+        352,
+        2,
+        16
+      ],
+      "clut": [
+        112,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 16,
+      "atlas_cell": 10,
+      "depth": 0,
+      "rect": [
+        432,
+        288,
+        4,
+        32
+      ],
+      "clut": [
+        128,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 18,
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        432,
+        416,
+        2,
+        8
+      ],
+      "clut": [
+        160,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 20,
+      "atlas_cell": 13,
+      "depth": 1,
+      "rect": [
+        400,
+        320,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 21,
+      "atlas_cell": 14,
+      "depth": 0,
+      "rect": [
+        424,
+        352,
+        8,
+        32
+      ],
+      "clut": [
+        192,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 23,
+      "atlas_cell": 15,
+      "depth": 0,
+      "rect": [
+        420,
+        384,
+        8,
+        64
+      ],
+      "clut": [
+        224,
+        509
+      ]
+    }
+  ]
+}

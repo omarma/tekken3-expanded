@@ -1,0 +1,21 @@
+# Cycle-isolation micro-benchmark test ROM — ruler #2 (in-tree).
+# Paths are relative to the psxrecomp worktree root (find_project_root walks up
+# to it). Generated EXE: gen_testrom.py. Recompiled by psxrecomp-game for the
+# native cost-model side; sideloaded raw into Beetle for the HW-oracle side.
+[game]
+name = "CycleTestROM"
+id = "CYCT-00101"
+exe = "cycle_testrom.exe"
+disc = "disc/cyctest.cue"   # synthetic licensed disc (gen via tools/mkpsxiso)
+load_address = "0x80010000"
+entry_pc = "0x80010000"
+text_size = "0x00000800"
+
+[recompiler]
+seeds = "seeds.txt"
+out_dir = "generated"
+strict = true
+
+[runtime]
+debug_port = 4600
+window_title = "Cycle Test ROM"

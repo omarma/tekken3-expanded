@@ -1,0 +1,192 @@
+{
+ "key": "unknown@eddy",
+ "combos": [
+  {
+   "name": "Combo Jilar",
+   "command": "1, 2, 4",
+   "ten": false,
+   "gaps": [
+    2,
+    6,
+    12
+   ],
+   "moves": [
+    172,
+    173
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     2
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     6
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Shin Cutter Combo",
+   "command": "f+2, 1, 4",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  },
+  {
+   "name": "Leg Whip Thong Bikini Hot Plate Special",
+   "command": "b+4, 3, 3",
+   "ten": false,
+   "gaps": [
+    16,
+    2,
+    12
+   ],
+   "moves": [
+    356,
+    331,
+    310
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     8,
+     3
+    ],
+    [
+     2,
+     8,
+     4
+    ],
+    [
+     0,
+     0,
+     16
+    ],
+    [
+     4,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     2
+    ],
+    [
+     4,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Leg Whip Mars Attack Flip",
+   "command": "b+4, 4, 3+4",
+   "ten": false,
+   "gaps": [
+    16,
+    6,
+    12
+   ],
+   "moves": [
+    356,
+    357,
+    358,
+    416
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     8,
+     3
+    ],
+    [
+     2,
+     8,
+     4
+    ],
+    [
+     0,
+     0,
+     16
+    ],
+    [
+     2,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     6
+    ],
+    [
+     6,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Hammer Head",
+   "command": "FC+1+2, 1, 2",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  }
+ ]
+}

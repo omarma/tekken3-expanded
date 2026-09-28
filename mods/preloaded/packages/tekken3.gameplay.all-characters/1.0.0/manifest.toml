@@ -1,0 +1,34 @@
+format_version = 5
+id = "tekken3.gameplay.all-characters"
+version = "1.0.0"
+name = "All Characters Unlocked"
+author = "Tekken3Recomp"
+description = "Unlocks the playable roster, Tekken Ball, Theatre and all Tekken 3 movies by default."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "all-characters"
+name = "Unlock All Characters"
+description = "Unlocks the full roster, including Gon and Dr. Boskonovitch, on every launch and after loading a save."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "all-characters"
+id = "tekken3.unlock-all-characters"
+
+[[feature]]
+id = "modes-movies"
+name = "Unlock Modes & Movies"
+description = "Makes Tekken Ball, Theatre and every Tekken 3 ending available, including alternate endings, without changing settings or records."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "modes-movies"
+id = "tekken3.unlock-modes-movies"

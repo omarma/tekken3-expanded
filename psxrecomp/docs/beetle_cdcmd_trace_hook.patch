@@ -1,0 +1,87 @@
+diff --git a/libretro.cpp b/libretro.cpp
+index d2e82bca..e9c867c8 100644
+--- a/libretro.cpp
++++ b/libretro.cpp
+@@ -508,6 +508,11 @@ PS_SPU *PSX_SPU = NULL;
+ PS_CDC *PSX_CDC = NULL;
+ FrontIO *PSX_FIO = NULL;
+ 
++/* PSXRecomp oracle hooks: NULL when no listener attached. */
++psxrecomp_wtrace_cb_t  g_psxrecomp_wtrace_cb  = NULL;
++psxrecomp_fntrace_cb_t g_psxrecomp_fntrace_cb = NULL;
++psxrecomp_cdcmd_cb_t   g_psxrecomp_cdcmd_cb   = NULL;
++
+ MultiAccessSizeMem<512 * 1024, uint32, false> *BIOSROM = NULL;
+ MultiAccessSizeMem<65536, uint32, false> *PIOMem = NULL;
+ MultiAccessSizeMem<2048 * 1024, uint32, false> *MainRAM = NULL;
+diff --git a/mednafen/psx/cdc.cpp b/mednafen/psx/cdc.cpp
+index 1daaa5b7..a6b31b66 100644
+--- a/mednafen/psx/cdc.cpp
++++ b/mednafen/psx/cdc.cpp
+@@ -1318,6 +1318,16 @@ int32_t PS_CDC::Update(const int32_t timestamp)
+                      else
+                      {
+                         const CDC_CTEntry *command = &Commands[PendingCommand];
++                        /* PSXRecomp oracle hook: CD command about to execute.
++                         * PC of the guest at dispatch time — the command was
++                         * WRITTEN earlier (latency), so this is the poll/idle
++                         * PC, but it still localizes kernel vs shell vs game. */
++                        if(MDFN_UNLIKELY(g_psxrecomp_cdcmd_cb))
++                           g_psxrecomp_cdcmd_cb(PendingCommand, ArgsReceiveIn,
++                                                ArgsReceiveIn > 0 ? ArgsReceiveBuf[0] : 0,
++                                                ArgsReceiveIn > 1 ? ArgsReceiveBuf[1] : 0,
++                                                ArgsReceiveIn > 2 ? ArgsReceiveBuf[2] : 0,
++                                                PSX_CPU ? PSX_CPU->GetRegister(PS_CPU::GSREG_PC, NULL, 0) : 0);
+                         next_time = (this->*(command->func))(ArgsReceiveIn, ArgsReceiveBuf);
+                         PendingCommandPhase = 2;
+                      }
+diff --git a/mednafen/psx/psx.h b/mednafen/psx/psx.h
+index 704c0a19..fc53362d 100644
+--- a/mednafen/psx/psx.h
++++ b/mednafen/psx/psx.h
+@@ -137,4 +137,45 @@ extern unsigned psx_gpu_overclock_shift;
+ extern uint8_t analog_combo[2];
+ extern uint8_t analog_combo_hold;
+ 
++/* PSXRecomp oracle: SIO byte trace callback.
++ * Fired by FrontIO when a complete byte exchange finishes. */
++class FrontIO;
++extern FrontIO *PSX_FIO;
++typedef void (*psxrecomp_sio_trace_cb_t)(uint8_t tx, uint8_t rx, uint16_t ctrl);
++
++/* PSXRecomp oracle: RAM write trace callback.
++ * Fired by PS_CPU::SB/SH/SW after the write completes.
++ *   addr  = virtual address (caller masks for physical filter)
++ *   value = stored value (sized by `size`)
++ *   pc    = PC of the executing store instruction
++ *   ra    = $ra (GPR[31]) at time of store, for one frame of caller context
++ *   size  = 1, 2, or 4 (byte / halfword / word) */
++typedef void (*psxrecomp_wtrace_cb_t)(uint32_t addr, uint32_t value,
++                                       uint32_t pc, uint32_t ra, uint8_t size);
++extern psxrecomp_wtrace_cb_t g_psxrecomp_wtrace_cb;
++
++/* PSXRecomp oracle: function-call (JAL/JALR/J/JR) trace callback.
++ * Fired by PS_CPU on every J/JAL/JR/JALR retire, BEFORE the link write.
++ * Caller filters by target_pc to keep volume bounded.
++ *   caller_pc = PC of the J/JAL/JR/JALR instruction
++ *   target_pc = computed branch target
++ *   parent_ra = GPR[31] at time of call (parent's return address)
++ *   a0, a1    = argument registers at time of call
++ *   kind      = 1=J, 2=JAL, 3=JR, 4=JALR */
++typedef void (*psxrecomp_fntrace_cb_t)(uint32_t caller_pc, uint32_t target_pc,
++                                        uint32_t parent_ra, uint32_t a0,
++                                        uint32_t a1, uint8_t kind);
++extern psxrecomp_fntrace_cb_t g_psxrecomp_fntrace_cb;
++
++/* PSXRecomp oracle: CD command trace callback.
++ * Fired by PS_CDC just before a command handler executes.
++ *   cmd   = command byte (0x01 GetStat, 0x02 Setloc, 0x06 ReadN, 0x09 Pause,
++ *           0x0A Init, 0x0E Setmode, 0x15 SeekL, 0x1A GetID, 0x1B ReadS, ...)
++ *   nargs = number of argument bytes
++ *   arg0..arg2 = first three argument bytes (0 if absent) */
++typedef void (*psxrecomp_cdcmd_cb_t)(uint8_t cmd, uint8_t nargs,
++                                      uint8_t arg0, uint8_t arg1, uint8_t arg2,
++                                      uint32_t pc);
++extern psxrecomp_cdcmd_cb_t g_psxrecomp_cdcmd_cb;
++
+ #endif

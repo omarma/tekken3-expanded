@@ -1,0 +1,25 @@
+# id|character ID|display name|stock confirm mask (hex)|skin (-1=original,0=Nina,1=Xiaoyu,2=Anna,3=Kuma,4=Eddy,5=Julia,6=Heihachi)|art basename
+nina-purple|5|PURPLE ASSASSIN|0x8000|-1|nina-purple
+nina-crimson|5|CRIMSON LEATHER|0x4000|-1|nina-crimson
+nina-white|5|WHITE SATIN|0x4000|0|nina-white
+xiaoyu-red|7|RED & GOLD|0x8000|-1|xiaoyu-red
+xiaoyu-blue|7|BLUE RIBBON|0x4000|-1|xiaoyu-blue
+xiaoyu-school|7|SCHOOL UNIFORM|0x0008|-1|xiaoyu-school
+xiaoyu-pink|7|CHERRY BLOSSOM|0x8000|1|xiaoyu-pink
+anna-red|18|SCARLET SILK|0x8000|-1|anna-red
+anna-blue|18|MIDNIGHT SILK|0x4000|-1|anna-blue
+anna-tiger|18|WHITE TIGER|0x0008|-1|anna-tiger
+anna-jessica|18|JESSICA RABBIT|0x8000|2|anna-jessica
+kuma-brown|11|BROWN BEAR|0x8000|-1|kuma-brown
+kuma-panda|11|PANDA|0x4000|-1|kuma-panda
+kuma-polar|11|POLAR BEAR|0x8000|3|kuma-polar
+eddy-original-1|8|ORIGINAL OUTFIT 1|0x8000|-1|eddy-original-1
+eddy-original-2|8|ORIGINAL OUTFIT 2|0x4000|-1|eddy-original-2
+eddy-tiger|8|TIGER JACKSON|0x0008|-1|eddy-tiger
+eddy-monochrome|8|MONOCHROME|0x8000|4|eddy-monochrome
+julia-original-1|10|ORIGINAL OUTFIT 1|0x8000|-1|julia-original-1
+julia-original-2|10|ORIGINAL OUTFIT 2|0x4000|-1|julia-original-2
+julia-blue|10|BLUE TURQUOISE|0x8000|5|julia-blue
+heihachi-original-1|13|ORIGINAL OUTFIT 1|0x8000|-1|heihachi-original-1
+heihachi-original-2|13|ORIGINAL OUTFIT 2|0x4000|-1|heihachi-original-2
+heihachi-tiger-coat|13|TIGER COAT|0x4000|6|heihachi-tiger-coat

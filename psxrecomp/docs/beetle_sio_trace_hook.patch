@@ -1,0 +1,35 @@
+diff --git a/mednafen/psx/frontio.cpp b/mednafen/psx/frontio.cpp
+index a35b022f..02e7ce0b 100644
+--- a/mednafen/psx/frontio.cpp
++++ b/mednafen/psx/frontio.cpp
+@@ -783,6 +783,10 @@ int32_t FrontIO::Update(int32_t timestamp)
+                   ReceiveInProgress = false;
+                   ReceiveBufferAvail = true;
+ 
++                  /* PSXRecomp oracle hook: byte exchange complete. */
++                  if(MDFN_UNLIKELY(sio_trace_cb))
++                     sio_trace_cb(TransmitBuffer, ReceiveBuffer, (uint16_t)Control);
++
+                   if(Control & 0x800)
+                   {
+                      istatus = true;
+diff --git a/mednafen/psx/frontio.h b/mednafen/psx/frontio.h
+index 8a67f5af..d9a260ca 100644
+--- a/mednafen/psx/frontio.h
++++ b/mednafen/psx/frontio.h
+@@ -95,8 +95,15 @@ class FrontIO
+ 
+       int StateAction(StateMem* sm, int load, int data_only);
+ 
++      /* PSXRecomp oracle hook: fires once per completed SIO byte exchange
++       * (tx byte sent, rx byte received, current Control register). */
++      typedef void (*sio_trace_cb_t)(uint8_t tx, uint8_t rx, uint16_t ctrl);
++      void SetSIOTraceCallback(sio_trace_cb_t cb) { sio_trace_cb = cb; }
++
+    private:
+ 
++      sio_trace_cb_t sio_trace_cb = nullptr;
++
+       void DoDSRIRQ(void);
+       void CheckStartStopPending(int32_t timestamp, bool skip_event_set = false);
+ 

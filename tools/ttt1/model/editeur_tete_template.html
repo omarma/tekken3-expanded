@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Éditeur de tête</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e2e2e0;--sel:#e0a100}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338}}
+:root[data-theme=dark]{--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,sans-serif;display:flex;height:100vh}
+aside{width:300px;flex:none;overflow:auto;padding:12px;border-right:1px solid var(--line);background:var(--panel)}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+h1{font-size:16px;margin:0 0 4px}.sub{color:var(--mute);font-size:12px;margin-bottom:10px}
+#list button{display:block;width:100%;text-align:left;margin:2px 0;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:4px 8px;cursor:pointer;font-size:13px}
+#list button.on{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+#list button.moved::after{content:" •";color:var(--sel)}
+fieldset{border:1px solid var(--line);border-radius:6px;margin:10px 0;padding:6px 8px}
+legend{font-size:12px;color:var(--mute)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.pad button,.row button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:4px;cursor:pointer;font-size:13px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px}
+select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px}
+textarea{width:100%;height:120px;font:11px ui-monospace,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px}
+canvas{flex:1;display:block;width:100%;min-height:0}
+#info{padding:6px 12px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
+@media (max-width:700px){body{flex-direction:column}aside{width:100%;height:45vh}}
+</style>
+</head>
+<body>
+<aside>
+<h1>Éditeur de tête</h1>
+<div class="sub">Clique une pièce (liste ou modèle), puis déplace-la. Chaque déplacement est enregistré. Page locale, données du jeu : ne pas publier.</div>
+<div id="list"></div>
+<fieldset><legend>Déplacer la pièce (3D)</legend>
+<div class="pad">
+<span></span><button data-m="0,1,0" title="I">▲ monter</button><span></span>
+<button data-m="-1,0,0" title="J">◀ gauche</button><button data-m="0,0,1" title="U">avant</button><button data-m="1,0,0" title="L">droite ▶</button>
+<span></span><button data-m="0,-1,0" title="K">▼ descendre</button><button data-m="0,0,-1" title="O">arrière</button>
+</div>
+<div class="row">Pas <select id="step"><option>1</option><option selected>4</option><option>16</option></select> unités · clavier I J K L U O</div>
+</fieldset>
+<fieldset><legend>Décaler la texture de la pièce (pixels)</legend>
+<div class="pad">
+<span></span><button data-t="0,-1">▲ texture haut</button><span></span>
+<button data-t="-1,0">◀ texture</button><span></span><button data-t="1,0">texture ▶</button>
+<span></span><button data-t="0,1">▼ texture bas</button><span></span>
+</div>
+<div class="row">clavier T F G H (Maj : ×4)</div>
+</fieldset>
+<div class="row"><button id="reset1">Annuler cette pièce</button><button id="resetall">Tout annuler</button></div>
+<div class="row"><label><input type="checkbox" id="body" checked> Corps</label><label><input type="checkbox" id="dim" checked> Estomper les autres pièces</label></div>
+<fieldset><legend>Enregistrement</legend><textarea id="out" readonly></textarea></fieldset>
+</aside>
+<main><canvas id="view"></canvas><div id="info"></div></main>
+<!--DATA-->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const D=window.EDITOR;
+if(!D){document.getElementById('info').textContent='Modèle de page sans données : ouvrir la page générée (workspace/native/viewer/editeur_tete.html via http://localhost:8765/editeur_tete.html).';throw new Error('pas de données')}
+const KEY='editeur-tete:'+D.name;
+let E={};
+try{E=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){E={}}
+const cv=document.getElementById('view');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true}); R.setPixelRatio(devicePixelRatio);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(getComputedStyle(document.body).backgroundColor);
+const cam=new THREE.PerspectiveCamera(35,1,1,100000);
+const ctl=new OrbitControls(cam,cv); ctl.zoomSpeed=3;
+const loader=new THREE.TextureLoader();
+const texs=D.textures.map(src=>{const t=loader.load(src);t.magFilter=t.minFilter=THREE.NearestFilter;t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;return t});
+function geom(tris,du=0,dv=0){
+  const pos=new Float32Array(tris.length*9),uv=new Float32Array(tris.length*6);
+  tris.forEach((t,i)=>{for(let v=0;v<3;v++){pos[i*9+v*3]=t[2+v*3];pos[i*9+v*3+1]=-t[3+v*3];pos[i*9+v*3+2]=-t[4+v*3];
+    uv[i*6+v*2]=(t[11+v*2]+du+.5)/256;uv[i*6+v*2+1]=(t[12+v*2]+dv+.5)/256}});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));return g}
+function meshes(tris,du,dv){const by={};for(const t of tris)(by[t[1]]=by[t[1]]||[]).push(t);
+  const grp=new THREE.Group();for(const[ti,l]of Object.entries(by))grp.add(new THREE.Mesh(geom(l,du,dv),new THREE.MeshBasicMaterial({map:texs[ti],side:THREE.BackSide,alphaTest:.2,transparent:true})));return grp}
+const bodyG=meshes(D.body,0,0); scene.add(bodyG);
+const P={}; let sel=null;
+const list=document.getElementById('list');
+for(const p of D.pieces){
+  const e=E[p.id]||(E[p.id]={dx:0,dy:0,dz:0,du:0,dv:0});
+  const g=meshes(p.tris,e.du,e.dv); g.position.set(e.dx,e.dy,e.dz); g.userData.id=p.id; scene.add(g);
+  const b=document.createElement('button'); b.textContent=p.label; b.onclick=()=>select(p.id); list.appendChild(b);
+  P[p.id]={p,g,b};
+}
+function rebuildUV(id){const {p,g}=P[id],e=E[id];scene.remove(g);const n=meshes(p.tris,e.du,e.dv);n.position.set(e.dx,e.dy,e.dz);n.userData.id=id;scene.add(n);P[id].g=n;shade()}
+function shade(){const dim=document.getElementById('dim').checked;
+  for(const[id,{g,b}]of Object.entries(P)){const on=id===sel;b.classList.toggle('on',on);
+    const e=E[id];b.classList.toggle('moved',!!(e.dx||e.dy||e.dz||e.du||e.dv));
+    g.traverse(o=>{if(o.material){o.material.opacity=(sel&&dim&&!on)?.45:1;o.material.color.set(on?0xffe7a0:0xffffff)}})}
+  bodyG.visible=document.getElementById('body').checked;
+  bodyG.traverse(o=>{if(o.material)o.material.opacity=(sel&&dim)?.45:1});
+  save()}
+function select(id){sel=id;shade();const e=E[id];document.getElementById('info').textContent=`${P[id].p.label} — ${P[id].p.tris.length} triangles`}
+function save(){const moved={};for(const[id,e]of Object.entries(E))if(e.dx||e.dy||e.dz||e.du||e.dv)moved[id]=Object.assign({label:P[id].p.label,cle:P[id].p.key},e);
+  const txt=JSON.stringify({modele:D.name,axes:'unites du modele ; dx droite, dy haut, dz vers la camera ; du/dv en pixels de texture',pieces:moved},null,1);
+  document.getElementById('out').value=txt; window.EDITS=JSON.parse(txt);
+  try{localStorage.setItem(KEY,JSON.stringify(E))}catch(e){}}
+function move(x,y,z){if(!sel)return;const s=+document.getElementById('step').value,e=E[sel];e.dx+=x*s;e.dy+=y*s;e.dz+=z*s;P[sel].g.position.set(e.dx,e.dy,e.dz);shade()}
+function shift(u,v,f=1){if(!sel)return;const e=E[sel];e.du+=u*f;e.dv+=v*f;rebuildUV(sel)}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>move(...b.dataset.m.split(',').map(Number)));
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>shift(...b.dataset.t.split(',').map(Number)));
+document.getElementById('reset1').onclick=()=>{if(!sel)return;E[sel]={dx:0,dy:0,dz:0,du:0,dv:0};rebuildUV(sel)};
+document.getElementById('resetall').onclick=()=>{for(const id in P){E[id]={dx:0,dy:0,dz:0,du:0,dv:0};rebuildUV(id)}};
+document.getElementById('body').onchange=shade;document.getElementById('dim').onchange=shade;
+addEventListener('keydown',ev=>{if(ev.target.tagName==='SELECT'||ev.target.tagName==='TEXTAREA')return;
+  const k=ev.key.toLowerCase(),f=ev.shiftKey?4:1,M={i:[0,1,0],k:[0,-1,0],j:[-1,0,0],l:[1,0,0],u:[0,0,1],o:[0,0,-1]},T={t:[0,-1],g:[0,1],f:[-1,0],h:[1,0]};
+  if(M[k]){move(...M[k]);ev.preventDefault()} else if(T[k]){shift(...T[k],f);ev.preventDefault()}
+  else if(ev.key==='ArrowUp'||ev.key==='ArrowDown'){const d=(ev.key==='ArrowUp'?1:-1)*home[1]*0.02*(ev.shiftKey?5:1);cam.position.y+=d;ctl.target.y+=d;ev.preventDefault()}});
+const ray=new THREE.Raycaster(),mv=new THREE.Vector2();let down=null;
+cv.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+cv.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>4)return;const r=cv.getBoundingClientRect();
+  mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,cam);
+  const hit=ray.intersectObjects(Object.values(P).map(x=>x.g),true)[0];if(hit){let o=hit.object;while(o&&!o.userData.id)o=o.parent;if(o)select(o.userData.id)}});
+const all=new THREE.Group();Object.values(P).forEach(x=>all.add(x.g.clone()));
+const box=new THREE.Box3().setFromObject(all),c=box.getCenter(new THREE.Vector3()),s=box.getSize(new THREE.Vector3()).length();
+const home=[c,s];ctl.target.copy(c);cam.position.set(c.x,c.y,c.z+s*1.8);
+function resize(){const w=cv.clientWidth,h=cv.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();shade();
+(function loop(){requestAnimationFrame(loop);ctl.update();R.render(scene,cam)})();
+</script>
+</body>
+</html>

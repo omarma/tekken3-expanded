@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.heihachi-tiger-coat"
+version = "1.0.0"
+name = "Heihachi Tiger Coat"
+author = "Tekken3Recomp"
+description = "Gold-and-black tiger stripes, dark fur trim and charcoal/gold clothing, adapted to Heihachi's original alternate coat model. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "heihachi-tiger-coat"
+name = "Heihachi Tiger Coat"
+description = "Adds Heihachi Tiger Coat to Heihachi's L1 gallery alongside his original outfits. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "heihachi-tiger-coat"
+id = "tekken3.heihachi-tiger-coat"

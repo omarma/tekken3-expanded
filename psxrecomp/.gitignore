@@ -1,0 +1,134 @@
+# BIOS ROM (copyrighted, not distributable)
+bios/*
+!bios/*.toml
+# OpenBIOS is MIT — the one BIOS image that is legal to track (see
+# THIRD_PARTY_ATTRIBUTION.md; pin recorded in bios/OpenBIOS.toml; notice
+# shipped alongside as bios/OpenBIOS.LICENSE).
+!bios/openbios.bin
+!bios/*.LICENSE
+
+# DuckStation — upstream source is a git submodule pointing at stenzek/duckstation.
+# Our custom changes live in tools/duckstation/psxrecomp_oracle.patch (committed).
+# Only the build artefacts and prebuilt binary deps are untracked at the parent level;
+# the submodule's own .gitignore handles in-tree ignores.
+duckstation/build/
+duckstation/dep/prebuilt/
+
+# Ghidra project files (large, regenerable)
+ghidra/
+
+# Backup of the working state — see CURRENT_STATE.md for what this contains.
+.happypath/
+
+# Build artifacts
+recompiler/build/
+recompiler/build-asan/
+recompiler/build-asan2/
+recompiler/build-checked/
+recompiler/build-cli/
+recompiler/build-t2/
+runtime/build/
+runtime/build-msvc/
+runtime/build-*/
+runtime/build-*.exe
+test_msvc/
+
+# Recompiler output (derivative of copyrighted Sony BIOS, regenerate locally)
+generated/
+
+# Release packaging artifacts
+release-stage/
+*.zip
+
+# Vendored upstream sources (cloned locally, not checked in)
+beetle-psx/
+
+# Explicit-fallback SDL2 / dep zips (large, regenerable)
+sdl2-dev.zip
+sdl2-msvc/
+
+# Diagnostic dumps & smoke logs (transient)
+*.log
+*.jsonl
+/.aot_capture_history/
+
+# Local additive overlay-capture store configuration and game-derived data.
+.psxrecomp.env
+.env
+.local/
+
+# Build-generated codegen-hash header (hash_codegen.cmake): folds an emitter
+# content hash into the overlay cache path; regenerated each build, never committed.
+runtime/include/overlay_codegen_hash.h
+
+# Runtime diagnostic/crash files
+psx_crash.txt
+psx_diag.txt
+psx_dispatch_misses.txt
+psx_err.txt
+psx_out.txt
+
+# Probe / scratch artifacts
+# All ad-hoc diagnostic dumps land under probes/ so the repo root stays clean.
+# Runtime data (memcards) is intentionally NOT covered: card*.mcd, dummy.*.mcr.
+probes/
+
+# Ad-hoc scratch tools (underscore prefix convention).
+# Real tools have no leading underscore (e.g. tools/codegen_audit.py).
+tools/_*.py
+/*.json
+/*.png
+/*.bmp
+/*.txt
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Python caches
+__pycache__/
+
+# DuckStation oracle (local-only; private fork at git@github.com:mstan/duckstation.git)
+/duckstation/
+_wip/
+
+# Game discs/EXEs and recompiler output (copyrighted, not distributable).
+# Only the per-game config (game.toml) is tracked.
+games/*/*
+!games/*/game.toml
+!games/*/seeds.txt
+
+# Per-game memcards created at runtime
+*.mcr
+!dummy.*.mcr
+
+# macOS .app bundle (contains recompiled BIOS-derived binary — not distributable)
+/dist/
+
+# Session-scratch debug scripts (hardcoded local paths; kept on disk, not tracked)
+tools/_options_session/
+
+# Compiled test binaries (build artifacts; the runtime/tests/*.c sources are tracked).
+# The *.exe rule alone missed extension-less Linux binaries, and three of them
+# (test_netplay_snap_ring, test_netplay_hash_confirm, test_netplay_input_hist)
+# were committed as a result — the snap-ring one from before boot_state grew its
+# VRAM-incremental queries, so it could no longer be rebuilt from the tree it sat
+# in. Ignore everything matching test_* here except the tracked sources/fixtures.
+runtime/tests/*.exe
+runtime/tests/test_*
+!runtime/tests/test_*.c
+!runtime/tests/test_*.cpp
+!runtime/tests/test_*.py
+!runtime/tests/test_*.mcd
+!runtime/tests/test_dir/
+
+# transient split-gen build dirs
+recompiler/build-splitgen/
+recompiler/build-*/
+
+# Public game packages exclude even upstream synthetic memory-card fixtures.
+dummy.*.mcr
+runtime/tests/*.mcd

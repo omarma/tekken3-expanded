@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.julia-blue"
+version = "1.0.0"
+name = "Julia Blue Turquoise"
+author = "Tekken3Recomp"
+description = "Blue-turquoise clothing, dark denim and silver-white boots, adapted to Julia's original PS1 model. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "julia-blue"
+name = "Julia Blue Turquoise"
+description = "Adds Julia Blue Turquoise to Julia's L1 gallery alongside her original outfits. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "julia-blue"
+id = "tekken3.julia-blue"

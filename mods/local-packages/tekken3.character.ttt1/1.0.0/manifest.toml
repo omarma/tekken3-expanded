@@ -1,0 +1,334 @@
+format_version = 5
+id = "tekken3.character.ttt1"
+version = "1.0.0"
+name = "TTT1 Characters"
+author = "Tekken3Recomp"
+description = "Adds the Tekken Tag Tournament characters missing from Tekken 3 as a guest fighter, with their arcade model, moves, voices and interface. Requires the characters imported locally from your own TTT1 ROM."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "ttt1-characters"
+name = "TTT1 Characters"
+description = "Adds the imported TTT1 characters as characters of their own. At the character selector, R2 / L2 switch between the Tekken 3 grid and the Tag page of guests; player 1 and player 2 can fight with two different guests. Team Battle offers one guest cell. Tag mechanics are excluded."
+group = "Characters"
+default_enabled = true
+
+[[plugin]]
+feature = "ttt1-characters"
+id = "tekken3.ttt1-characters"
+
+[[feature]]
+id = "ttt1-embu"
+name = "Embu TTT"
+description = "The attract-mode Embu (the dojo kata demo) played by TTT1 guests instead of the Tekken 3 cast: each native keeps his choreography and camera, the chosen guest takes his place. Needs TTT1 Characters."
+group = "Characters"
+default_enabled = true
+
+[[plugin]]
+feature = "ttt1-embu"
+id = "tekken3.ttt1-embu"
+
+[[option]]
+feature = "ttt1-embu"
+id = "hwoarang"
+label = "Hwoarang"
+description = "Who plays Hwoarang's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "baek"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "paul"
+label = "Paul"
+description = "Who plays Paul's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "bruce"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "law"
+label = "Law"
+description = "Who plays Law's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "lee"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "nina"
+label = "Nina"
+description = "Who plays Nina's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "angel"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "xiaoyu"
+label = "Xiaoyu"
+description = "Who plays Xiaoyu's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "jun"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "yoshimitsu"
+label = "Yoshimitsu"
+description = "Who plays Yoshimitsu's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "kunimitsu"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "lei"
+label = "Lei"
+description = "Who plays Lei's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "wang"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "jin"
+label = "Jin"
+description = "Who plays Jin's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "kazuya"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "eddy"
+label = "Eddy"
+description = "Who plays Eddy's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "michelle"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]
+
+[[option]]
+feature = "ttt1-embu"
+id = "king"
+label = "King"
+description = "Who plays King's part in the Embu."
+group = "Characters"
+type = "choice"
+default = "armorking"
+choice = [
+    { value = "none", label = "Original" },
+    { value = "kazuya", label = "Kazuya" },
+    { value = "kunimitsu", label = "Kunimitsu" },
+    { value = "michelle", label = "Michelle" },
+    { value = "baek", label = "Baek" },
+    { value = "armorking", label = "Armor King" },
+    { value = "bruce", label = "Bruce" },
+    { value = "jack2", label = "Jack-2" },
+    { value = "lee", label = "Lee" },
+    { value = "ganryu", label = "Ganryu" },
+    { value = "pjack", label = "Prototype Jack" },
+    { value = "devil", label = "Devil" },
+    { value = "angel", label = "Angel" },
+    { value = "roger", label = "Roger" },
+    { value = "alex", label = "Alex" },
+    { value = "tetsujin", label = "Tetsujin" },
+    { value = "jun", label = "Jun" },
+    { value = "wang", label = "Wang" },
+    { value = "unknown", label = "Unknown" },
+]

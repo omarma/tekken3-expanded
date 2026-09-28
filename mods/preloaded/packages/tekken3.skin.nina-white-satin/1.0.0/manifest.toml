@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.nina-white-satin"
+version = "1.0.0"
+name = "Nina White Satin"
+author = "Tekken3Recomp"
+description = "Ivory-white satin top, black hair and leather trousers, cherry-red patent heels. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "nina-white-satin"
+name = "Nina — White Satin and Red Heels"
+description = "Adds White Satin to Nina's L1 skin gallery. Original costumes remain available. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "nina-white-satin"
+id = "tekken3.nina-white-satin"

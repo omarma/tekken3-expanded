@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.gameplay.difficulty"
+version = "1.0.0"
+name = "Arcade Difficulty"
+author = "Tekken3Recomp"
+description = "CPU difficulty levels beyond HARD from the Tekken 3 and Tekken Tag arcade boards, in the Options menu. Needs tools/difficulty/import.py run once on your own ROMs."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "arcade-difficulty"
+name = "Arcade Difficulty Levels"
+description = "Adds the arcade boards' levels beyond HARD to DIFFICULTY LEVEL in the Options menu."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "arcade-difficulty"
+id = "tekken3.arcade-difficulty"

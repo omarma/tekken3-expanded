@@ -1,0 +1,79 @@
+# bios/SCPH1001.toml — BIOS build profile for the retail Sony SCPH-1001 image.
+#
+# One profile per BIOS image. Consumed by `psxrecomp-bios --config`, by
+# tools/regen_bios.sh (which reads rom/seeds/out_dir/out_stem from here), and
+# by tools/bios_emitter_fingerprint.sh (which hashes this file, the seeds and
+# the ROM into the generated/<stem>.emitter.sha staleness stamp).
+#
+# The .BIN image itself stays untracked (bios/* gitignore rule) — profiles are
+# the only tracked contents of this directory.
+
+[program]
+name         = "Sony SCPH-1001 BIOS"
+id           = "SCPH-1001"
+rom          = "bios/SCPH1001.BIN"
+load_address = "0xBFC00000"
+entry_pc     = "0xBFC00000"
+text_size    = "0x80000"
+
+[recompiler]
+seeds    = "recompiler/seeds/phase2_ghidra_seeds.json"
+out_dir  = "generated"
+out_stem = "SCPH1001"
+strict   = true
+
+# The BIOS's boot-time bulk copies of CODE out of ROM into RAM. Single source
+# of truth for every relocation window in the recompiler AND in the C it
+# emits (the generated dispatch's normalize(), the kernel-bless guard, the
+# game/shell-overlap tests). Each entry is a CLAIM that the copy is
+# byte-verbatim; the runtime's kernel-bless memcmp enforces it for the
+# bless window. All bounds are [lo, hi) with hi EXCLUSIVE.
+#
+# dispatch_key = "ram": functions in the window are keyed by RAM address
+#                       (normalize folds ROM -> RAM).
+# dispatch_key = "rom": functions keep their ROM key (normalize folds the
+#                       RAM alias back to ROM).
+[recompiler.address_model]
+normalize_mask = "0x1FFFFFFF"
+
+[[recompiler.address_model.copy]]
+name         = "Kernel Part 2"
+rom_lo       = "0x1FC10000"
+rom_hi       = "0x1FC18000"
+ram_lo       = "0x00000500"
+runtime_base = "0x00000500"     # KUSEG — the kernel executes uncached-region code cached at 0x500
+dispatch_key = "ram"
+kernel_bless = true
+
+[[recompiler.address_model.copy]]
+name         = "Shell"
+rom_lo       = "0x1FC18000"
+rom_hi       = "0x1FC43000"
+ram_lo       = "0x00030000"
+runtime_base = "0x80030000"     # KSEG0 — LoadRunShell jumps to 0x80030000
+dispatch_key = "rom"
+kernel_bless = false
+# NOTE (do not "fix" without evidence): runtime/src/bios_hle.c documents the
+# actual LoadRunShell copy as 0x67FF0 bytes (ROM 0xBFC18000 -> RAM 0x30000..
+# 0x97FF0). Every pre-profile window constant covered only 0x2B000 of that,
+# and dirty_ram_interp.c tracks live RAM in [0x5B000,0x8F000) as an open
+# class-B bug. Widening this window is a REAL BEHAVIOR CHANGE requiring its
+# own evidence-backed commit — it is not a parameterization cleanup.
+
+# Kernel-RAM PCs the BIOS overwrites with 4-instruction dispatch stubs at
+# runtime (CLAUDE.md rule 18; docs/dynamic_handler_install.md). The emitter
+# plants a dirty-check hook at these PCs so the installed stub executes.
+[[recompiler.install_slots]]
+ram_addr = "0x00000CF0"         # SIO data-byte handler dispatch slot
+
+# Per-image anchors couriered into the generated C (psx_bios_image) for the
+# runtime HLE tier. Values are FACTS about this image, not tunables: the
+# shell entry is where LoadRunShell (ROM 0xBFC06FF0) jumps after its copy;
+# deliver_event_ret is the instruction after the kernel DeliverEvent loop's
+# `jalr v0` (kernel RAM 0x1718), the $ra a delivered event callback returns
+# through. Omit a key on a BIOS that has no such anchor — the runtime then
+# treats that HLE feature as structurally unavailable instead of firing on a
+# wrong address.
+[recompiler.runtime_exports]
+shell_entry_phys  = "0x00030000"
+deliver_event_ret = "0x80001720"

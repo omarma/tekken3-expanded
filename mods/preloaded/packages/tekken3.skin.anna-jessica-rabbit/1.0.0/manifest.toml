@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.anna-jessica-rabbit"
+version = "1.0.0"
+name = "Anna Jessica Rabbit"
+author = "Tekken3Recomp"
+description = "Jessica Rabbit inspired crimson sequins, lavender opera gloves and copper-red hair for Anna's red gown. Uses Anna's original model. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "anna-jessica-rabbit"
+name = "Anna — Jessica Rabbit"
+description = "Adds Jessica Rabbit to Anna's L1 skin gallery. Original costumes remain available. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "anna-jessica-rabbit"
+id = "tekken3.anna-jessica-rabbit"

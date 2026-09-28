@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.20)
+project(@PROJECT_CMAKE_NAME@ LANGUAGES C CXX)
+
+set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
+    "Path to psxrecomp")
+
+# --- Opt-in product surfaces (OFF by default in the framework) -------------
+# Scaffold prompts / flags fill these. Without recomp-ui, PSX_RECOMP_UI is OFF.
+# Setup-host CI requires WIZARD_CMAKE_BLOCK / ENABLE_SETUP_WIZARD (FORCE_SETUP_HOST
+# alone does not open first-run / Generate & rebuild).
+@RECOMP_UI_CMAKE_BLOCK@
+@NETPLAY_CMAKE_BLOCK@
+@WIZARD_CMAKE_BLOCK@
+include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
+
+psxrecomp_add_game_runtime(psx-runtime
+@NETPLAY_RUNTIME_ARG@
+@NETPLAY_LOBBY_URL_ARG@
+@WIZARD_RUNTIME_ARG@
+    WINDOW_TITLE "@WINDOW_TITLE@"
+    DEFAULT_GAME_CONFIG_PATH "game.toml"
+    MAX_PLAYERS @PLAYERS@
+@BOXART_CMAKE_ARG@
+    GEN_MARKER "generated/@BOOT_EXE@_dispatch.c"
+    GEN_FULL_GLOB "generated/@BOOT_EXE@_full_*.c"
+@CODEGEN_SETUP_ARG@
+)

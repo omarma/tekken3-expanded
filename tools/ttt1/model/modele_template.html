@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modèle texturé</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e2e2e0}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338}}
+:root[data-theme=dark]{--bg:#151517;--panel:#1f1f22;--ink:#ececf0;--mute:#9a9aa2;--line:#333338}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,sans-serif}
+header{padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:17px;margin:0 0 4px}.sub{color:var(--mute);font-size:12px}
+.ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px}
+button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:2px 9px;font-size:14px;cursor:pointer}
+select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px}
+#view{width:100%;height:calc(100vh - 150px);min-height:360px;display:block}
+#info{padding:8px 16px;font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+<h1>Modèle texturé</h1>
+<div class="sub">Géométrie rejouée selon les règles du moteur natif, textures lues dans la mémoire vidéo du jeu. Glisser pour tourner, molette pour zoomer, clic droit pour déplacer, flèches haut / bas pour monter / descendre (Maj : plus vite). Page locale, données du jeu : ne pas publier.</div>
+<div class="ctl">
+<label>Modèle <select id="model"></select></label>
+<label><input type="checkbox" id="tex" checked> Textures</label>
+<label><input type="checkbox" id="wire"> Arêtes</label>
+<label><input type="checkbox" id="back"> Faces arrière</label>
+<span><button id="zin" title="Zoomer">＋</button> <button id="zout" title="Dézoomer">－</button> <button id="zreset" title="Recentrer">⟲</button></span>
+<label>Pièce <select id="part"><option value="">toutes</option></select></label>
+</div>
+</header>
+<canvas id="view"></canvas>
+<div id="info"></div>
+<!--DATA-->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const M=window.TEXTURED||[];
+const cv=document.getElementById('view');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+R.setPixelRatio(devicePixelRatio);
+const scene=new THREE.Scene();
+const bg=getComputedStyle(document.body).backgroundColor; scene.background=new THREE.Color(bg);
+const cam=new THREE.PerspectiveCamera(35,1,1,100000);
+const ctl=new OrbitControls(cam,cv);
+ctl.enableDamping=false; ctl.zoomSpeed=3; ctl.rotateSpeed=1.2;
+let group=null;
+const selM=document.getElementById('model'),selP=document.getElementById('part');
+M.forEach((m,i)=>selM.add(new Option(m.name,i)));
+function build(){
+  if(group){scene.remove(group);group.traverse(o=>{o.geometry&&o.geometry.dispose()})}
+  group=new THREE.Group();
+  const m=M[selM.value|0], only=selP.value, useTex=document.getElementById('tex').checked, wire=document.getElementById('wire').checked, back=document.getElementById('back').checked;
+  const loader=new THREE.TextureLoader();
+  const mats=m.textures.map(src=>{const t=loader.load(src);t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestFilter;t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({map:useTex?t:null,color:useTex?0xffffff:0x999999,side:back?THREE.DoubleSide:THREE.BackSide,alphaTest:.5,transparent:false,wireframe:wire})});
+  const byTex={};
+  for(const t of m.tris){ if(only!=='' && String(t[0])!==only) continue; (byTex[t[1]]=byTex[t[1]]||[]).push(t) }
+  let n=0;
+  for(const [ti,list] of Object.entries(byTex)){
+    const pos=new Float32Array(list.length*9), uv=new Float32Array(list.length*6);
+    list.forEach((t,i)=>{ for(let v=0;v<3;v++){ pos[i*9+v*3]=t[2+v*3]; pos[i*9+v*3+1]=-t[3+v*3]; pos[i*9+v*3+2]=-t[4+v*3];
+      uv[i*6+v*2]=(t[11+v*2]+.5)/256; uv[i*6+v*2+1]=(t[12+v*2]+.5)/256 } });
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+    group.add(new THREE.Mesh(g,mats[ti])); n+=list.length;
+  }
+  scene.add(group);
+  const box=new THREE.Box3().setFromObject(group), c=box.getCenter(new THREE.Vector3()), s=box.getSize(new THREE.Vector3()).length();
+  ctl.target.copy(c); build.home=[c.clone(),s]; if(!build.done){cam.position.set(c.x,c.y,c.z+s*1.6); build.done=1}
+  document.getElementById('info').textContent=`${n} triangles · ${m.textures.length} pages de texture`;
+}
+function parts(){ selP.length=1; const m=M[selM.value|0]; [...new Set(m.tris.map(t=>t[0]))].sort((a,b)=>a-b).forEach(r=>selP.add(new Option('ligne '+r,r))) }
+selM.onchange=()=>{build.done=0;parts();build()}; selP.onchange=build;
+document.getElementById('tex').onchange=build; document.getElementById('wire').onchange=build; document.getElementById('back').onchange=build;
+function zoom(f){const d=cam.position.clone().sub(ctl.target).multiplyScalar(f);cam.position.copy(ctl.target).add(d);ctl.update()}
+document.getElementById('zin').onclick=()=>zoom(0.7); document.getElementById('zout').onclick=()=>zoom(1/0.7);
+document.getElementById('zreset').onclick=()=>{const [c,s]=build.home;ctl.target.copy(c);cam.position.set(c.x,c.y,c.z+s*1.6);ctl.update()};
+// Up / down arrows raise / lower the camera and its target (2 % of the model size, x5 with Shift).
+addEventListener('keydown',e=>{
+  if(e.key!=='ArrowUp'&&e.key!=='ArrowDown') return;
+  if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT') e.target.blur();
+  e.preventDefault();
+  const d=(e.key==='ArrowUp'?1:-1)*build.home[1]*0.02*(e.shiftKey?5:1);
+  cam.position.y+=d; ctl.target.y+=d; ctl.update();
+});
+function resize(){const w=cv.clientWidth,h=cv.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);
+if(M.length){parts();resize();build()}
+(function loop(){requestAnimationFrame(loop);ctl.update();R.render(scene,cam)})();
+</script>
+</body>
+</html>

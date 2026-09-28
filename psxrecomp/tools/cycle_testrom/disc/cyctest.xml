@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="cyctest.bin" cue_sheet="cyctest.cue" no_xa="0">
+	<track type="data" xa_edc="true" new_type="true">
+		<identifiers
+			system      = "PLAYSTATION"
+			application = "PLAYSTATION"
+			volume      = "CYCT00101"
+			volume_set  = "CYCT00101"
+			publisher   = "PSXRECOMP"
+			data_preparer= "MKPSXISO"
+			copyright   = "SYSTEM.CNF;1"
+		/>
+		<license file="license_data.dat"/>
+		<directory_tree>
+			<file name="system.cnf"  type="data" source="SYSTEM.CNF"/>
+			<file name="cyct_001.01" type="data" source="../cycle_testrom.exe"/>
+		</directory_tree>
+	</track>
+</iso_project>

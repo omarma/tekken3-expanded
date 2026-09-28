@@ -1,0 +1,555 @@
+{
+  "source_sha256": "7b7a35f6e3364275e684fe94f263a845364e08477acb9ca4b335e68a5e5b26d7",
+  "generated_art_sha256": "00e5ecb48e44cfb3651a10e8944312a9a1b4f94f61b621c0f6392cb7bc25477a",
+  "atlas_size": [
+    1152,
+    1152
+  ],
+  "base_texture_bytes": 5308416,
+  "tiles": [
+    {
+      "player": 1,
+      "tile": 0,
+      "part": "closed-eye face",
+      "atlas_cell": 0,
+      "depth": 1,
+      "rect": [
+        400,
+        128,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 1,
+      "part": "skirt panel",
+      "atlas_cell": 1,
+      "depth": 1,
+      "rect": [
+        384,
+        0,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 2,
+      "part": "skirt panel",
+      "atlas_cell": 2,
+      "depth": 1,
+      "rect": [
+        384,
+        64,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 3,
+      "part": "waist",
+      "atlas_cell": 3,
+      "depth": 0,
+      "rect": [
+        384,
+        192,
+        8,
+        32
+      ],
+      "clut": [
+        0,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 4,
+      "part": "chest and bodice",
+      "atlas_cell": 4,
+      "depth": 0,
+      "rect": [
+        384,
+        128,
+        8,
+        64
+      ],
+      "clut": [
+        16,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 5,
+      "part": "open-eye face",
+      "atlas_cell": 5,
+      "depth": 1,
+      "rect": [
+        400,
+        176,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        504
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 6,
+      "part": "upper arm",
+      "atlas_cell": 6,
+      "depth": 0,
+      "rect": [
+        392,
+        192,
+        8,
+        32
+      ],
+      "clut": [
+        32,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 7,
+      "part": "opera glove",
+      "atlas_cell": 7,
+      "depth": 0,
+      "rect": [
+        408,
+        32,
+        4,
+        32
+      ],
+      "clut": [
+        0,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 8,
+      "part": "back and bodice",
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        392,
+        128,
+        8,
+        64
+      ],
+      "clut": [
+        48,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 9,
+      "part": "neck",
+      "atlas_cell": 9,
+      "depth": 0,
+      "rect": [
+        408,
+        96,
+        8,
+        16
+      ],
+      "clut": [
+        64,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 10,
+      "part": "gloved fingers",
+      "atlas_cell": 10,
+      "depth": 0,
+      "rect": [
+        408,
+        112,
+        8,
+        16
+      ],
+      "clut": [
+        80,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 11,
+      "part": "ankle and heel",
+      "atlas_cell": 11,
+      "depth": 0,
+      "rect": [
+        408,
+        0,
+        8,
+        32
+      ],
+      "clut": [
+        96,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 12,
+      "part": "leg",
+      "atlas_cell": 12,
+      "depth": 0,
+      "rect": [
+        400,
+        0,
+        8,
+        64
+      ],
+      "clut": [
+        112,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 13,
+      "part": "hair",
+      "atlas_cell": 13,
+      "depth": 0,
+      "rect": [
+        400,
+        64,
+        8,
+        64
+      ],
+      "clut": [
+        128,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 14,
+      "part": "fringe",
+      "atlas_cell": 14,
+      "depth": 0,
+      "rect": [
+        408,
+        64,
+        4,
+        32
+      ],
+      "clut": [
+        144,
+        505
+      ]
+    },
+    {
+      "player": 1,
+      "tile": 15,
+      "part": "glove cuff bow",
+      "atlas_cell": 15,
+      "depth": 0,
+      "rect": [
+        412,
+        32,
+        4,
+        16
+      ],
+      "clut": [
+        0,
+        505
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 0,
+      "part": "closed-eye face",
+      "atlas_cell": 0,
+      "depth": 1,
+      "rect": [
+        400,
+        384,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 1,
+      "part": "skirt panel",
+      "atlas_cell": 1,
+      "depth": 1,
+      "rect": [
+        384,
+        256,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 2,
+      "part": "skirt panel",
+      "atlas_cell": 2,
+      "depth": 1,
+      "rect": [
+        384,
+        320,
+        16,
+        64
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 3,
+      "part": "waist",
+      "atlas_cell": 3,
+      "depth": 0,
+      "rect": [
+        384,
+        448,
+        8,
+        32
+      ],
+      "clut": [
+        0,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 4,
+      "part": "chest and bodice",
+      "atlas_cell": 4,
+      "depth": 0,
+      "rect": [
+        384,
+        384,
+        8,
+        64
+      ],
+      "clut": [
+        16,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 5,
+      "part": "open-eye face",
+      "atlas_cell": 5,
+      "depth": 1,
+      "rect": [
+        400,
+        432,
+        16,
+        48
+      ],
+      "clut": [
+        0,
+        508
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 6,
+      "part": "upper arm",
+      "atlas_cell": 6,
+      "depth": 0,
+      "rect": [
+        392,
+        448,
+        8,
+        32
+      ],
+      "clut": [
+        32,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 7,
+      "part": "opera glove",
+      "atlas_cell": 7,
+      "depth": 0,
+      "rect": [
+        408,
+        288,
+        4,
+        32
+      ],
+      "clut": [
+        0,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 8,
+      "part": "back and bodice",
+      "atlas_cell": 8,
+      "depth": 0,
+      "rect": [
+        392,
+        384,
+        8,
+        64
+      ],
+      "clut": [
+        48,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 9,
+      "part": "neck",
+      "atlas_cell": 9,
+      "depth": 0,
+      "rect": [
+        408,
+        352,
+        8,
+        16
+      ],
+      "clut": [
+        64,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 10,
+      "part": "gloved fingers",
+      "atlas_cell": 10,
+      "depth": 0,
+      "rect": [
+        408,
+        368,
+        8,
+        16
+      ],
+      "clut": [
+        80,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 11,
+      "part": "ankle and heel",
+      "atlas_cell": 11,
+      "depth": 0,
+      "rect": [
+        408,
+        256,
+        8,
+        32
+      ],
+      "clut": [
+        96,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 12,
+      "part": "leg",
+      "atlas_cell": 12,
+      "depth": 0,
+      "rect": [
+        400,
+        256,
+        8,
+        64
+      ],
+      "clut": [
+        112,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 13,
+      "part": "hair",
+      "atlas_cell": 13,
+      "depth": 0,
+      "rect": [
+        400,
+        320,
+        8,
+        64
+      ],
+      "clut": [
+        128,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 14,
+      "part": "fringe",
+      "atlas_cell": 14,
+      "depth": 0,
+      "rect": [
+        408,
+        320,
+        4,
+        32
+      ],
+      "clut": [
+        144,
+        509
+      ]
+    },
+    {
+      "player": 2,
+      "tile": 15,
+      "part": "glove cuff bow",
+      "atlas_cell": 15,
+      "depth": 0,
+      "rect": [
+        412,
+        288,
+        4,
+        16
+      ],
+      "clut": [
+        0,
+        509
+      ]
+    }
+  ]
+}

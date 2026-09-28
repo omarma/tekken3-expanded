@@ -1,0 +1,25 @@
+#version 450
+/* PACK: re-encode the RGBA8 supersampled VRAM image into the native R16_UINT
+ * raw mirror (the texture-sampling source). Each native pixel takes the
+ * top-left sample of its SxS block (the sample at the exact native coord), so
+ * the raw mirror is the bit-exact 1555 value the PS1 would have written.
+ * Dispatched over the dirty rect: global id + (off_x,off_y) = native coord.
+ * Ported from the GL backend's PACK_FS (fragment) to a compute pass. */
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D u_hr;             /* RGBA8 VRAM image */
+layout(set = 0, binding = 1, r16ui) uniform writeonly uimage2D u_raw;
+layout(push_constant) uniform PC {
+    int u_scale;
+    int off_x;
+    int off_y;
+} pc;
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy) + ivec2(pc.off_x, pc.off_y);
+    if (p.x >= 1024 || p.y >= 512) return;
+    vec4 c = texelFetch(u_hr, p * pc.u_scale, 0);
+    uint r = uint(c.r * 255.0 + 0.5) >> 3;
+    uint g = uint(c.g * 255.0 + 0.5) >> 3;
+    uint b = uint(c.b * 255.0 + 0.5) >> 3;
+    uint o = r | (g << 5) | (b << 10) | (c.a >= 0.5 ? 0x8000u : 0u);
+    imageStore(u_raw, p, uvec4(o, 0, 0, 0));
+}

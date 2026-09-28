@@ -1,0 +1,1187 @@
+diff --git a/src/common/log_channels.h b/src/common/log_channels.h
+index a1576e7..6dfdb45 100644
+--- a/src/common/log_channels.h
++++ b/src/common/log_channels.h
+@@ -47,6 +47,7 @@
+   X(PerfMon)                                                                                                           \
+   X(PlatformMisc)                                                                                                      \
+   X(PostProcessing)                                                                                                    \
++  X(PSXRecompDebug)                                                                                                    \
+   X(PIO)                                                                                                               \
+   X(ReShadeFXShader)                                                                                                   \
+   X(Recompiler)                                                                                                        \
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index e2d0294..b290bd3 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -116,6 +116,8 @@ add_library(core
+   playstation_mouse.h
+   psf_loader.cpp
+   psf_loader.h
++  psxrecomp_debug_server.cpp
++  psxrecomp_debug_server.h
+   save_state_version.h
+   settings.cpp
+   settings.h
+diff --git a/src/core/gpu.h b/src/core/gpu.h
+index 975f8d5..05fa360 100644
+--- a/src/core/gpu.h
++++ b/src/core/gpu.h
+@@ -212,6 +212,19 @@ public:
+   ALWAYS_INLINE u16 GetCRTCActiveStartLine() const { return m_crtc_state.vertical_display_start; }
+   ALWAYS_INLINE u16 GetCRTCActiveEndLine() const { return m_crtc_state.vertical_display_end; }
+ 
++  // PSXRecomp debug accessors
++  ALWAYS_INLINE u16 GetDisplayVRAMLeft() const { return m_crtc_state.display_vram_left; }
++  ALWAYS_INLINE u16 GetDisplayVRAMTop() const { return m_crtc_state.display_vram_top; }
++  ALWAYS_INLINE u16 GetDisplayVRAMWidth() const { return m_crtc_state.display_vram_width; }
++  ALWAYS_INLINE u16 GetDisplayVRAMHeight() const { return m_crtc_state.display_vram_height; }
++  ALWAYS_INLINE s32 GetDrawingOffsetX() const { return m_drawing_offset.x; }
++  ALWAYS_INLINE s32 GetDrawingOffsetY() const { return m_drawing_offset.y; }
++  ALWAYS_INLINE u32 GetGPUSTATBits() const { return m_GPUSTAT.bits; }
++  ALWAYS_INLINE u32 GetDrawingAreaLeft() const { return m_drawing_area.left; }
++  ALWAYS_INLINE u32 GetDrawingAreaTop() const { return m_drawing_area.top; }
++  ALWAYS_INLINE u32 GetDrawingAreaRight() const { return m_drawing_area.right; }
++  ALWAYS_INLINE u32 GetDrawingAreaBottom() const { return m_drawing_area.bottom; }
++
+   // Returns the video clock frequency.
+   TickCount GetCRTCFrequency() const;
+ 
+diff --git a/src/core/psxrecomp_debug_server.cpp b/src/core/psxrecomp_debug_server.cpp
+new file mode 100644
+index 0000000..1fcc225
+--- /dev/null
++++ b/src/core/psxrecomp_debug_server.cpp
+@@ -0,0 +1,1053 @@
++// PSXRecomp TCP debug server for DuckStation
++// JSON-over-newline protocol on localhost:4371 (same as runner debug server).
++// Includes 36000-frame ring buffer with CPU, GPU, pad, and RAM snapshot state.
++
++#include "psxrecomp_debug_server.h"
++#include "bus.h"
++#include "controller.h"
++#include "cpu_core.h"
++#include "cpu_types.h"
++#include "digital_controller.h"
++#include "dma.h"
++#include "gpu.h"
++#include "interrupt_controller.h"
++#include "pad.h"
++#include "system.h"
++
++#include "common/assert.h"
++#include "common/log.h"
++#include "common/small_string.h"
++
++#include "util/image.h"
++#include "util/sockets.h"
++
++#include <algorithm>
++#include <cstdio>
++#include <cstring>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "fmt/format.h"
++
++LOG_CHANNEL(PSXRecompDebug);
++
++// ---------------------------------------------------------------------------
++// Minimal JSON helpers
++// ---------------------------------------------------------------------------
++
++static bool json_get_str(const char* json, const char* key, char* out, size_t out_sz)
++{
++  char pattern[128];
++  std::snprintf(pattern, sizeof(pattern), "\"%s\"", key);
++  const char* p = std::strstr(json, pattern);
++  if (!p) return false;
++  p += std::strlen(pattern);
++  while (*p == ' ' || *p == ':') p++;
++  if (*p != '"') return false;
++  p++;
++  size_t i = 0;
++  while (*p && *p != '"' && i + 1 < out_sz) out[i++] = *p++;
++  out[i] = 0;
++  return true;
++}
++
++static bool json_get_u32(const char* json, const char* key, u32* out)
++{
++  char pattern[128];
++  std::snprintf(pattern, sizeof(pattern), "\"%s\"", key);
++  const char* p = std::strstr(json, pattern);
++  if (!p) return false;
++  p += std::strlen(pattern);
++  while (*p == ' ' || *p == ':') p++;
++  if (*p == '"') p++;
++  *out = static_cast<u32>(std::strtoul(p, nullptr, 0));
++  return true;
++}
++
++static s32 json_get_int(const char* json, const char* key, s32 def)
++{
++  u32 v;
++  if (!json_get_u32(json, key, &v)) return def;
++  return static_cast<s32>(v);
++}
++
++// ---------------------------------------------------------------------------
++// Frame record (ring buffer element)
++// ---------------------------------------------------------------------------
++
++static constexpr u32 FRAME_HISTORY_CAP = 36000; // ~10 min @ 60fps
++
++// Snapshot of a RAM region stored per frame
++static constexpr int RAM_SNAPSHOT_REGIONS = 4;
++static constexpr int RAM_SNAPSHOT_SIZE = 128; // bytes per region
++
++struct FrameRecord
++{
++  u32 frame_number;
++
++  // CPU
++  u32 gpr[32];
++  u32 pc, hi, lo;
++
++  // GPU
++  u16 display_vram_left, display_vram_top;
++  u16 display_vram_width, display_vram_height;
++  u8  display_disable;
++  u8  interlaced;
++  u8  pal_mode;
++  u8  _gpu_pad;
++
++  // Pad
++  u16 pad1_buttons; // inverted PS1 style: 0=pressed
++
++  u16 _reserved;
++
++  // RAM snapshots — configurable regions captured every frame
++  u32 snapshot_addr[RAM_SNAPSHOT_REGIONS];
++  u8  snapshot_data[RAM_SNAPSHOT_REGIONS][RAM_SNAPSHOT_SIZE];
++};
++
++// ---------------------------------------------------------------------------
++// State
++// ---------------------------------------------------------------------------
++
++namespace PSXRecompDebug {
++
++namespace {
++
++class ClientSocket final : public BufferedStreamSocket
++{
++public:
++  ClientSocket(SocketMultiplexer& multiplexer, SocketDescriptor descriptor);
++  ~ClientSocket() override;
++
++  void SendJSON(const std::string& json);
++
++protected:
++  void OnConnected() override;
++  void OnDisconnected(const Error& error) override;
++  void OnRead() override;
++
++private:
++  void ProcessLine(std::string_view line);
++};
++
++} // namespace
++
++static std::shared_ptr<ListenSocket> s_listen_socket;
++static std::vector<std::shared_ptr<ClientSocket>> s_clients;
++
++// Frame counter & control
++static u32 s_frame_counter = 0;
++static int s_step_frames = 0;
++static bool s_paused = false;
++static int s_request_id = 0;
++static u32 s_run_to_frame = 0; // target frame for run_to_frame (0=disabled)
++
++// Ring buffer
++static FrameRecord s_history[FRAME_HISTORY_CAP];
++static u64 s_history_count = 0;
++
++// Watchpoints
++static constexpr int MAX_WATCHPOINTS = 8;
++static struct { u32 addr; u8 prev_val; bool active; } s_watchpoints[MAX_WATCHPOINTS] = {};
++
++// PC breakpoints — execute breakpoint with state capture on hit.
++// When the callback fires we capture all GPRs + PC + $ra into a pending-hit
++// record, pause the system, and broadcast an event. The pending record stays
++// until queried via "pc_hit_last" (or cleared via "pc_hit_clear").
++static constexpr int MAX_PC_BREAKS = 16;
++static struct { u32 addr; bool active; } s_pc_breaks[MAX_PC_BREAKS] = {};
++static struct {
++  bool valid;
++  u32 addr_hit;
++  u32 pc;
++  u32 ra;
++  u32 hi, lo;
++  u32 gpr[32];
++  u32 cop0_sr, cop0_cause, cop0_epc;
++} s_pc_hit_last = {};
++
++// Input override (-1 = no override, otherwise PS1 inverted bitmask)
++static s32 s_input_override = -1;
++
++// RAM snapshot regions (user-configurable via "set_snapshot" command)
++static u32 s_snapshot_addrs[RAM_SNAPSHOT_REGIONS] = {
++  0x00097C40, // DMA context (default for memcard investigation)
++  0x00097840, // staging buffer
++  0, 0
++};
++
++// Helper: broadcast to all clients
++static void BroadcastJSON(const std::string& msg)
++{
++  for (auto& c : s_clients)
++    c->SendJSON(msg);
++}
++
++} // namespace PSXRecompDebug
++
++// ---------------------------------------------------------------------------
++// Client socket
++// ---------------------------------------------------------------------------
++
++PSXRecompDebug::ClientSocket::ClientSocket(SocketMultiplexer& multiplexer, SocketDescriptor descriptor)
++  : BufferedStreamSocket(multiplexer, descriptor, 8192, 65536)
++{
++}
++
++PSXRecompDebug::ClientSocket::~ClientSocket() = default;
++
++void PSXRecompDebug::ClientSocket::OnConnected()
++{
++  INFO_LOG("PSXRecomp debug client connected from {}", GetRemoteAddress().ToString());
++  s_clients.push_back(std::static_pointer_cast<ClientSocket>(shared_from_this()));
++}
++
++void PSXRecompDebug::ClientSocket::OnDisconnected(const Error& error)
++{
++  INFO_LOG("PSXRecomp debug client disconnected: {}", error.GetDescription());
++  auto it = std::find_if(s_clients.begin(), s_clients.end(),
++                         [this](const auto& c) { return c.get() == this; });
++  if (it != s_clients.end()) s_clients.erase(it);
++}
++
++void PSXRecompDebug::ClientSocket::OnRead()
++{
++  const std::span<const u8> buffer = AcquireReadBuffer();
++  if (buffer.empty()) return;
++
++  size_t consumed = 0;
++  for (size_t i = 0; i < buffer.size(); i++)
++  {
++    if (buffer[i] == '\n')
++    {
++      std::string_view line(reinterpret_cast<const char*>(buffer.data() + consumed), i - consumed);
++      if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
++      if (!line.empty()) ProcessLine(line);
++      consumed = i + 1;
++    }
++  }
++  ReleaseReadBuffer(consumed);
++}
++
++void PSXRecompDebug::ClientSocket::SendJSON(const std::string& json)
++{
++  std::string msg = json + "\n";
++  Write(msg.data(), msg.size());
++}
++
++// ---------------------------------------------------------------------------
++// Register names
++// ---------------------------------------------------------------------------
++
++static const char* const s_reg_names[32] = {
++  "zero","at","v0","v1","a0","a1","a2","a3",
++  "t0","t1","t2","t3","t4","t5","t6","t7",
++  "s0","s1","s2","s3","s4","s5","s6","s7",
++  "t8","t9","k0","k1","gp","sp","fp","ra",
++};
++
++// ---------------------------------------------------------------------------
++// Hex encoding helper
++// ---------------------------------------------------------------------------
++
++static std::string hex_encode(const u8* data, size_t len)
++{
++  std::string hex;
++  hex.reserve(len * 2);
++  for (size_t i = 0; i < len; i++)
++    fmt::format_to(std::back_inserter(hex), "{:02x}", data[i]);
++  return hex;
++}
++
++// ---------------------------------------------------------------------------
++// Command handlers
++// ---------------------------------------------------------------------------
++
++void PSXRecompDebug::ClientSocket::ProcessLine(std::string_view line)
++{
++  std::string line_str(line);
++  const char* json = line_str.c_str();
++
++  char cmd[64] = {};
++  json_get_str(json, "cmd", cmd, sizeof(cmd));
++  u32 id = 0;
++  json_get_u32(json, "id", &id);
++  s_request_id = static_cast<int>(id);
++
++  // ---- ping / frame ----
++  if (std::strcmp(cmd, "ping") == 0 || std::strcmp(cmd, "frame") == 0)
++  {
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"frame":{}}})", s_request_id, s_frame_counter));
++  }
++  // ---- registers ----
++  else if (std::strcmp(cmd, "get_registers") == 0 || std::strcmp(cmd, "regs") == 0)
++  {
++    std::string resp = fmt::format(
++      R"({{"id":{},"ok":true,"pc":"0x{:08X}","hi":"0x{:08X}","lo":"0x{:08X}","regs":{{)",
++      s_request_id, CPU::g_state.pc, CPU::g_state.regs.hi, CPU::g_state.regs.lo);
++    for (int i = 0; i < 32; i++)
++    {
++      if (i > 0) resp += ",";
++      resp += fmt::format(R"("{}":"0x{:08X}")", s_reg_names[i], CPU::g_state.regs.r[i]);
++    }
++    resp += "}}";
++    SendJSON(resp);
++  }
++  // ---- read_ram ----
++  else if (std::strcmp(cmd, "read_ram") == 0)
++  {
++    u32 addr = 0, len = 1;
++    json_get_u32(json, "addr", &addr);
++    json_get_u32(json, "len", &len);
++    if (len > 65536) len = 65536;
++
++    u32 phys = addr & 0x1FFFFFFFu;
++    std::string hex;
++    hex.reserve(len * 2);
++    for (u32 i = 0; i < len; i++)
++    {
++      u8 byte = (phys + i < Bus::g_ram_size) ? Bus::g_ram[phys + i] : 0;
++      fmt::format_to(std::back_inserter(hex), "{:02x}", byte);
++    }
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"addr":"0x{:08X}","len":{},"hex":"{}"}})",
++      s_request_id, addr, len, hex));
++  }
++  // ---- write_ram ----
++  else if (std::strcmp(cmd, "write_ram") == 0)
++  {
++    u32 addr = 0;
++    json_get_u32(json, "addr", &addr);
++    char hex_data[131072] = {};
++    json_get_str(json, "hex", hex_data, sizeof(hex_data));
++
++    u32 phys = addr & 0x1FFFFFFFu;
++    size_t hex_len = std::strlen(hex_data);
++    u32 byte_count = 0;
++    for (size_t i = 0; i + 1 < hex_len; i += 2)
++    {
++      char bs[3] = {hex_data[i], hex_data[i + 1], 0};
++      u8 byte = static_cast<u8>(std::strtoul(bs, nullptr, 16));
++      if (phys + byte_count < Bus::g_ram_size)
++        Bus::g_ram[phys + byte_count] = byte;
++      byte_count++;
++    }
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"bytes_written":{}}})", s_request_id, byte_count));
++  }
++  // ---- gpu_state ----
++  else if (std::strcmp(cmd, "gpu_state") == 0)
++  {
++    // Map display width to h_resolution index (0=256,1=320,2=512,3=640)
++    u16 w = g_gpu.GetDisplayVRAMWidth();
++    u8 h_res = (w >= 640) ? 3 : (w >= 512) ? 2 : (w >= 320) ? 1 : 0;
++    // Map display height to v_resolution index (0=240,1=480i)
++    u16 h = g_gpu.GetDisplayVRAMHeight();
++    u8 v_res = (h > 240) ? 1 : 0;
++    // display_enable: 0=on, 1=off (same as native convention)
++    u8 disp_en = g_gpu.IsDisplayDisabled() ? 1 : 0;
++
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"display_area_x":{},"display_area_y":{},"draw_offset_x":{},"draw_offset_y":{},"h_resolution":{},"v_resolution":{},"display_enable":{},"gpustat":"0x{:08X}","disp_w":{},"disp_h":{},"clip":[{},{},{},{}]}})",
++      s_request_id,
++      g_gpu.GetDisplayVRAMLeft(), g_gpu.GetDisplayVRAMTop(),
++      g_gpu.GetDrawingOffsetX(), g_gpu.GetDrawingOffsetY(),
++      h_res, v_res, disp_en,
++      g_gpu.GetGPUSTATBits(),
++      g_gpu.GetDisplayVRAMWidth(), g_gpu.GetDisplayVRAMHeight(),
++      g_gpu.GetDrawingAreaLeft(), g_gpu.GetDrawingAreaTop(),
++      g_gpu.GetDrawingAreaRight(), g_gpu.GetDrawingAreaBottom()));
++  }
++  // ---- pause ----
++  else if (std::strcmp(cmd, "pause") == 0)
++  {
++    s_paused = true;
++    System::PauseSystem(true);
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"paused":true,"frame":{}}})", s_request_id, s_frame_counter));
++  }
++  // ---- continue ----
++  else if (std::strcmp(cmd, "continue") == 0 || std::strcmp(cmd, "c") == 0)
++  {
++    s_paused = false;
++    System::PauseSystem(false);
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"paused":false,"frame":{}}})", s_request_id, s_frame_counter));
++  }
++  // ---- step ----
++  else if (std::strcmp(cmd, "step") == 0)
++  {
++    u32 n = 1;
++    json_get_u32(json, "count", &n);
++    if (n < 1) n = 1;
++    s_step_frames = static_cast<int>(n);
++    s_paused = false;
++    System::PauseSystem(false);
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"stepping":{},"frame":{}}})", s_request_id, n, s_frame_counter));
++  }
++  // ---- watch ----
++  else if (std::strcmp(cmd, "watch") == 0)
++  {
++    u32 addr = 0;
++    json_get_u32(json, "addr", &addr);
++    bool added = false;
++    for (int i = 0; i < MAX_WATCHPOINTS; i++)
++    {
++      if (!s_watchpoints[i].active)
++      {
++        s_watchpoints[i].addr = addr & 0x1FFFFFFFu;
++        s_watchpoints[i].prev_val = (s_watchpoints[i].addr < Bus::g_ram_size) ?
++                                      Bus::g_ram[s_watchpoints[i].addr] : 0;
++        s_watchpoints[i].active = true;
++        added = true;
++        break;
++      }
++    }
++    SendJSON(fmt::format(R"({{"id":{},"ok":{},"addr":"0x{:08X}"}})",
++      s_request_id, added ? "true" : "false", addr));
++  }
++  // ---- unwatch ----
++  else if (std::strcmp(cmd, "unwatch") == 0)
++  {
++    u32 addr = 0;
++    json_get_u32(json, "addr", &addr);
++    u32 phys = addr & 0x1FFFFFFFu;
++    for (int i = 0; i < MAX_WATCHPOINTS; i++)
++      if (s_watchpoints[i].active && s_watchpoints[i].addr == phys)
++        s_watchpoints[i].active = false;
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"addr":"0x{:08X}"}})", s_request_id, addr));
++  }
++  // ---- pc_break: set execute breakpoint at given PC (full state capture on hit) ----
++  else if (std::strcmp(cmd, "pc_break") == 0)
++  {
++    u32 addr = 0;
++    json_get_u32(json, "addr", &addr);
++    bool added = false;
++    int slot = -1;
++    for (int i = 0; i < MAX_PC_BREAKS; i++)
++    {
++      if (!s_pc_breaks[i].active) { slot = i; break; }
++    }
++    if (slot >= 0)
++    {
++      bool ok = CPU::AddBreakpointWithCallback(
++        CPU::BreakpointType::Execute, addr,
++        [](CPU::BreakpointType, VirtualMemoryAddress pc_hit, VirtualMemoryAddress) -> bool {
++          // Capture full state at hit.
++          s_pc_hit_last.valid = true;
++          s_pc_hit_last.addr_hit = pc_hit;
++          s_pc_hit_last.pc = CPU::g_state.pc;
++          s_pc_hit_last.ra = CPU::g_state.regs.r[31];
++          s_pc_hit_last.hi = CPU::g_state.regs.hi;
++          s_pc_hit_last.lo = CPU::g_state.regs.lo;
++          for (int i = 0; i < 32; i++) s_pc_hit_last.gpr[i] = CPU::g_state.regs.r[i];
++          s_pc_hit_last.cop0_sr    = CPU::g_state.cop0_regs.sr.bits;
++          s_pc_hit_last.cop0_cause = CPU::g_state.cop0_regs.cause.bits;
++          s_pc_hit_last.cop0_epc   = CPU::g_state.cop0_regs.EPC;
++          // Pause the system so the client can inspect before anything else runs.
++          s_paused = true;
++          System::PauseSystem(true);
++          // Broadcast event (best-effort; client may reconnect and query pc_hit_last).
++          BroadcastJSON(fmt::format(
++            R"({{"event":"pc_hit","addr":"0x{:08X}","pc":"0x{:08X}","ra":"0x{:08X}","frame":{}}})",
++            pc_hit, CPU::g_state.pc, CPU::g_state.regs.r[31], s_frame_counter));
++          return true; // keep breakpoint
++        });
++      if (ok)
++      {
++        s_pc_breaks[slot].addr = addr;
++        s_pc_breaks[slot].active = true;
++        added = true;
++      }
++    }
++    SendJSON(fmt::format(R"({{"id":{},"ok":{},"addr":"0x{:08X}","slot":{}}})",
++      s_request_id, added ? "true" : "false", addr, slot));
++  }
++  // ---- pc_unbreak: remove execute breakpoint at given PC ----
++  else if (std::strcmp(cmd, "pc_unbreak") == 0)
++  {
++    u32 addr = 0;
++    json_get_u32(json, "addr", &addr);
++    bool removed = CPU::RemoveBreakpoint(CPU::BreakpointType::Execute, addr);
++    for (int i = 0; i < MAX_PC_BREAKS; i++)
++      if (s_pc_breaks[i].active && s_pc_breaks[i].addr == addr)
++        s_pc_breaks[i].active = false;
++    SendJSON(fmt::format(R"({{"id":{},"ok":{},"addr":"0x{:08X}"}})",
++      s_request_id, removed ? "true" : "false", addr));
++  }
++  // ---- pc_break_list ----
++  else if (std::strcmp(cmd, "pc_break_list") == 0)
++  {
++    std::string resp = fmt::format(R"({{"id":{},"ok":true,"breaks":[)", s_request_id);
++    bool first = true;
++    for (int i = 0; i < MAX_PC_BREAKS; i++)
++    {
++      if (!s_pc_breaks[i].active) continue;
++      if (!first) resp += ",";
++      resp += fmt::format(R"("0x{:08X}")", s_pc_breaks[i].addr);
++      first = false;
++    }
++    resp += "]}";
++    SendJSON(resp);
++  }
++  // ---- pc_hit_last: return captured state from most recent PC break hit ----
++  else if (std::strcmp(cmd, "pc_hit_last") == 0)
++  {
++    if (!s_pc_hit_last.valid)
++    {
++      SendJSON(fmt::format(R"({{"id":{},"ok":true,"valid":false}})", s_request_id));
++    }
++    else
++    {
++      std::string resp = fmt::format(
++        R"({{"id":{},"ok":true,"valid":true,"addr_hit":"0x{:08X}","pc":"0x{:08X}","ra":"0x{:08X}",)"
++        R"("hi":"0x{:08X}","lo":"0x{:08X}","cop0_sr":"0x{:08X}","cop0_cause":"0x{:08X}","cop0_epc":"0x{:08X}","regs":{{)",
++        s_request_id, s_pc_hit_last.addr_hit, s_pc_hit_last.pc, s_pc_hit_last.ra,
++        s_pc_hit_last.hi, s_pc_hit_last.lo,
++        s_pc_hit_last.cop0_sr, s_pc_hit_last.cop0_cause, s_pc_hit_last.cop0_epc);
++      for (int i = 0; i < 32; i++)
++      {
++        if (i > 0) resp += ",";
++        resp += fmt::format(R"("{}":"0x{:08X}")", s_reg_names[i], s_pc_hit_last.gpr[i]);
++      }
++      resp += "}}";
++      SendJSON(resp);
++    }
++  }
++  // ---- pc_hit_clear ----
++  else if (std::strcmp(cmd, "pc_hit_clear") == 0)
++  {
++    s_pc_hit_last.valid = false;
++    SendJSON(fmt::format(R"({{"id":{},"ok":true}})", s_request_id));
++  }
++  // ---- history (ring buffer stats) ----
++  else if (std::strcmp(cmd, "history") == 0)
++  {
++    u64 oldest = (s_history_count > FRAME_HISTORY_CAP) ? s_history_count - FRAME_HISTORY_CAP : 0;
++    u64 newest = s_history_count > 0 ? s_history_count - 1 : 0;
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"count":{},"oldest":{},"newest":{}}})",
++      s_request_id, s_history_count, oldest, newest));
++  }
++  // ---- get_frame (single frame from ring buffer) ----
++  else if (std::strcmp(cmd, "get_frame") == 0)
++  {
++    s32 f = json_get_int(json, "frame", -1);
++    if (f < 0) { SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"missing frame"}})", s_request_id)); return; }
++
++    u64 oldest = (s_history_count > FRAME_HISTORY_CAP) ? s_history_count - FRAME_HISTORY_CAP : 0;
++    if (static_cast<u64>(f) < oldest || static_cast<u64>(f) >= s_history_count)
++    {
++      SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"frame not in buffer"}})", s_request_id));
++      return;
++    }
++
++    u32 idx = static_cast<u32>(f) % FRAME_HISTORY_CAP;
++    const FrameRecord& r = s_history[idx];
++
++    // Encode snapshot regions as hex
++    std::string snaps = "[";
++    for (int si = 0; si < RAM_SNAPSHOT_REGIONS; si++)
++    {
++      if (si > 0) snaps += ",";
++      if (r.snapshot_addr[si] == 0)
++      {
++        snaps += "null";
++      }
++      else
++      {
++        snaps += fmt::format(R"({{"addr":"0x{:08X}","hex":"{}"}})",
++          r.snapshot_addr[si] | 0x80000000u,
++          hex_encode(r.snapshot_data[si], RAM_SNAPSHOT_SIZE));
++      }
++    }
++    snaps += "]";
++
++    std::string resp = fmt::format(
++      R"({{"id":{},"ok":true,"frame":{},"pc":"0x{:08X}","hi":"0x{:08X}","lo":"0x{:08X}",)"
++      R"("sp":"0x{:08X}","ra":"0x{:08X}","v0":"0x{:08X}","a0":"0x{:08X}",)"
++      R"("gpu":{{"da_x":{},"da_y":{},"do_x":0,"do_y":0}},)"
++      R"("pad":"0x{:04X}",)"
++      R"("overlay_base":"0x00000000",)"
++      R"("dispatch_misses":0,)"
++      R"("game_data":"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",)"
++      R"("last_func":"",)"
++      R"("snapshots":{}}})",
++      s_request_id, r.frame_number, r.pc, r.hi, r.lo,
++      r.gpr[29], r.gpr[31], r.gpr[2], r.gpr[4],
++      r.display_vram_left, r.display_vram_top,
++      r.pad1_buttons,
++      snaps);
++    SendJSON(resp);
++  }
++  // ---- frame_range (batch query, max 200) ----
++  else if (std::strcmp(cmd, "frame_range") == 0)
++  {
++    s32 start = json_get_int(json, "start", -1);
++    s32 end = json_get_int(json, "end", -1);
++    if (start < 0 || end < 0) { SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"missing start/end"}})", s_request_id)); return; }
++    if (end - start + 1 > 200) { SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"max 200 frames"}})", s_request_id)); return; }
++
++    u64 oldest = (s_history_count > FRAME_HISTORY_CAP) ? s_history_count - FRAME_HISTORY_CAP : 0;
++
++    std::string resp = fmt::format(R"({{"id":{},"ok":true,"frames":[)", s_request_id);
++    bool first = true;
++    for (s32 f = start; f <= end; f++)
++    {
++      if (!first) resp += ",";
++      first = false;
++
++      if (static_cast<u64>(f) < oldest || static_cast<u64>(f) >= s_history_count)
++      {
++        resp += fmt::format(R"({{"frame":{},"available":false}})", f);
++        continue;
++      }
++
++      u32 idx = static_cast<u32>(f) % FRAME_HISTORY_CAP;
++      const FrameRecord& r = s_history[idx];
++
++      // Include first snapshot region hex for compact view
++      std::string snap0_hex = (r.snapshot_addr[0] != 0) ?
++        hex_encode(r.snapshot_data[0], RAM_SNAPSHOT_SIZE) : "";
++
++      resp += fmt::format(
++        R"({{"frame":{},"pc":"0x{:08X}","pad":"0x{:04X}","game_data":"0000000000000000000000000000000000000000000000000000000000000000","snap0":"{}"}})",
++        r.frame_number, r.pc, r.pad1_buttons, snap0_hex);
++    }
++    resp += "]}";
++    SendJSON(resp);
++  }
++  // ---- frame_timeseries (compact batch, max 200) ----
++  else if (std::strcmp(cmd, "frame_timeseries") == 0)
++  {
++    s32 start = json_get_int(json, "start", -1);
++    s32 end = json_get_int(json, "end", -1);
++    if (start < 0 || end < 0) { SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"missing start/end"}})", s_request_id)); return; }
++    if (end - start + 1 > 200) { SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"max 200 frames"}})", s_request_id)); return; }
++
++    u64 oldest = (s_history_count > FRAME_HISTORY_CAP) ? s_history_count - FRAME_HISTORY_CAP : 0;
++
++    std::string resp = fmt::format(R"({{"id":{},"ok":true,"ts":[)", s_request_id);
++    bool first = true;
++    for (s32 f = start; f <= end; f++)
++    {
++      if (!first) resp += ",";
++      first = false;
++
++      if (static_cast<u64>(f) < oldest || static_cast<u64>(f) >= s_history_count)
++      {
++        resp += "null";
++        continue;
++      }
++
++      u32 idx = static_cast<u32>(f) % FRAME_HISTORY_CAP;
++      const FrameRecord& r = s_history[idx];
++
++      resp += fmt::format(
++        R"({{"f":{},"pc":"0x{:08X}","sp":"0x{:08X}","ra":"0x{:08X}","pad":{},"da_x":{},"da_y":{},"misses":0,"gd":"0000000000000000000000000000000000000000000000000000000000000000"}})",
++        r.frame_number, r.pc, r.gpr[29], r.gpr[31],
++        r.pad1_buttons, r.display_vram_left, r.display_vram_top);
++    }
++    resp += "]}";
++    SendJSON(resp);
++  }
++  // ---- set_snapshot (configure RAM snapshot regions) ----
++  else if (std::strcmp(cmd, "set_snapshot") == 0)
++  {
++    // set_snapshot: {"cmd":"set_snapshot","slot":0,"addr":"0x80097C40"}
++    u32 slot = 0, addr = 0;
++    json_get_u32(json, "slot", &slot);
++    json_get_u32(json, "addr", &addr);
++    if (slot < RAM_SNAPSHOT_REGIONS)
++    {
++      s_snapshot_addrs[slot] = addr & 0x1FFFFFFFu;
++      SendJSON(fmt::format(R"({{"id":{},"ok":true,"slot":{},"addr":"0x{:08X}"}})",
++        s_request_id, slot, addr));
++    }
++    else
++    {
++      SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"slot must be 0-{}"}})",
++        s_request_id, RAM_SNAPSHOT_REGIONS - 1));
++    }
++  }
++  // ---- get_snapshots (show current snapshot config) ----
++  else if (std::strcmp(cmd, "get_snapshots") == 0)
++  {
++    std::string resp = fmt::format(R"({{"id":{},"ok":true,"regions":[)", s_request_id);
++    for (int i = 0; i < RAM_SNAPSHOT_REGIONS; i++)
++    {
++      if (i > 0) resp += ",";
++      if (s_snapshot_addrs[i] == 0)
++        resp += "null";
++      else
++        resp += fmt::format(R"({{"slot":{},"addr":"0x{:08X}","size":{}}})",
++          i, s_snapshot_addrs[i] | 0x80000000u, RAM_SNAPSHOT_SIZE);
++    }
++    resp += "]}";
++    SendJSON(resp);
++  }
++  // ---- read_scratch (scratchpad memory) ----
++  else if (std::strcmp(cmd, "read_scratch") == 0)
++  {
++    u32 addr = 0, len = 1;
++    json_get_u32(json, "addr", &addr);
++    json_get_u32(json, "len", &len);
++    if (len > 1024) len = 1024;
++
++    std::string hex;
++    hex.reserve(len * 2);
++    for (u32 i = 0; i < len; i++)
++    {
++      u32 off = (addr + i) & 0x3FFu;
++      fmt::format_to(std::back_inserter(hex), "{:02x}", CPU::g_state.scratchpad[off]);
++    }
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"addr":"0x{:08X}","len":{},"hex":"{}"}})",
++      s_request_id, addr, len, hex));
++  }
++  // ---- overlay_state (not applicable for DS, returns zeros) ----
++  else if (std::strcmp(cmd, "overlay_state") == 0)
++  {
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"overlay_base":"0x00000000","overlay_pc":"0x00000000"}})",
++      s_request_id));
++  }
++  // ---- run_to_frame ----
++  else if (std::strcmp(cmd, "run_to_frame") == 0)
++  {
++    u32 target = 0;
++    json_get_u32(json, "frame", &target);
++    if (target <= s_frame_counter)
++    {
++      SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"target frame already passed"}})", s_request_id));
++    }
++    else
++    {
++      s_run_to_frame = target;
++      s_paused = false;
++      System::PauseSystem(false);
++      SendJSON(fmt::format(R"({{"id":{},"ok":true,"running_to":{}}})", s_request_id, target));
++    }
++  }
++  // ---- dump_ram (chunked large reads, up to 64KB) ----
++  else if (std::strcmp(cmd, "dump_ram") == 0)
++  {
++    u32 addr = 0, len = 256;
++    json_get_u32(json, "addr", &addr);
++    json_get_u32(json, "len", &len);
++    if (len > 65536) len = 65536;
++
++    u32 phys = addr & 0x1FFFFFFFu;
++    u32 offset = 0;
++    while (offset < len)
++    {
++      u32 chunk = std::min(len - offset, 4096u);
++      std::string hex;
++      hex.reserve(chunk * 2);
++      for (u32 i = 0; i < chunk; i++)
++      {
++        u32 p = phys + offset + i;
++        u8 byte = (p < Bus::g_ram_size) ? Bus::g_ram[p] : 0;
++        fmt::format_to(std::back_inserter(hex), "{:02x}", byte);
++      }
++      SendJSON(fmt::format(
++        R"({{"id":{},"ok":true,"addr":"0x{:08X}","offset":{},"len":{},"hex":"{}"}})",
++        s_request_id, addr + offset, offset, chunk, hex));
++      offset += chunk;
++    }
++  }
++  // ---- read_vram (read VRAM pixels, max 128x128) ----
++  else if (std::strcmp(cmd, "read_vram") == 0)
++  {
++    u32 x = 0, y = 0, w = 1, h = 1;
++    json_get_u32(json, "x", &x);
++    json_get_u32(json, "y", &y);
++    json_get_u32(json, "w", &w);
++    json_get_u32(json, "h", &h);
++    if (w > 128) w = 128;
++    if (h > 128) h = 128;
++    if (w == 0) w = 1;
++    if (h == 0) h = 1;
++
++    std::string hex;
++    hex.reserve(w * h * 4);
++    for (u32 row = 0; row < h; row++)
++    {
++      u32 vy = (y + row) & (VRAM_HEIGHT - 1);
++      for (u32 col = 0; col < w; col++)
++      {
++        u32 vx = (x + col) & (VRAM_WIDTH - 1);
++        u16 pixel = g_vram[vy * VRAM_WIDTH + vx];
++        fmt::format_to(std::back_inserter(hex), "{:04x}", pixel);
++      }
++    }
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"x":{},"y":{},"w":{},"h":{},"pixels":"{}"}})",
++      s_request_id, x, y, w, h, hex));
++  }
++  // ---- set_input ----
++  else if (std::strcmp(cmd, "set_input") == 0)
++  {
++    u32 buttons = 0xFFFF;
++    json_get_u32(json, "buttons", &buttons);
++    s_input_override = static_cast<s32>(buttons & 0xFFFF);
++    SendJSON(fmt::format(R"({{"id":{},"ok":true,"buttons":"0x{:04X}"}})", s_request_id, s_input_override));
++  }
++  // ---- clear_input ----
++  else if (std::strcmp(cmd, "clear_input") == 0)
++  {
++    s_input_override = -1;
++    SendJSON(fmt::format(R"({{"id":{},"ok":true}})", s_request_id));
++  }
++  // ---- dma_state ----
++  else if (std::strcmp(cmd, "dma_state") == 0)
++  {
++    static const char* const dma_names[7] = {"MDECin","MDECout","GPU","CDROM","SPU","PIO","OTC"};
++    u32 dpcr = DMA::ReadRegister(0x70);
++    u32 dicr = DMA::ReadRegister(0x74);
++    std::string channels = "[";
++    for (u32 ch = 0; ch < 7; ch++)
++    {
++      if (ch > 0) channels += ",";
++      u32 base = ch * 16;
++      u32 madr = DMA::ReadRegister(base + 0);
++      u32 bcr  = DMA::ReadRegister(base + 4);
++      u32 chcr = DMA::ReadRegister(base + 8);
++      u32 enabled = (dpcr >> (ch * 4 + 3)) & 1;
++      channels += fmt::format(
++        R"({{"ch":{},"name":"{}","madr":"0x{:08X}","bcr":"0x{:08X}","chcr":"0x{:08X}","enabled":{}}})",
++        ch, dma_names[ch], madr, bcr, chcr, enabled);
++    }
++    channels += "]";
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"dpcr":"0x{:08X}","dicr":"0x{:08X}","channels":{}}})",
++      s_request_id, dpcr, dicr, channels));
++  }
++  // ---- irq_state ----
++  else if (std::strcmp(cmd, "irq_state") == 0)
++  {
++    u32 i_stat = InterruptController::ReadRegister(0x00);
++    u32 i_mask = InterruptController::ReadRegister(0x04);
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"i_stat":"0x{:08X}","i_mask":"0x{:08X}","chains":[]}})",
++      s_request_id, i_stat, i_mask));
++  }
++  // ---- event_state (BIOS concept — stub for DS) ----
++  else if (std::strcmp(cmd, "event_state") == 0)
++  {
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"evcb_base":0,"evcb_count":0,"events":[]}})",
++      s_request_id));
++  }
++  // ---- sio_state (read SIO/Pad registers) ----
++  else if (std::strcmp(cmd, "sio_state") == 0)
++  {
++    // Read SIO registers via Pad namespace (offsets from SIO base 0x1F801040)
++    u32 rx_data = Pad::ReadRegister(0x00);  // SIO_RX_DATA
++    u32 stat    = Pad::ReadRegister(0x04);  // SIO_STAT
++    u32 mode    = Pad::ReadRegister(0x08);  // SIO_MODE
++    u32 ctrl    = Pad::ReadRegister(0x0A);  // SIO_CTRL
++    u32 baud    = Pad::ReadRegister(0x0E);  // SIO_BAUD
++    SendJSON(fmt::format(
++      R"({{"id":{},"ok":true,"regs":{{"rx_data":"0x{:02X}","stat":"0x{:04X}","mode":"0x{:04X}","ctrl":"0x{:04X}","baud":"0x{:04X}"}},"note":"DS exposes raw registers only, not protocol state"}})",
++      s_request_id,
++      rx_data & 0xFF, stat & 0xFFFF, mode & 0xFFFF, ctrl & 0xFFFF, baud & 0xFFFF));
++  }
++  // ---- screenshot ----
++  else if (std::strcmp(cmd, "screenshot") == 0)
++  {
++    char path[256] = {};
++    json_get_str(json, "path", path, sizeof(path));
++    if (path[0] == '\0')
++    {
++      SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"missing path"}})", s_request_id));
++    }
++    else
++    {
++      u16 dx = g_gpu.GetDisplayVRAMLeft();
++      u16 dy = g_gpu.GetDisplayVRAMTop();
++      u16 dw = g_gpu.GetDisplayVRAMWidth();
++      u16 dh = g_gpu.GetDisplayVRAMHeight();
++      if (dw == 0) dw = 320;
++      if (dh == 0) dh = 240;
++
++      Image img(dw, dh, ImageFormat::RGBA8);
++      for (u16 row = 0; row < dh; row++)
++      {
++        u32* dst = reinterpret_cast<u32*>(img.GetRowPixels(row));
++        for (u16 col = 0; col < dw; col++)
++        {
++          u16 vx = (dx + col) & (VRAM_WIDTH - 1);
++          u16 vy = (dy + row) & (VRAM_HEIGHT - 1);
++          u16 pixel = g_vram[vy * VRAM_WIDTH + vx];
++          u8 r = static_cast<u8>((pixel & 0x1F) << 3);
++          u8 g = static_cast<u8>(((pixel >> 5) & 0x1F) << 3);
++          u8 b = static_cast<u8>(((pixel >> 10) & 0x1F) << 3);
++          dst[col] = static_cast<u32>(r) | (static_cast<u32>(g) << 8) | (static_cast<u32>(b) << 16) | 0xFF000000u;
++        }
++      }
++
++      Error error;
++      if (img.SaveToFile(path, 85, &error))
++        SendJSON(fmt::format(R"({{"id":{},"ok":true,"path":"{}","w":{},"h":{}}})", s_request_id, path, dw, dh));
++      else
++        SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"save failed: {}"}})", s_request_id, error.GetDescription()));
++    }
++  }
++  // ---- unknown ----
++  else
++  {
++    SendJSON(fmt::format(R"({{"id":{},"ok":false,"error":"unknown command: {}"}})", s_request_id, cmd));
++  }
++}
++
++// ---------------------------------------------------------------------------
++// Public API
++// ---------------------------------------------------------------------------
++
++bool PSXRecompDebug::Initialize(u16 port)
++{
++  Error error;
++  Assert(!s_listen_socket);
++
++  const std::optional<SocketAddress> address =
++    SocketAddress::Parse(SocketAddress::Type::IPv4, "127.0.0.1", port, &error);
++  if (!address.has_value())
++  {
++    ERROR_LOG("Failed to parse address: {}", error.GetDescription());
++    return false;
++  }
++
++  SocketMultiplexer* multiplexer = System::GetSocketMultiplexer();
++  if (!multiplexer) return false;
++
++  s_listen_socket = multiplexer->CreateListenSocket<ClientSocket>(address.value(), &error);
++  if (!s_listen_socket)
++  {
++    ERROR_LOG("Failed to create listen socket: {}", error.GetDescription());
++    System::ReleaseSocketMultiplexer();
++    return false;
++  }
++
++  s_frame_counter = 0;
++  s_paused = false;
++  s_step_frames = 0;
++  s_run_to_frame = 0;
++  s_history_count = 0;
++  std::memset(s_watchpoints, 0, sizeof(s_watchpoints));
++  std::memset(s_pc_breaks, 0, sizeof(s_pc_breaks));
++  s_pc_hit_last.valid = false;
++  std::memset(s_history, 0, sizeof(s_history));
++
++  INFO_LOG("PSXRecomp debug server listening on 127.0.0.1:{}", port);
++  return true;
++}
++
++bool PSXRecompDebug::HasAnyClients() { return !s_clients.empty(); }
++
++void PSXRecompDebug::Shutdown()
++{
++  if (!s_listen_socket) return;
++  INFO_LOG("Shutting down PSXRecomp debug server ({} clients)", s_clients.size());
++  s_clients.clear();
++  s_listen_socket.reset();
++  System::ReleaseSocketMultiplexer();
++}
++
++void PSXRecompDebug::OnFrameDone()
++{
++  s_frame_counter++;
++
++  // ---- Record frame into ring buffer ----
++  u32 idx = s_frame_counter % FRAME_HISTORY_CAP;
++  FrameRecord& r = s_history[idx];
++  r.frame_number = s_frame_counter;
++
++  // CPU
++  for (int i = 0; i < 32; i++)
++    r.gpr[i] = CPU::g_state.regs.r[i];
++  r.pc = CPU::g_state.pc;
++  r.hi = CPU::g_state.regs.hi;
++  r.lo = CPU::g_state.regs.lo;
++
++  // GPU
++  r.display_vram_left = g_gpu.GetDisplayVRAMLeft();
++  r.display_vram_top = g_gpu.GetDisplayVRAMTop();
++  r.display_vram_width = g_gpu.GetDisplayVRAMWidth();
++  r.display_vram_height = g_gpu.GetDisplayVRAMHeight();
++  r.display_disable = g_gpu.IsDisplayDisabled() ? 1 : 0;
++  r.interlaced = g_gpu.IsInterlacedDisplayEnabled() ? 1 : 0;
++  r.pal_mode = g_gpu.IsInPALMode() ? 1 : 0;
++  r._gpu_pad = 0;
++
++  // Pad
++  Controller* ctrl = System::GetController(0);
++  r.pad1_buttons = ctrl ? static_cast<u16>(ctrl->GetButtonStateBits()) : 0xFFFF;
++
++  r._reserved = 0;
++
++  // RAM snapshots
++  for (int si = 0; si < RAM_SNAPSHOT_REGIONS; si++)
++  {
++    r.snapshot_addr[si] = s_snapshot_addrs[si];
++    if (s_snapshot_addrs[si] != 0 && s_snapshot_addrs[si] + RAM_SNAPSHOT_SIZE <= Bus::g_ram_size)
++      std::memcpy(r.snapshot_data[si], Bus::g_ram + s_snapshot_addrs[si], RAM_SNAPSHOT_SIZE);
++    else
++      std::memset(r.snapshot_data[si], 0, RAM_SNAPSHOT_SIZE);
++  }
++
++  s_history_count = static_cast<u64>(s_frame_counter) + 1;
++
++  // ---- Input override ----
++  if (s_input_override >= 0)
++  {
++    Controller* pad = System::GetController(0);
++    if (pad)
++    {
++      u16 mask = static_cast<u16>(s_input_override);
++      for (u32 bit = 0; bit < 16; bit++)
++      {
++        // PS1 bitmask: 0 = pressed, 1 = released
++        float value = ((mask >> bit) & 1) == 0 ? 1.0f : 0.0f;
++        pad->SetBindState(bit, value);
++      }
++    }
++  }
++
++  // ---- Watchpoints ----
++  for (int i = 0; i < MAX_WATCHPOINTS; i++)
++  {
++    if (!s_watchpoints[i].active || s_watchpoints[i].addr >= Bus::g_ram_size)
++      continue;
++    u8 cur = Bus::g_ram[s_watchpoints[i].addr];
++    if (cur != s_watchpoints[i].prev_val)
++    {
++      BroadcastJSON(fmt::format(
++        R"({{"event":"watchpoint","addr":"0x{:08X}","old":"0x{:02X}","new":"0x{:02X}","frame":{}}})",
++        s_watchpoints[i].addr | 0x80000000u, s_watchpoints[i].prev_val, cur, s_frame_counter));
++      s_watchpoints[i].prev_val = cur;
++    }
++  }
++
++  // ---- Step mode ----
++  if (s_step_frames > 0)
++  {
++    s_step_frames--;
++    if (s_step_frames == 0)
++    {
++      s_paused = true;
++      System::PauseSystem(true);
++      BroadcastJSON(fmt::format(R"({{"event":"step_done","frame":{}}})", s_frame_counter));
++    }
++  }
++
++  // ---- Run-to-frame mode ----
++  if (s_run_to_frame > 0 && s_frame_counter >= s_run_to_frame)
++  {
++    s_run_to_frame = 0;
++    s_paused = true;
++    System::PauseSystem(true);
++    BroadcastJSON(fmt::format(R"({{"event":"run_to_done","frame":{}}})", s_frame_counter));
++  }
++}
+diff --git a/src/core/psxrecomp_debug_server.h b/src/core/psxrecomp_debug_server.h
+new file mode 100644
+index 0000000..8aa466c
+--- /dev/null
++++ b/src/core/psxrecomp_debug_server.h
+@@ -0,0 +1,20 @@
++// PSXRecomp TCP debug server for DuckStation
++// JSON-over-newline protocol on localhost:4371
++// Same protocol as the PSXRecomp runner debug server.
++// Includes 36000-frame ring buffer for retroactive state queries.
++
++#pragma once
++
++#include "common/types.h"
++
++namespace PSXRecompDebug {
++
++bool Initialize(u16 port = 4371);
++void Shutdown();
++bool HasAnyClients();
++
++/// Call once per frame from System::FrameDone(). Records frame state into
++/// the ring buffer, checks watchpoints, handles step-N logic.
++void OnFrameDone();
++
++} // namespace PSXRecompDebug
+diff --git a/src/core/system.cpp b/src/core/system.cpp
+index a36ad75..1d23daf 100644
+--- a/src/core/system.cpp
++++ b/src/core/system.cpp
+@@ -102,6 +102,7 @@ LOG_CHANNEL(System);
+ #define ENABLE_GDB_SERVER 1
+ #define ENABLE_SOCKET_MULTIPLEXER 1
+ #include "gdb_server.h"
++#include "psxrecomp_debug_server.h"
+ #endif
+ 
+ // #define PROFILE_MEMORY_SAVE_STATES 1
+@@ -2018,6 +2019,9 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
+     GDBServer::Initialize(g_settings.gdb_server_port);
+ #endif
+ 
++  // PSXRecomp debug server — always enabled on port 4371
++  PSXRecompDebug::Initialize(4371);
++
+   Host::OnSystemStarted();
+ 
+   if (parameters.load_image_to_ram || g_settings.cdrom_load_image_to_ram)
+@@ -2136,6 +2140,8 @@ void System::DestroySystem()
+   GDBServer::Shutdown();
+ #endif
+ 
++  PSXRecompDebug::Shutdown();
++
+   VideoThread::RunOnThread([]() {
+     VideoThread::SetRunIdleReason(VideoThread::RunIdleReason::SystemPaused, false);
+     Host::ClearOSDMessages();
+@@ -2278,6 +2284,8 @@ void System::FrameDone()
+       Achievements::FrameUpdate();
+   }
+ 
++  PSXRecompDebug::OnFrameDone();
++
+ #ifdef ENABLE_DISCORD_PRESENCE
+   PollDiscordPresence();
+ #endif
+diff --git a/src/duckstation-qt/CMakeLists.txt b/src/duckstation-qt/CMakeLists.txt
+index acb8e40..b7f7b8e 100644
+--- a/src/duckstation-qt/CMakeLists.txt
++++ b/src/duckstation-qt/CMakeLists.txt
+@@ -210,7 +210,7 @@ foreach(src ${SRCS})
+     list(APPEND UI_FILES ${src})
+   endif()
+ endforeach()
+-qt_wrap_ui(UI_SRCS SOURCES ${UI_FILES})
++qt_wrap_ui(UI_SRCS ${UI_FILES})
+ target_sources(duckstation-qt PRIVATE ${UI_SRCS})
+ target_include_directories(duckstation-qt PRIVATE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
+ 

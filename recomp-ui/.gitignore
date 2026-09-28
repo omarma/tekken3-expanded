@@ -1,0 +1,18 @@
+build/
+build*/
+*.dll
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.ninja
+.ninja_log
+recompui_test.png
+# N64 launcher bind file — the harness/host writes it next to the exe (cwd)
+input.cfg
+# Optional N64 wordmark logo — Nintendo trademark, user-supplied, never committed
+wordmark_n64.tga

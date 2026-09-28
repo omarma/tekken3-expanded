@@ -1,0 +1,15 @@
+{
+  "_comment": "Lasers TTT1 (Devil / Angel) : animation TTT1 -> type de rayon du runtime (src/tekken3_jun_combat.c, laser_beams). Mesures MAME du 2026-09-23 (capsule actor+364..384, versus contre un joueur immobile) : le rayon part de la tete + un decalage et s'allonge chaque image depuis la 3e trame de la fenetre active. Air Inferno n'a pas pu etre mesure : type Inferno par defaut.",
+  "types": {
+    "1": {"name": "Inferno (1+2)", "offset_forward": -49, "offset_up": 170, "step_forward": 199, "step_down": 0},
+    "2": {"name": "Devil Blaster (3+4)", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110},
+    "3": {"name": "Reverse Devil Blaster (3+4, 3+4)", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110, "_note": "Mesure MAME : -99 / -101 dans le repere du combattant, dont l orientation reste celle d avant le vol au-dessus de l adversaire. Le runtime vise l adversaire a l apparition du rayon, apres le passage : ce sont donc les valeurs du Blaster (verifie en jeu contre Jin le 2026-09-24)."}
+  },
+  "clips": {
+    "0x5f6f68": 1,
+    "0x5f7a70": 2,
+    "0x30c608c": 3,
+    "0x30c7308": 1,
+    "0xae0088": 1
+  }
+}

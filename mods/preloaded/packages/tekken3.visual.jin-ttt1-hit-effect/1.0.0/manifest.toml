@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.visual.jin-ttt1-hit-effect"
+version = "1.0.0"
+name = "Jin — TTT1 Strong-Hit Effect"
+author = "Tekken3Recomp"
+description = "Jin's red lightning from Tekken Tag Tournament replaces his blue strong-hit effect. Requires the effect converted locally from your TTT1 ROM with tools/ttt1_jin_hit_effect.py."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "jin-ttt1-hit-effect"
+name = "Jin — Red Lightning (TTT1)"
+description = "Shows Jin's TTT1 red lightning on strong hits instead of his blue one, for either player. Does nothing until the effect has been imported."
+group = "Visual Enhancements"
+default_enabled = true
+
+[[plugin]]
+feature = "jin-ttt1-hit-effect"
+id = "tekken3.jin-ttt1-hit-effect"

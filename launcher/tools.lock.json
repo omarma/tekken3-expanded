@@ -1,0 +1,21 @@
+{
+  "toolchain": {
+    "version": "1.0.10",
+    "url": "https://github.com/RetroPortingToolKit/RetroPorting-Toolchains/releases/download/v1.0.10/cmake-clang-v1-windows-x64.zip",
+    "sha256": "2abd36016aa60510632cbe230b914b252fff3c41f7288ae20d90de16d0c19dee",
+    "size": 211313134,
+    "filename": "cmake-clang-v1-windows-x64.zip"
+  },
+  "mame": {
+    "version": "0.289",
+    "url": "https://github.com/mamedev/mame/releases/download/mame0289/mame0289b_x64.exe",
+    "sha256": "a1aa7912168c9d1b05e611906bc21b8b9be3935822aead36d12a1da363150b7d",
+    "size": 87626249,
+    "filename": "mame0289b_x64.exe"
+  },
+  "pillow": {
+    "version": "12.0.0",
+    "url": "https://files.pythonhosted.org/packages/a2/0b/d87733741526541c909bbf159e338dcace4f982daac6e5a8d6be225ca32d/pillow-12.0.0-cp312-cp312-win_amd64.whl",
+    "sha256": "9fe611163f6303d1619bbcb653540a4d60f9e55e622d60a3108be0d5b441017a"
+  }
+}

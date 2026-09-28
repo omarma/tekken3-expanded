@@ -1,0 +1,22 @@
+# Inert authoring example. It contains no retail bytes and performs no writes.
+format_version = 1
+id = "example.tekken3.noop"
+version = "1.0.0"
+name = "Tekken 3 no-op example"
+author = "Example author"
+description = "A safe manifest skeleton with one default-off, no-op feature."
+license = "CC0-1.0"
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+disc_sha256 = "6b660e62748d02779e9e08362a5ed202540af7fad134de2ec0a2184ad78bb496"
+
+[[feature]]
+id = "noop"
+name = "No-op example"
+description = "Demonstrates metadata only; enabling it intentionally changes nothing."
+group = "Examples"
+default_enabled = false

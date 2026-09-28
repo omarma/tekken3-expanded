@@ -1,0 +1,155 @@
+diff --git a/libretro.cpp b/libretro.cpp
+index 476311b..efd9162 100644
+--- a/libretro.cpp
++++ b/libretro.cpp
+@@ -510,6 +510,10 @@ PS_SPU *PSX_SPU = NULL;
+ PS_CDC *PSX_CDC = NULL;
+ FrontIO *PSX_FIO = NULL;
+ 
++/* PSXRecomp oracle hooks: NULL when no listener attached. */
++psxrecomp_wtrace_cb_t  g_psxrecomp_wtrace_cb  = NULL;
++psxrecomp_fntrace_cb_t g_psxrecomp_fntrace_cb = NULL;
++
+ MultiAccessSizeMem<512 * 1024, uint32, false> *BIOSROM = NULL;
+ MultiAccessSizeMem<65536, uint32, false> *PIOMem = NULL;
+ MultiAccessSizeMem<2048 * 1024, uint32, false> *MainRAM = NULL;
+diff --git a/mednafen/psx/cpu.cpp b/mednafen/psx/cpu.cpp
+index f11e243..ea01b8b 100644
+--- a/mednafen/psx/cpu.cpp
++++ b/mednafen/psx/cpu.cpp
+@@ -1557,6 +1557,12 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 
+ 	DO_LDS();
+ 
++	/* PSXRecomp oracle hook: J retire (caller_pc, target). */
++	if (MDFN_UNLIKELY(g_psxrecomp_fntrace_cb)) {
++	    uint32_t target_addr = (PC & 0xF0000000u) | ((target << 2) & 0x0FFFFFFFu);
++	    g_psxrecomp_fntrace_cb(PC, target_addr, GPR[31], GPR[4], GPR[5], 1 /* J */);
++	}
++
+ 	DO_BRANCH(true, target << 2, 0xF0000000, false, 0);
+     END_OPF;
+ 
+@@ -1572,6 +1578,12 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 
+ 	DO_LDS();
+ 
++	/* PSXRecomp oracle hook: JAL retire. parent_ra captured BEFORE link. */
++	if (MDFN_UNLIKELY(g_psxrecomp_fntrace_cb)) {
++	    uint32_t target_addr = (PC & 0xF0000000u) | ((target << 2) & 0x0FFFFFFFu);
++	    g_psxrecomp_fntrace_cb(PC, target_addr, GPR[31], GPR[4], GPR[5], 2 /* JAL */);
++	}
++
+ 	DO_BRANCH(true, target << 2, 0xF0000000, true, 31);
+     END_OPF;
+ 
+@@ -1590,6 +1602,10 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 
+ 	DO_LDS();
+ 
++	/* PSXRecomp oracle hook: JALR retire. parent_ra captured BEFORE link. */
++	if (MDFN_UNLIKELY(g_psxrecomp_fntrace_cb))
++	    g_psxrecomp_fntrace_cb(PC, tmp, GPR[31], GPR[4], GPR[5], 4 /* JALR */);
++
+ 	DO_BRANCH(true, tmp, 0, true, rd);
+     END_OPF;
+ 
+@@ -1608,6 +1624,10 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 
+ 	DO_LDS();
+ 
++	/* PSXRecomp oracle hook: JR retire. */
++	if (MDFN_UNLIKELY(g_psxrecomp_fntrace_cb))
++	    g_psxrecomp_fntrace_cb(PC, bt, GPR[31], GPR[4], GPR[5], 3 /* JR */);
++
+ 	DO_BRANCH(true, bt, 0, false, 0);
+     END_OPF;
+ 
+@@ -2370,13 +2390,17 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 
+ 	WriteMemory<uint8>(timestamp, address, GPR[rt]);
+ 
++	/* PSXRecomp oracle hook: capture (addr, val, PC, ra, size) for wtrace. */
++	if (MDFN_UNLIKELY(g_psxrecomp_wtrace_cb))
++	    g_psxrecomp_wtrace_cb(address, GPR[rt] & 0xFFu, PC, GPR[31], 1);
++
+ 	if (PGXP_GetModes() & PGXP_MODE_MEMORY)
+ 		PGXP_CPU_SB(instr, GPR[rt], address);
+ 
+ 	DO_LDS();
+     END_OPF;
+ 
+-    // 
++    //
+     // SH - Store Halfword
+     //
+     BEGIN_OPF(SH);
+@@ -2397,13 +2421,17 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 	else
+ 	 WriteMemory<uint16>(timestamp, address, GPR[rt]);
+ 
++	/* PSXRecomp oracle hook: SH (only if no alignment exception). */
++	if (MDFN_UNLIKELY(g_psxrecomp_wtrace_cb) && !(address & 0x1))
++	    g_psxrecomp_wtrace_cb(address, GPR[rt] & 0xFFFFu, PC, GPR[31], 2);
++
+ 	if (PGXP_GetModes() & PGXP_MODE_MEMORY)
+ 		PGXP_CPU_SH(instr, GPR[rt], address);
+ 
+ 	DO_LDS();
+     END_OPF;
+ 
+-    // 
++    //
+     // SW - Store Word
+     //
+     BEGIN_OPF(SW);
+@@ -2424,6 +2452,10 @@ pscpu_timestamp_t PS_CPU::RunReal(pscpu_timestamp_t timestamp_in)
+ 	else
+ 	 WriteMemory<uint32>(timestamp, address, GPR[rt]);
+ 
++	/* PSXRecomp oracle hook: SW (only if no alignment exception). */
++	if (MDFN_UNLIKELY(g_psxrecomp_wtrace_cb) && !(address & 0x3))
++	    g_psxrecomp_wtrace_cb(address, GPR[rt], PC, GPR[31], 4);
++
+ 	if (PGXP_GetModes() & PGXP_MODE_MEMORY)
+ 		PGXP_CPU_SW(instr, GPR[rt], address);
+ 
+diff --git a/mednafen/psx/psx.h b/mednafen/psx/psx.h
+index 704c0a1..e16a230 100644
+--- a/mednafen/psx/psx.h
++++ b/mednafen/psx/psx.h
+@@ -137,4 +137,34 @@ extern unsigned psx_gpu_overclock_shift;
+ extern uint8_t analog_combo[2];
+ extern uint8_t analog_combo_hold;
+ 
++/* PSXRecomp oracle: SIO byte trace callback.
++ * Fired by FrontIO when a complete byte exchange finishes. */
++class FrontIO;
++extern FrontIO *PSX_FIO;
++typedef void (*psxrecomp_sio_trace_cb_t)(uint8_t tx, uint8_t rx, uint16_t ctrl);
++
++/* PSXRecomp oracle: RAM write trace callback.
++ * Fired by PS_CPU::SB/SH/SW after the write completes.
++ *   addr  = virtual address (caller masks for physical filter)
++ *   value = stored value (sized by `size`)
++ *   pc    = PC of the executing store instruction
++ *   ra    = $ra (GPR[31]) at time of store, for one frame of caller context
++ *   size  = 1, 2, or 4 (byte / halfword / word) */
++typedef void (*psxrecomp_wtrace_cb_t)(uint32_t addr, uint32_t value,
++                                       uint32_t pc, uint32_t ra, uint8_t size);
++extern psxrecomp_wtrace_cb_t g_psxrecomp_wtrace_cb;
++
++/* PSXRecomp oracle: function-call (JAL/JALR/J/JR) trace callback.
++ * Fired by PS_CPU on every J/JAL/JR/JALR retire, BEFORE the link write.
++ * Caller filters by target_pc to keep volume bounded.
++ *   caller_pc = PC of the J/JAL/JR/JALR instruction
++ *   target_pc = computed branch target
++ *   parent_ra = GPR[31] at time of call (parent's return address)
++ *   a0, a1    = argument registers at time of call
++ *   kind      = 1=J, 2=JAL, 3=JR, 4=JALR */
++typedef void (*psxrecomp_fntrace_cb_t)(uint32_t caller_pc, uint32_t target_pc,
++                                        uint32_t parent_ra, uint32_t a0,
++                                        uint32_t a1, uint8_t kind);
++extern psxrecomp_fntrace_cb_t g_psxrecomp_fntrace_cb;
++
+ #endif

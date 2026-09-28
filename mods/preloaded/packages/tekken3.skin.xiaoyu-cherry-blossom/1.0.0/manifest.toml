@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.xiaoyu-cherry-blossom"
+version = "1.0.0"
+name = "Xiaoyu Cherry Blossom Ribbon"
+author = "Tekken3Recomp"
+description = "Rose-pink silk, light-blue ribbons and delicate blossom embroidery for Xiaoyu's red-and-yellow outfit. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "xiaoyu-cherry-blossom"
+name = "Xiaoyu — Pink Silk and Blue Ribbons"
+description = "Adds Cherry Blossom to Xiaoyu's L1 skin gallery. Original costumes remain available. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "xiaoyu-cherry-blossom"
+id = "tekken3.xiaoyu-cherry-blossom"

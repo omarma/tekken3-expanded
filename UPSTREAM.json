@@ -1,0 +1,8 @@
+{
+  "vendored_at": {
+    "psxrecomp": "5ab24616f18b8005d80c1b971f95ab3c3bdd650d",
+    "recomp-ui": "3d93e84d426d75ea5cdcad5442a042fb1d0b3045"
+  },
+  "psxrecomp_modified": true,
+  "optional_recomp_net": "f38cd05b2ed7bb76e36e0ce929e4b2cb78d65ec1"
+}

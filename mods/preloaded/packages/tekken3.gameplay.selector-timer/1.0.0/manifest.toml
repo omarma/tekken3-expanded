@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.gameplay.selector-timer"
+version = "1.0.0"
+name = "Longer Character Select"
+author = "Tekken3Recomp"
+description = "Character select countdown of 99 seconds instead of 20."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "selector-timer"
+name = "99-second Character Select"
+description = "The Arcade, Time Attack, Survival, Practice and Tekken Force character select counts down from 99 instead of 20."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "selector-timer"
+id = "tekken3.selector-timer"

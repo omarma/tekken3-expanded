@@ -1,0 +1,933 @@
+{
+  "schema_version": 1,
+  "source": {
+    "url": "https://github.com/mamedev/mame/blob/aab5dcadb6025303ba019d0189344a5df536a623/src/mame/namco/namcos12.cpp",
+    "commit": "aab5dcadb6025303ba019d0189344a5df536a623",
+    "source_sha256": "90ea8fc2df807d30d41d566bf11529ca74a7db4d67ad5f1b092513555314b7fb",
+    "license": "BSD-3-Clause",
+    "attribution": "MAME namcos12.cpp; copyright-holders: smf",
+    "note": "ROM names, hashes, sizes and load wiring transcribed from the pinned source."
+  },
+  "sets": {
+    "tekken3": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet2vere1.2e",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "7ded5461",
+              "sha1": "3a5638c6ad40bfde6e12fdfd6d469f6ea5e9f4fb"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet2vere1.2j",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "25c96e1e",
+              "sha1": "554d1e42886d6a6c9c5857e9cbd5d7c37d7a6e67"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 29360128,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom0l.6",
+              "offset": 0,
+              "size": 4194304,
+              "crc32": "2886bb32",
+              "sha1": "08ad9da2df25ad8c933a812ac238c81135072929"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom0u.9",
+              "offset": 1,
+              "size": 4194304,
+              "crc32": "c5705b92",
+              "sha1": "20df20c8d18eb4712d565a3df9a8d9270dee6aaa"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom1l.7",
+              "offset": 8388608,
+              "size": 4194304,
+              "crc32": "0397d283",
+              "sha1": "ebafcd14cdb2601214129a84fc6830846f5cd274"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom1u.10",
+              "offset": 8388609,
+              "size": 4194304,
+              "crc32": "502ba5cd",
+              "sha1": "19c1282245c6dbfc945c0bd0f3918968c3e5c3ed"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom2l.8",
+              "offset": 16777216,
+              "size": 4194304,
+              "crc32": "e03b1c24",
+              "sha1": "8579b95a8fd06b7d2893ff88b228fd794162dff1"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1rom2u.11",
+              "offset": 16777217,
+              "size": 4194304,
+              "crc32": "75eb2ab3",
+              "sha1": "dee43884e542391903f6aaae2c166e7921a86fb4"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1fl3l.12",
+              "offset": 25165824,
+              "size": 2097152,
+              "crc32": "45513073",
+              "sha1": "8a36f58ee2d292b50e00c6bf275f9def358032d8"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "tet1fl3u.13",
+              "offset": 25165825,
+              "size": 2097152,
+              "crc32": "1917d993",
+              "sha1": "cabc44514a3e62a18a7f8f883603241447d6948b"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "tet1vere.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "c92b98d1",
+              "sha1": "8ae6fba8c5b6b9a2ab9541eac8553b282f35750d"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "tet1wave0.5",
+              "offset": 0,
+              "size": 4194304,
+              "crc32": "77ba7975",
+              "sha1": "fe9434dcf0fb232c85efaaae1b4b13d36099620a"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "tet1wave1.4",
+              "offset": 4194304,
+              "size": 4194304,
+              "crc32": "ffeba79f",
+              "sha1": "941412bbe9d0305d9a23c224c1bb774c4321f6df"
+            }
+          ]
+        }
+      ]
+    },
+    "tektagt": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg2verc1.2e",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "c6da0717",
+              "sha1": "9e01ae64710d85eb9899d6fa6fd0a2152aee8c11"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg2verc1.2j",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "25a1d2ff",
+              "sha1": "529a11a1bbb8655534d7ec371f1c09e9e387ed11"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 58720256,
+          "loads": [
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0e.ic9",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "c962a373",
+              "sha1": "d662dbd89ef62c5ac3150a018fc2d35ef2ee94ac"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0o.ic13",
+              "offset": 2,
+              "size": 8388608,
+              "crc32": "badb7dcf",
+              "sha1": "8c0bf7f6351c5a2a0996df371a901cf90c68cd8c"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1e.ic10",
+              "offset": 16777216,
+              "size": 8388608,
+              "crc32": "b3d56124",
+              "sha1": "4df20c74ba63f7362caf15e9b8949fab655704fb"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1o.ic14",
+              "offset": 16777218,
+              "size": 8388608,
+              "crc32": "2434ceb6",
+              "sha1": "f19f1599acbd6fd48793a2ee5a500ca817d9df56"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2e.ic11",
+              "offset": 33554432,
+              "size": 8388608,
+              "crc32": "6e5c3428",
+              "sha1": "e3cdb60a4445406877b2e273385f34bfb0974220"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2o.ic15",
+              "offset": 33554434,
+              "size": 8388608,
+              "crc32": "21ce9dfa",
+              "sha1": "f27e8210ee236c327aa3e1ce4dd408abc6580a1b"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flel.ic4",
+              "offset": 50331648,
+              "size": 2097152,
+              "crc32": "88b3823c",
+              "sha1": "6f31acb642c57daccbfdb87b790037e261c8c73c"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "fleu.ic5",
+              "offset": 50331649,
+              "size": 2097152,
+              "crc32": "36df0867",
+              "sha1": "6bec8560ad4c122dc909daa83aa9089ba5b281f7"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flol.ic6",
+              "offset": 50331650,
+              "size": 2097152,
+              "crc32": "03a76765",
+              "sha1": "ae35ae28375f2a3e52d72b77ec09750c326cc269"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flou.ic7",
+              "offset": 50331651,
+              "size": 2097152,
+              "crc32": "6d6947d1",
+              "sha1": "2f307bc4070fadb510c0473bc91d917b2d845ca5"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "teg1.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "67d0c469",
+              "sha1": "da164702fc21b9f46a9e32c89e7b1d36070ddf79"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave0.ic1",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "4bd99104",
+              "sha1": "f76b0576cc28fe49d3c1c402988b933933e52e15"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave1.ic12",
+              "offset": 8388608,
+              "size": 8388608,
+              "crc32": "dbc74fff",
+              "sha1": "601b7e7361ea744b34e3fa1fc39d88641de7f4c6"
+            }
+          ]
+        }
+      ]
+    },
+    "tektagtjc1": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg1verc1.2e",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "adbdfc2e",
+              "sha1": "e18458efb0f9b341970132b512d2e5104a942c6e"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg1verc1.2j",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "2fa33418",
+              "sha1": "e15f4c8cc4309ebb90d8d015b1f17f75ce5c8879"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 58720256,
+          "loads": [
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0e.ic9",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "c962a373",
+              "sha1": "d662dbd89ef62c5ac3150a018fc2d35ef2ee94ac"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0o.ic13",
+              "offset": 2,
+              "size": 8388608,
+              "crc32": "badb7dcf",
+              "sha1": "8c0bf7f6351c5a2a0996df371a901cf90c68cd8c"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1e.ic10",
+              "offset": 16777216,
+              "size": 8388608,
+              "crc32": "b3d56124",
+              "sha1": "4df20c74ba63f7362caf15e9b8949fab655704fb"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1o.ic14",
+              "offset": 16777218,
+              "size": 8388608,
+              "crc32": "2434ceb6",
+              "sha1": "f19f1599acbd6fd48793a2ee5a500ca817d9df56"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2e.ic11",
+              "offset": 33554432,
+              "size": 8388608,
+              "crc32": "6e5c3428",
+              "sha1": "e3cdb60a4445406877b2e273385f34bfb0974220"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2o.ic15",
+              "offset": 33554434,
+              "size": 8388608,
+              "crc32": "21ce9dfa",
+              "sha1": "f27e8210ee236c327aa3e1ce4dd408abc6580a1b"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flel.ic4",
+              "offset": 50331648,
+              "size": 2097152,
+              "crc32": "88b3823c",
+              "sha1": "6f31acb642c57daccbfdb87b790037e261c8c73c"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "fleu.ic5",
+              "offset": 50331649,
+              "size": 2097152,
+              "crc32": "36df0867",
+              "sha1": "6bec8560ad4c122dc909daa83aa9089ba5b281f7"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flol.ic6",
+              "offset": 50331650,
+              "size": 2097152,
+              "crc32": "03a76765",
+              "sha1": "ae35ae28375f2a3e52d72b77ec09750c326cc269"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flou.ic7",
+              "offset": 50331651,
+              "size": 2097152,
+              "crc32": "6d6947d1",
+              "sha1": "2f307bc4070fadb510c0473bc91d917b2d845ca5"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "teg1.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "67d0c469",
+              "sha1": "da164702fc21b9f46a9e32c89e7b1d36070ddf79"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave0.ic1",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "4bd99104",
+              "sha1": "f76b0576cc28fe49d3c1c402988b933933e52e15"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave1.ic12",
+              "offset": 8388608,
+              "size": 8388608,
+              "crc32": "dbc74fff",
+              "sha1": "601b7e7361ea744b34e3fa1fc39d88641de7f4c6"
+            }
+          ]
+        }
+      ]
+    },
+    "tektagtuc1": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg3verc1.2l",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "1efb7b85",
+              "sha1": "0623bb6571caf046ff7b4f83f11ee84a92c4b462"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg3verc1.2p",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "7caef9b2",
+              "sha1": "5c56d69ba2f723d0a4fbe4902196efc6ba9d5094"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 58720256,
+          "loads": [
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0e.ic9",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "c962a373",
+              "sha1": "d662dbd89ef62c5ac3150a018fc2d35ef2ee94ac"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0o.ic13",
+              "offset": 2,
+              "size": 8388608,
+              "crc32": "badb7dcf",
+              "sha1": "8c0bf7f6351c5a2a0996df371a901cf90c68cd8c"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1e.ic10",
+              "offset": 16777216,
+              "size": 8388608,
+              "crc32": "b3d56124",
+              "sha1": "4df20c74ba63f7362caf15e9b8949fab655704fb"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1o.ic14",
+              "offset": 16777218,
+              "size": 8388608,
+              "crc32": "2434ceb6",
+              "sha1": "f19f1599acbd6fd48793a2ee5a500ca817d9df56"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2e.ic11",
+              "offset": 33554432,
+              "size": 8388608,
+              "crc32": "6e5c3428",
+              "sha1": "e3cdb60a4445406877b2e273385f34bfb0974220"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2o.ic15",
+              "offset": 33554434,
+              "size": 8388608,
+              "crc32": "21ce9dfa",
+              "sha1": "f27e8210ee236c327aa3e1ce4dd408abc6580a1b"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flel.ic4",
+              "offset": 50331648,
+              "size": 2097152,
+              "crc32": "88b3823c",
+              "sha1": "6f31acb642c57daccbfdb87b790037e261c8c73c"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "fleu.ic5",
+              "offset": 50331649,
+              "size": 2097152,
+              "crc32": "36df0867",
+              "sha1": "6bec8560ad4c122dc909daa83aa9089ba5b281f7"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flol.ic6",
+              "offset": 50331650,
+              "size": 2097152,
+              "crc32": "03a76765",
+              "sha1": "ae35ae28375f2a3e52d72b77ec09750c326cc269"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flou.ic7",
+              "offset": 50331651,
+              "size": 2097152,
+              "crc32": "6d6947d1",
+              "sha1": "2f307bc4070fadb510c0473bc91d917b2d845ca5"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "teg1.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "67d0c469",
+              "sha1": "da164702fc21b9f46a9e32c89e7b1d36070ddf79"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave0.ic1",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "4bd99104",
+              "sha1": "f76b0576cc28fe49d3c1c402988b933933e52e15"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave1.ic12",
+              "offset": 8388608,
+              "size": 8388608,
+              "crc32": "dbc74fff",
+              "sha1": "601b7e7361ea744b34e3fa1fc39d88641de7f4c6"
+            }
+          ]
+        }
+      ]
+    },
+    "tektagtub": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg3verb.2l",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "97df2855",
+              "sha1": "c1b61df8e79348424f4bd2660ab5179ef21bdb07"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg3verb.2p",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "1dbe7591",
+              "sha1": "af464caa03fdd12024ad482e9c853a36510bfba7"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 58720256,
+          "loads": [
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0e.ic9",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "c962a373",
+              "sha1": "d662dbd89ef62c5ac3150a018fc2d35ef2ee94ac"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom0o.ic13",
+              "offset": 2,
+              "size": 8388608,
+              "crc32": "badb7dcf",
+              "sha1": "8c0bf7f6351c5a2a0996df371a901cf90c68cd8c"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1e.ic10",
+              "offset": 16777216,
+              "size": 8388608,
+              "crc32": "b3d56124",
+              "sha1": "4df20c74ba63f7362caf15e9b8949fab655704fb"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom1o.ic14",
+              "offset": 16777218,
+              "size": 8388608,
+              "crc32": "2434ceb6",
+              "sha1": "f19f1599acbd6fd48793a2ee5a500ca817d9df56"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2e.ic11",
+              "offset": 33554432,
+              "size": 8388608,
+              "crc32": "6e5c3428",
+              "sha1": "e3cdb60a4445406877b2e273385f34bfb0974220"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg1_rom2o.ic15",
+              "offset": 33554434,
+              "size": 8388608,
+              "crc32": "21ce9dfa",
+              "sha1": "f27e8210ee236c327aa3e1ce4dd408abc6580a1b"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flel.ic4",
+              "offset": 50331648,
+              "size": 2097152,
+              "crc32": "88b3823c",
+              "sha1": "6f31acb642c57daccbfdb87b790037e261c8c73c"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "fleu.ic5",
+              "offset": 50331649,
+              "size": 2097152,
+              "crc32": "36df0867",
+              "sha1": "6bec8560ad4c122dc909daa83aa9089ba5b281f7"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flol.ic6",
+              "offset": 50331650,
+              "size": 2097152,
+              "crc32": "03a76765",
+              "sha1": "ae35ae28375f2a3e52d72b77ec09750c326cc269"
+            },
+            {
+              "operation": "ROM_LOAD32_BYTE",
+              "name": "flou.ic7",
+              "offset": 50331651,
+              "size": 2097152,
+              "crc32": "6d6947d1",
+              "sha1": "2f307bc4070fadb510c0473bc91d917b2d845ca5"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "teg1.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "67d0c469",
+              "sha1": "da164702fc21b9f46a9e32c89e7b1d36070ddf79"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave0.ic1",
+              "offset": 0,
+              "size": 8388608,
+              "crc32": "4bd99104",
+              "sha1": "f76b0576cc28fe49d3c1c402988b933933e52e15"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg1_wave1.ic12",
+              "offset": 8388608,
+              "size": 8388608,
+              "crc32": "dbc74fff",
+              "sha1": "601b7e7361ea744b34e3fa1fc39d88641de7f4c6"
+            }
+          ]
+        }
+      ]
+    },
+    "tektagtc1a": {
+      "regions": [
+        {
+          "name": "maincpu:rom",
+          "size": 4194304,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg2ver_c1.2e",
+              "offset": 0,
+              "size": 2097152,
+              "crc32": "c0800960",
+              "sha1": "80fc8910ebb2399b3be3c9ea87cc1d9283b42676"
+            },
+            {
+              "operation": "ROM_LOAD16_BYTE",
+              "name": "teg2ver_c1.2j",
+              "offset": 1,
+              "size": 2097152,
+              "crc32": "c0476713",
+              "sha1": "e51e4f3cd20ad6838fb05aaede0ab288e145e7a2"
+            }
+          ]
+        },
+        {
+          "name": "bankedroms",
+          "size": 58720256,
+          "loads": [
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml0",
+              "offset": 0,
+              "size": 4194304,
+              "crc32": "cf984e85",
+              "sha1": "4d8296998b5f225b3f20bfdcb092a64b6e1fa76e"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml00.ic13",
+              "offset": 2,
+              "size": 4194304,
+              "crc32": "927723a5",
+              "sha1": "075aaca1700c9134496eb9a73cbe325ddc74eae1"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh0",
+              "offset": 8388608,
+              "size": 4194304,
+              "crc32": "ea088657",
+              "sha1": "fbacca78832f68a310bafd06188d645e3424e0ed"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh00",
+              "offset": 8388610,
+              "size": 4194304,
+              "crc32": "a85aa306",
+              "sha1": "07318133c7c48cb61590ed0eceb519a8cc1ca781"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml1",
+              "offset": 16777216,
+              "size": 4194304,
+              "crc32": "8552f0ef",
+              "sha1": "45ed0dacdad94e708260a98b9cd47861543d2b7a"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml10.ic14",
+              "offset": 16777218,
+              "size": 4194304,
+              "crc32": "13eb424b",
+              "sha1": "59d6c77136050de1e7250e6627636d5b178bb8a8"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh1",
+              "offset": 25165824,
+              "size": 4194304,
+              "crc32": "86eb5abe",
+              "sha1": "66a3807a18d81e8291baf56533694f60e31a6367"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh10",
+              "offset": 25165826,
+              "size": 4194304,
+              "crc32": "25131a87",
+              "sha1": "77fa236c4879a59323bc2dac26c195b7c47f812c"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml2",
+              "offset": 33554432,
+              "size": 4194304,
+              "crc32": "abdfc6ca",
+              "sha1": "70033becd29ea15611be2fc099a43712181bcbec"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2roml20.ic15",
+              "offset": 33554434,
+              "size": 4194304,
+              "crc32": "ed5ec7f7",
+              "sha1": "c91085a64ced95ee6618303987de61893e069742"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh2",
+              "offset": 41943040,
+              "size": 4194304,
+              "crc32": "8c03b301",
+              "sha1": "f395a4685e2deb8f7e9afc18ce15fa0d392b0cfa"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2romh20",
+              "offset": 41943042,
+              "size": 4194304,
+              "crc32": "c873c362",
+              "sha1": "d95451a7477b716c0d75ba04e1d8df3d8a4e10dd"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2rf4",
+              "offset": 50331648,
+              "size": 4194304,
+              "crc32": "612f6a37",
+              "sha1": "bd9597ef802e3c46f891f0ef523a3e0b0fe22672"
+            },
+            {
+              "operation": "ROM_LOAD32_WORD",
+              "name": "teg2rf6",
+              "offset": 50331650,
+              "size": 4194304,
+              "crc32": "0c9292ce",
+              "sha1": "664c6ccf18042ed8ebc29b1781ae7454acb05ba1"
+            }
+          ]
+        },
+        {
+          "name": "sub",
+          "size": 524288,
+          "loads": [
+            {
+              "operation": "ROM_LOAD16_WORD_SWAP",
+              "name": "teg1.11s",
+              "offset": 0,
+              "size": 524288,
+              "crc32": "67d0c469",
+              "sha1": "da164702fc21b9f46a9e32c89e7b1d36070ddf79"
+            }
+          ]
+        },
+        {
+          "name": "c352",
+          "size": 16777216,
+          "loads": [
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg2wavel0.ic12",
+              "offset": 0,
+              "size": 4194304,
+              "crc32": "1865336f",
+              "sha1": "deda6d129daf709b0316f6260e67613fbf849e57"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg2wavel1",
+              "offset": 4194304,
+              "size": 4194304,
+              "crc32": "f5ab70e6",
+              "sha1": "cdb62d8eb92ca961be684caf768d1961d98ece22"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg2waveh0",
+              "offset": 8388608,
+              "size": 4194304,
+              "crc32": "bc0325bf",
+              "sha1": "77059c300a9d53d0e97bb898a06c58076078d7d2"
+            },
+            {
+              "operation": "ROM_LOAD",
+              "name": "teg2waveh1",
+              "offset": 12582912,
+              "size": 4194304,
+              "crc32": "6c654921",
+              "sha1": "3849157b30b4b459956b823511551abda2e4b6e5"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

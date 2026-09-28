@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.skin.kuma-polar-bear"
+version = "1.0.0"
+name = "Kuma Polar Bear"
+author = "Tekken3Recomp"
+description = "White polar-bear fur for Kuma, retaining his red bandana and wristband. Uses the original Kuma model. OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "kuma-polar-bear"
+name = "Kuma — Polar Bear"
+description = "Adds Polar Bear to Kuma's L1 gallery alongside original Kuma and Panda. Restart after toggling this package."
+group = "Character Skins"
+default_enabled = true
+
+[[plugin]]
+feature = "kuma-polar-bear"
+id = "tekken3.kuma-polar-bear"

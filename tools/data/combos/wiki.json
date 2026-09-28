@@ -1,0 +1,66 @@
+{
+ "armorking": [
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "FC d/f+4, 4, 4",
+   "ten": false,
+   "page": "Stagger Kick"
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "d+3+4, 4, 4",
+   "ten": false,
+   "page": "Stagger Kick"
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "FC d/f+4, 4, 4, 4",
+   "ten": false,
+   "page": "Stagger Kick"
+  },
+  {
+   "name": "Jumping Stagger Kick",
+   "command": "d+3+4, 4, 4, 4",
+   "ten": false,
+   "page": "Stagger Kick"
+  }
+ ],
+ "jun": [
+  {
+   "name": "Blizzard Combo to Leg Cutter",
+   "command": "1+4,2,1,4,4,4",
+   "ten": false,
+   "page": "Blizzard Combo to Leg Cutter"
+  }
+ ],
+ "kunimitsu": [
+  {
+   "name": "Shark Attack",
+   "command": "f,f+3+4,1+2,3+4",
+   "ten": false,
+   "page": "Reverse Cartwheel Shark Attack"
+  }
+ ],
+ "lee": [
+  {
+   "name": "Shaolin Spin Kicks",
+   "command": "4, 3, 4",
+   "ten": false,
+   "page": "Shaolin Spin Kicks"
+  }
+ ],
+ "michelle": [
+  {
+   "name": "Tequila Sunrise to Arrow Kicks",
+   "command": "WS+2,1,4,3",
+   "ten": false,
+   "page": "Tequila Sunrise Arrow Kick"
+  },
+  {
+   "name": "Tequila Sunrise to Arrow Kicks",
+   "command": "3~2,1,4,3",
+   "ten": false,
+   "page": "Tequila Sunrise Arrow Kick"
+  }
+ ]
+}
