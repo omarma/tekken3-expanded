@@ -284,7 +284,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
     if disc.is_file():disc=single_bin(disc)
     validate_files(disc,ttt,include_ttt1)
     # Optional: an unsupported tekken3.zip only costs the arcade difficulty
-    # levels, checked now rather than failing the import an hour later.
+    # levels, checked now rather than failing at the end of the import.
     if tekken3 and not tekken3_supported(tekken3):
         log_line(f'{tekken3}: no TET2/VER.E1 program ROMs, arcade difficulty levels skipped')
         emit(message='Skipping the arcade difficulty levels',detail='Your tekken3.zip is not the TET2/VER.E1 set (see the README). Setup goes on without them.')
@@ -310,7 +310,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
     if include_ttt1 and (not ttt1_ready(ROOT/'workspace/ttt1-import/roster') or (jin_red and not jin_effect.is_file())
                          or (tekken3 and not levels.is_file())):
         oracle=mame()
-        emit(message='Adding the TTT1 characters',detail='Importing their models, moves, voices and portraits from your ROM. The first time takes about an hour. This runs muted.')
+        emit(message='Adding the TTT1 characters',detail='Importing their models, moves, voices and portraits from your ROM. The first time takes about 15 minutes. This runs muted.')
         command=[sys.executable,ROOT/'tools/ttt1_setup.py','--ttt1',ttt,'--mame',oracle,'--no-rebuild']
         if jin_red:command.append('--jin-red-lightning')
         if tekken3:command+=['--tekken3',tekken3]
