@@ -13,7 +13,7 @@ TRAILER : https://youtu.be/Th9PMY7SybA
 ### The Tag Tournament roster
 - **18 playable characters:** Kazuya, Jun, Kunimitsu, Michelle, Baek, Armor King, Bruce, Jack-2, P.Jack, Lee, Ganryu, Devil, Angel, Roger, Alex, Tetsujin, Wang, Unknown.
 - **Tag page on the select screen:** press **L2 / R2** to switch rosters. It works in every mode, and P1 and P2 can each pick a different guest.
-- **Costumes** on Punch, Kick or Start.
+- **ALL Costumes Available** by pressing Punch, Kick or Start.
 - **From TTT:** the voices, sounds, portraits and announcer calls, and each character's own strong-hit effect.
 - **Unknown** works as in Tekken Tag Tournament: she fights with the TTT movesets and switches style with **L1**, from 23 styles.
 - **Tetsujin** draws a random moveset every round from the TTT characters added to the game.
