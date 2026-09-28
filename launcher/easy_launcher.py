@@ -81,7 +81,7 @@ def gui(test_hook=None):
             self.jin_check=ttk.Checkbutton(root,text="Add-on: Jin's red lightning (from your TTT1 ROM)",variable=self.jin_red)
             self.jin_check.pack(anchor='w',pady=(6,0));self.controls.append(self.jin_check);self.ttt1_controls.append(self.jin_check)
             ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+('Tools download automatically; ' if os.name=='nt' else 'Needs cmake, ninja, SDL3 and MAME (brew install cmake ninja sdl3 mame); ')
-                      +'the first setup with the TTT1 characters takes about an hour.',
+                      +'the first setup with the TTT1 characters takes about 20 minutes.',
                       style='Muted.TLabel',justify='left').pack(anchor='w',pady=(12,20))
             self.status=tk.StringVar(value='Ready to set up')
             self.detail=tk.StringVar(value='No Python, MAME or compiler installation needed.' if os.name=='nt' else 'Your files stay on this Mac.')
