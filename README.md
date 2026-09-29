@@ -137,7 +137,7 @@ A finished install takes several GB, but only part of it is the game. Inside the
 | `.setup/venv`, `.setup/ready.json` | What lets **Setup Tekken 3** start the game directly | Yes |
 | `.setup/tools`, `.setup/downloads` | Windows only: the compiler and MAME the setup downloaded | No |
 | `workspace` | The TTT1 import's intermediate files (the result is in `build-release`) | No |
-| `generated` | The recompiled game code, used only to build it | No |
+| `generated` | The recompiled game code: the game checks for it at every start | Yes |
 | `.setup/disc-tracks` | Only for a single-`.bin` disc: its tracks, split for the setup | No |
 
 You can delete the folders marked **No** and keep playing. The cost comes with the next update that rebuilds the game: instead of about a minute, it runs the whole first setup again (about 17 minutes: downloads, TTT1 import and build), and it needs your disc image and `tektagt.zip` again. Keep your original game files either way.
