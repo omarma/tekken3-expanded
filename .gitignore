@@ -10,6 +10,8 @@
 /.setup/
 /.runtime/
 /Play Tekken 3.exe
+/Tekken 3 Expanded.exe
+/Tekken 3 Expanded.app/
 /psxrecomp/generated/
 /psxrecomp/recompiler/build*/
 /psxrecomp/recompiler/lib/rabbitizer/include/generated/

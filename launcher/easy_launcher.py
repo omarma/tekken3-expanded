@@ -173,6 +173,7 @@ def gui(test_hook=None):
                         if self.job:self.job.close();self.job=None
                         self.process=None;self.set_busy(False)
                         if self.completed and event['code']==0:
+                            self.offer_free_space()
                             try:backend.launch_game(settings=SETTINGS);self.window.destroy();return
                             except Exception as error:self.status.set('Could not launch the game');self.detail.set(str(error))
                         elif self.status.get()!='Setup needs attention':
@@ -180,6 +181,15 @@ def gui(test_hook=None):
                         self.primary.configure(text='Try again')
             except queue.Empty:pass
             self.window.after(100,self.poll)
+        def offer_free_space(self):
+            try:
+                size=backend.spare_size()
+                if not backend.offer_free_space(size):return
+                if messagebox.askyesno('Free up disk space?',backend.free_space_question(size),icon='warning',default='no',parent=self.window):
+                    self.status.set('Freeing up disk space');self.detail.set('Deleting the files only the setup uses…');self.window.update()
+                    backend.free_space()
+                else:backend.decline_free_space()
+            except Exception as error:backend.log_line(f'Free up disk space: {error}')
         def cancel(self):
             self.epoch+=1
             if self.job:self.job.close();self.job=None

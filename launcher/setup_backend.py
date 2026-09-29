@@ -9,7 +9,7 @@ STATE=ROOT/'.setup'
 BUILD=ROOT/'build-release'
 WINDOWS=os.name=='nt'
 EXE=BUILD/('Tekken_3_Recompiled.exe' if WINDOWS else 'Tekken_3_Recompiled')
-RELEASE='0.1.3-easy-setup'   # a new value makes existing installs rebuild once
+RELEASE='0.1.4-easy-setup'   # a new value makes existing installs rebuild once
 LOCK=json.loads((ROOT/'launcher/tools.lock.json').read_text())
 
 class SetupError(Exception):
@@ -272,6 +272,88 @@ def build_game(toolchain,env,include_ttt1):
     emit(message='Building your game',detail='This is the long part. Next time you can play immediately.')
     run([cmake,'--build',BUILD,'--target','psx-runtime','--parallel',env['CMAKE_BUILD_PARALLEL_LEVEL']],
         environment=env,friendly='The game build stopped. Open the setup log for the specific error, then click Try again. Completed work is kept.')
+    if WINDOWS:play_exe(cmake,env)
+    elif sys.platform=='darwin':play_app()
+
+# Double-click to play, beside the setup script. A convenience only: when one
+# cannot be made, the setup script still does the same.
+PLAY_EXE=ROOT/'Tekken 3 Expanded.exe'
+PLAY_APP=ROOT/'Tekken 3 Expanded.app'
+
+def play_exe(cmake,env):
+    """launcher/bootstrap.c, built by the game's CMake project (tekken3-play)."""
+    try:
+        run([cmake,'--build',BUILD,'--target','tekken3-play'],environment=env,friendly='Tekken 3 Expanded.exe could not be built.')
+        shutil.copy2(BUILD/'tekken3-play.exe',PLAY_EXE)
+    except (SetupError,OSError) as error:log_line(f'Tekken 3 Expanded.exe skipped: {error}')
+
+APP_PLIST='''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>Tekken 3 Expanded</string>
+  <key>CFBundleExecutable</key><string>Tekken 3 Expanded</string>
+  <key>CFBundleIdentifier</key><string>io.github.omarma.tekken3-expanded</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSUIElement</key><true/>
+</dict></plist>
+'''
+# Plays once setup is done; else (an update needs the setup) opens the setup script.
+APP_SCRIPT='''#!/bin/bash
+cd "$(dirname "$0")/../../.." || exit 1
+python=.setup/venv/bin/python
+if "$python" -c 'import sys; sys.path.insert(0, "launcher"); import setup_backend as b; sys.exit(not b.ready())' 2>/dev/null; then
+    exec "$python" -c 'import sys; sys.path.insert(0, "launcher"); import setup_backend as b; b.launch_game()'
+fi
+exec open "Setup Tekken 3.command"
+'''
+
+def play_app():
+    """The macOS counterpart of Tekken 3 Expanded.exe: a bundle around a script."""
+    try:
+        contents=PLAY_APP/'Contents';(contents/'MacOS').mkdir(parents=True,exist_ok=True)
+        (contents/'Info.plist').write_text(APP_PLIST,encoding='utf-8')
+        script=contents/'MacOS/Tekken 3 Expanded';script.write_text(APP_SCRIPT,encoding='utf-8');script.chmod(0o755)
+    except OSError as error:log_line(f'Tekken 3 Expanded.app skipped: {error}')
+
+# Only the setup and its updates read these: the downloaded tools, the TTT1
+# import's work files and the build's object files. generated/ stays: the game
+# checks for it at every start (psxrecomp/host/psxrecomp_codegen_host.c), and
+# disc/ holds its own copy of the tracks in .setup/disc-tracks.
+SPARE_FOLDERS=('.setup/tools','.setup/downloads','.setup/disc-tracks','workspace')
+
+def spare_files():
+    for name in SPARE_FOLDERS:
+        if (ROOT/name).is_dir():yield from (p for p in (ROOT/name).rglob('*') if p.is_file())
+    if BUILD.is_dir():
+        yield from (p for p in BUILD.rglob('*') if p.suffix in ('.o','.obj') and 'CMakeFiles' in p.relative_to(BUILD).parts and p.is_file())
+
+def spare_size():
+    total=0
+    for path in spare_files():
+        try:total+=path.stat().st_size
+        except OSError:pass
+    return total
+
+def offer_free_space(size):
+    """Worth asking, and not declined before."""
+    return size>=256*1024**2 and not load_json(STATE/'free-space.json').get('declined')
+
+def free_space_question(size):
+    return (f"{size/1024**3:.1f} GB in this folder are only used by the setup and by updates: the downloaded tools, "
+            "the TTT1 import's work files and the build's intermediate files. The game does not need them.\n\n"
+            "If you delete them, the next update that rebuilds the game runs the whole first setup again "
+            "(about 17 minutes) and needs your disc image and tektagt.zip again.\n\nDelete them now?")
+
+def decline_free_space():
+    save_json(STATE/'free-space.json',{'declined':True})
+
+def free_space():
+    """Delete spare_files(); the next setup downloads, imports and builds them again."""
+    for name in SPARE_FOLDERS:shutil.rmtree(ROOT/name,ignore_errors=True)
+    for path in list(spare_files()):
+        try:path.unlink()
+        except OSError:pass
+    log_line('Freed up disk space: '+', '.join(SPARE_FOLDERS)+' and the build objects deleted')
 
 def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
     STATE.mkdir(exist_ok=True)
@@ -352,4 +434,10 @@ if __name__=='__main__':
         log_line(traceback.format_exc())
         emit('error',message=str(error) if isinstance(error,SetupError) else f'Setup stopped unexpectedly. See {STATE/"setup.log"}.')
         sys.exit(1)
+    if args.text and sys.stdin.isatty():
+        size=spare_size()
+        if offer_free_space(size):
+            if input(free_space_question(size)+' [y/N] ').strip().lower()[:1] in ('y','o'):
+                print('Freeing up disk space...',flush=True);free_space()
+            else:decline_free_space()
     if args.play:launch_game(settings=args.settings)

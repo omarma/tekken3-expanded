@@ -90,6 +90,31 @@ class SetupTests(unittest.TestCase):
             backend.launch_game(settings=True);command=popen.call_args[0][0]
             self.assertIn('--launcher',command);self.assertNotIn('--no-launcher',command)
 
+    def test_free_space_keeps_what_the_game_reads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);build=root/'build-release';state=root/'.setup'
+            spare=[root/'.setup/tools/mame/mame.exe',root/'.setup/downloads/tools.zip',root/'workspace/ttt1-import/roster/guests.txt',
+                   build/'CMakeFiles/psx-runtime.dir/main.cpp.obj',build/'psxrecomp/CMakeFiles/x.dir/a.c.o']
+            kept=[build/'Tekken_3_Recompiled.exe',build/'mods/ttt1/guests.txt',root/'generated/SLUS_004.02_dispatch.c',
+                  root/'disc/Tekken 3 (USA).cue',root/'saves/card1.mcd',state/'venv/pyvenv.cfg',state/'ready.json']
+            for path in spare+kept:path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'x'*10)
+            with patch.object(backend,'ROOT',root),patch.object(backend,'BUILD',build),patch.object(backend,'STATE',state):
+                self.assertEqual(sorted(backend.spare_files()),sorted(spare))
+                self.assertEqual(backend.spare_size(),50)
+                self.assertFalse(backend.offer_free_space(50))
+                self.assertTrue(backend.offer_free_space(1024**3))
+                backend.free_space()
+                self.assertEqual([p for p in spare if p.exists()],[]);self.assertEqual([p for p in kept if not p.exists()],[])
+                backend.decline_free_space();self.assertFalse(backend.offer_free_space(1024**3))
+
+    def test_macos_app_starts_the_game_or_the_setup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=Path(temp)/'Tekken 3 Expanded.app'
+            with patch.object(backend,'PLAY_APP',app):backend.play_app()
+            script=app/'Contents/MacOS/Tekken 3 Expanded'
+            self.assertTrue(os.access(script,os.X_OK));self.assertIn('launch_game()',script.read_text())
+            self.assertIn('<string>Tekken 3 Expanded</string>',(app/'Contents/Info.plist').read_text())
+
     @unittest.skipUnless(os.name=='nt','Windows process ownership')
     def test_cancel_closes_owned_worker(self):
         job=ProcessJob()

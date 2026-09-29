@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 project(Tekken3Recomp LANGUAGES C CXX)
 
+# Tekken 3 Expanded.exe, the double-click way to play on Windows: the setup
+# builds it and copies it beside Setup Tekken 3.cmd (launcher/setup_backend.py).
+# Defined before runtime.cmake so none of the game's build settings reach it.
+if(WIN32)
+    add_executable(tekken3-play WIN32 launcher/bootstrap.c)
+    target_link_libraries(tekken3-play PRIVATE user32)
+    set_target_properties(tekken3-play PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "Path to psxrecomp")
 
