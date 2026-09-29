@@ -75,7 +75,7 @@ What counts is the content of the files, not their names: sets made for older MA
 
 To check a ROM zip yourself with MAME 0.289: copy it alone into an empty folder under the name `tektagt.zip` (or `tekken3.zip`), then run `mame -rompath <folder> -verifyroms tektagt` (or `tekken3`). It must say `romset ... is good`.
 
-**Platforms:** macOS on Intel and Apple Silicon (tested on macOS 15 and 26). Windows 10 and 11 (tested on Windows 11 with Python 3.14).
+**Platforms:** macOS on Intel and Apple Silicon (tested on macOS 15 and 26). Windows 10 and 11 (tested on Windows 11 with Python 3.14). Steam Deck: experimental, with the Windows build and Proton (see [Steam Deck](#steam-deck-experimental)).
 
 ## Where to put your game files
 
@@ -109,6 +109,22 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
 4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
 5. When it is done, the game's launcher opens: click **PLAY**. Next time, double-click **Tekken 3 Expanded.exe** in the same folder (see [The launcher](#the-launcher)). You can pin it to Start or send a shortcut to the desktop.
+
+## Steam Deck (experimental)
+
+The Steam Deck runs the Windows build through Proton: set the game up on a Windows PC, then copy it over. This hasn't been tested much yet: if you try it, please tell me how it went, working or not, in an [issue](https://github.com/omarma/tekken3-expanded/issues).
+
+1. On a Windows PC, install Tekken 3 Expanded as above and check that it plays. To copy less, answer Yes to **Free up disk space** at the end of the setup.
+2. Copy the whole `tekken3-expanded` folder to the Deck (USB stick, microSD card or network), for example to `/home/deck/Games/tekken3-expanded`.
+3. On the Deck, in Desktop Mode, open Steam, then **Games → Add a Non-Steam Game to My Library → Browse**, and choose `tekken3-expanded/build-release/Tekken_3_Recompiled.exe`.
+4. In Steam, right-click the game → **Properties**:
+   - **Start In**: `"/home/deck/Games/tekken3-expanded/"` (your folder, in quotes)
+   - **Launch Options**: `--game game.toml --disc "disc/Tekken 3 (USA).cue"`
+   - **Compatibility**: tick **Force the use of a specific Steam Play compatibility tool**, then choose the latest Proton
+   - You can rename the shortcut **Tekken 3 Expanded**.
+5. Start it, in Desktop Mode or Game Mode. To go straight into the game with the controller, tick **Skip launcher on boot** in the launcher.
+
+To update, update the folder on the PC, then copy it to the Deck again.
 
 ## The launcher
 
