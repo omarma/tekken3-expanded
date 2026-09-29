@@ -4,6 +4,8 @@ import ctypes, json, os, queue, subprocess, sys, threading
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import setup_backend as backend
 
+SETTINGS='--settings' in sys.argv   # open the game's launcher even if it is skipped on boot
+
 # Windows owns the worker tree so Cancel also stops compilers and MAME.
 class ProcessJob:
     def __init__(self):
@@ -171,7 +173,7 @@ def gui(test_hook=None):
                         if self.job:self.job.close();self.job=None
                         self.process=None;self.set_busy(False)
                         if self.completed and event['code']==0:
-                            try:backend.launch_game();self.window.destroy();return
+                            try:backend.launch_game(settings=SETTINGS);self.window.destroy();return
                             except Exception as error:self.status.set('Could not launch the game');self.detail.set(str(error))
                         elif self.status.get()!='Setup needs attention':
                             self.status.set('Setup stopped');self.detail.set('Open the setup log for details, then click Try again.')
@@ -201,7 +203,7 @@ if __name__=='__main__':
         try:ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except (AttributeError,OSError):pass
     try:
-        if backend.ready():backend.launch_game(settings='--settings' in sys.argv)
+        if backend.ready():backend.launch_game(settings=SETTINGS)
         else:gui()
     except Exception as error:
         import tkinter as tk

@@ -323,9 +323,11 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
     emit('complete',message='Ready to play',detail='Setup is complete.')
 
 def launch_game(settings=False):
+    """The game opens on its launcher unless the player ticked its "Skip
+    launcher on boot"; settings (--settings) opens the launcher even then."""
     if not ready():raise SetupError('Complete first setup before playing.')
     # Absolute --game and --disc: the runtime looks in the current folder first.
-    subprocess.Popen([str(EXE),'--launcher' if settings else '--no-launcher','--game',str(ROOT/'game.toml'),
+    subprocess.Popen([str(EXE),*(['--launcher'] if settings else []),'--game',str(ROOT/'game.toml'),
         '--disc',str(ROOT/'disc/Tekken 3 (USA).cue')],cwd=ROOT)
 
 if __name__=='__main__':
@@ -338,6 +340,7 @@ if __name__=='__main__':
     parser.add_argument('--wait-for-parent',action='store_true')
     parser.add_argument('--text',action='store_true',help='plain progress lines (terminal setup)')
     parser.add_argument('--play',action='store_true',help='start the game once setup is complete')
+    parser.add_argument('--settings',action='store_true',help='with --play: open the launcher even if it is skipped on boot')
     args=parser.parse_args()
     TEXT=args.text
     # Parent assigns the process to a Job before releasing this handshake.
@@ -349,4 +352,4 @@ if __name__=='__main__':
         log_line(traceback.format_exc())
         emit('error',message=str(error) if isinstance(error,SetupError) else f'Setup stopped unexpectedly. See {STATE/"setup.log"}.')
         sys.exit(1)
-    if args.play:launch_game()
+    if args.play:launch_game(settings=args.settings)
