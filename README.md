@@ -125,6 +125,23 @@ Update the folder you already set up: no full reinstall. The setup keeps its too
 
 Don't move `.setup`, `workspace` or `build-release` to a new folder: they remember their location, and the build would fail there.
 
+## Disk space
+
+A finished install takes several GB, but only part of it is the game. Inside the `tekken3-expanded` folder:
+
+| Folder | What it is | Needed to play |
+|---|---|---|
+| `build-release` | The game, its mods and the imported TTT characters | Yes |
+| `disc` | The setup's copy of your Tekken 3 disc, read by the game | Yes |
+| `saves` | Your memory cards | Yes |
+| `.setup/venv`, `.setup/ready.json` | What lets **Setup Tekken 3** start the game directly | Yes |
+| `.setup/tools`, `.setup/downloads` | Windows only: the compiler and MAME the setup downloaded | No |
+| `workspace` | The TTT1 import's intermediate files (the result is in `build-release`) | No |
+| `generated` | The recompiled game code, used only to build it | No |
+| `.setup/disc-tracks` | Only for a single-`.bin` disc: its tracks, split for the setup | No |
+
+You can delete the folders marked **No** and keep playing. The cost comes with the next update that rebuilds the game: instead of about a minute, it runs the whole first setup again (about 17 minutes: downloads, TTT1 import and build), and it needs your disc image and `tektagt.zip` again. Keep your original game files either way.
+
 ## Troubleshooting
 
 - **"Setup needs attention"**: the reason is in `.setup/setup.log`, inside the `tekken3-expanded` folder (the folder is hidden on macOS: press Cmd+Shift+. in Finder). Please [open an issue](https://github.com/omarma/tekken3-expanded/issues) and attach that file, with your OS and Python version (`python3 --version`, or `py --version` on Windows).
