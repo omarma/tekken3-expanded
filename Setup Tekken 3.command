@@ -39,7 +39,7 @@ if "$venv/bin/python" -c 'import tkinter' 2>/dev/null; then
     exec "$venv/bin/python" launcher/easy_launcher.py "$@"
 fi
 if "$venv/bin/python" -c 'import sys; sys.path.insert(0, "launcher"); import setup_backend as b; sys.exit(not b.ready())'; then
-    exec "$venv/bin/python" -c 'import sys; sys.path.insert(0, "launcher"); import setup_backend as b; b.launch_game()'
+    exec "$venv/bin/python" -c 'import sys; sys.path.insert(0, "launcher"); import setup_backend as b; b.launch_game(settings="--settings" in sys.argv)' "$@"
 fi
 echo "Tekken 3 Expanded: first setup. Drag each file onto this window, then press Return."
 ask() { local answer; read -r -p "$1: " answer; answer=${answer%\'}; answer=${answer#\'}; answer=${answer%\ }; printf '%s' "${answer//\\ / }"; }
@@ -50,6 +50,7 @@ read -r -p "Add Jin's red lightning? [y/N] " jin
 args=(--text --play --disc "$disc" --ttt1 "$ttt1")
 [ -n "$tekken3" ] && args+=(--tekken3 "$tekken3")
 [[ "$jin" =~ ^[yYoO] ]] && args+=(--jin-red-lightning)
+[[ " $* " == *" --settings "* ]] && args+=(--settings)
 "$venv/bin/python" launcher/setup_backend.py "${args[@]}"
 status=$?
 [ $status -ne 0 ] && read -r -p "Setup stopped (log: .setup/setup.log). Press Return to close." _
