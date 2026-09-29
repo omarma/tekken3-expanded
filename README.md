@@ -100,7 +100,7 @@ On macOS without the setup window, drag each file onto the Terminal window when 
    git clone https://github.com/omarma/tekken3-expanded.git
    ```
 3. In the `tekken3-expanded` folder, double-click **Setup Tekken 3.command**, choose your files, tick the add-on if you want it, and start.
-4. When it is done, the game's launcher opens: click **PLAY**. Next time, **Setup Tekken 3.command** opens the launcher directly (see [The launcher](#the-launcher)).
+4. When it is done, the game's launcher opens: click **PLAY**. Next time, double-click **Tekken 3 Expanded** in the same folder (see [The launcher](#the-launcher)).
 
 ## Install on Windows
 
@@ -108,9 +108,11 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 2. `git clone https://github.com/omarma/tekken3-expanded.git`, or download the ZIP of the [latest release](https://github.com/omarma/tekken3-expanded/releases/latest) and extract **all** of it with [7-Zip](https://www.7-zip.org/). Do not start the setup from inside the ZIP (double-clicking it in the ZIP's window): Windows then runs it from a temporary folder holding only part of the files. Windows' own extractor can silently skip files whose path is too long: the setup then stops with a confusing error.
 3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
 4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
-5. When it is done, the game's launcher opens: click **PLAY**. Next time, **Setup Tekken 3.cmd** opens the launcher directly (see [The launcher](#the-launcher)).
+5. When it is done, the game's launcher opens: click **PLAY**. Next time, double-click **Tekken 3 Expanded.exe** in the same folder (see [The launcher](#the-launcher)). You can pin it to Start or send a shortcut to the desktop.
 
 ## The launcher
+
+The setup puts **Tekken 3 Expanded** (`.exe` on Windows, `.app` on macOS) next to the setup script: double-click it to play. **Setup Tekken 3** does the same, and runs the setup again when an update needs it.
 
 The game opens on its launcher, where you set the controls, the display and the audio, then click **PLAY**. To go straight into the game, tick **Skip launcher on boot**. To bring the launcher back, in Terminal or the command prompt, in the `tekken3-expanded` folder, run `"Setup Tekken 3.cmd" --settings` (macOS: `./"Setup Tekken 3.command" --settings`), then untick it.
 
@@ -139,8 +141,9 @@ A finished install takes several GB, but only part of it is the game. Inside the
 | `workspace` | The TTT1 import's intermediate files (the result is in `build-release`) | No |
 | `generated` | The recompiled game code: the game checks for it at every start | Yes |
 | `.setup/disc-tracks` | Only for a single-`.bin` disc: its tracks, split for the setup | No |
+| `build-release/**/CMakeFiles` | The build's intermediate files (`.o`, `.obj`) | No |
 
-You can delete the folders marked **No** and keep playing. The cost comes with the next update that rebuilds the game: instead of about a minute, it runs the whole first setup again (about 17 minutes: downloads, TTT1 import and build), and it needs your disc image and `tektagt.zip` again. Keep your original game files either way.
+At the end of the setup, it offers to delete what is marked **No** for you (it asks once; answer No and it won't ask again). You can also delete those yourself and keep playing. The cost comes with the next update that rebuilds the game: instead of about a minute, it runs the whole first setup again (about 17 minutes: downloads, TTT1 import and build), and it needs your disc image and `tektagt.zip` again. Keep your original game files either way.
 
 ## Troubleshooting
 
