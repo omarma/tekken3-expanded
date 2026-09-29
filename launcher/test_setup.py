@@ -81,6 +81,15 @@ class SetupTests(unittest.TestCase):
             with patch.object(backend,'ROOT',root),patch.object(backend,'STATE',state),patch.object(backend,'EXE',exe):
                 self.assertTrue(backend.ready());exe.write_bytes(b'changed');self.assertFalse(backend.ready())
 
+    def test_game_opens_on_its_launcher(self):
+        # No --no-launcher: the game's own "Skip launcher on boot" decides;
+        # --settings forces the launcher back on.
+        with patch.object(backend,'ready',return_value=True),patch.object(backend.subprocess,'Popen') as popen:
+            backend.launch_game();command=popen.call_args[0][0]
+            self.assertNotIn('--no-launcher',command);self.assertNotIn('--launcher',command)
+            backend.launch_game(settings=True);command=popen.call_args[0][0]
+            self.assertIn('--launcher',command);self.assertNotIn('--no-launcher',command)
+
     @unittest.skipUnless(os.name=='nt','Windows process ownership')
     def test_cancel_closes_owned_worker(self):
         job=ProcessJob()

@@ -100,7 +100,7 @@ On macOS without the setup window, drag each file onto the Terminal window when 
    git clone https://github.com/omarma/tekken3-expanded.git
    ```
 3. In the `tekken3-expanded` folder, double-click **Setup Tekken 3.command**, choose your files, tick the add-on if you want it, and start.
-4. When it is done, the game starts. Next time, **Setup Tekken 3.command** starts the game directly.
+4. When it is done, the game's launcher opens: click **PLAY**. Next time, **Setup Tekken 3.command** opens the launcher directly (see [The launcher](#the-launcher)).
 
 ## Install on Windows
 
@@ -108,6 +108,11 @@ On macOS without the setup window, drag each file onto the Terminal window when 
 2. `git clone https://github.com/omarma/tekken3-expanded.git`, or download the ZIP of the [latest release](https://github.com/omarma/tekken3-expanded/releases/latest) and extract **all** of it with [7-Zip](https://www.7-zip.org/). Do not start the setup from inside the ZIP (double-clicking it in the ZIP's window): Windows then runs it from a temporary folder holding only part of the files. Windows' own extractor can silently skip files whose path is too long: the setup then stops with a confusing error.
 3. Put the `tekken3-expanded` folder on a short path without special characters, outside OneDrive (for example `C:\Games\tekken3-expanded`): the build creates deep paths that Windows may refuse otherwise.
 4. Double-click **Setup Tekken 3.cmd**. The setup downloads its own compiler and MAME, then asks for your files (see [Where to put your game files](#where-to-put-your-game-files)).
+5. When it is done, the game's launcher opens: click **PLAY**. Next time, **Setup Tekken 3.cmd** opens the launcher directly (see [The launcher](#the-launcher)).
+
+## The launcher
+
+The game opens on its launcher, where you set the controls, the display and the audio, then click **PLAY**. To go straight into the game, tick **Skip launcher on boot**. To bring the launcher back, in Terminal or the command prompt, in the `tekken3-expanded` folder, run `"Setup Tekken 3.cmd" --settings` (macOS: `./"Setup Tekken 3.command" --settings`), then untick it.
 
 ## Updating to a new version
 
@@ -150,7 +155,7 @@ Don't move `.setup`, `workspace` or `build-release` to a new folder: they rememb
 
 On a Mac, player 2's buttons are F G V B (△ ○ □ ✕), 7 / 9 (L2 / R2) and P (Start). The keys are positions on a US keyboard: on an AZERTY keyboard, "A" is the key marked Q.
 
-To change them, open the launcher: in Terminal or the command prompt, in the `tekken3-expanded` folder, run `"Setup Tekken 3.cmd" --settings` (macOS: `./"Setup Tekken 3.command" --settings`). Set a player's input source to **Keyboard**, click **Configure**, then click a button and press the new key. Each button takes a second key or a mouse button in the next column. The keys are saved in `build-release/keybinds.ini`.
+To change them, open [the launcher](#the-launcher). Set a player's input source to **Keyboard**, click **Configure**, then click a button and press the new key. Each button takes a second key or a mouse button in the next column. The keys are saved in `build-release/keybinds.ini`.
 
 ---
 
