@@ -73,14 +73,29 @@
 #include "native_wide_present_authority.h"
 #include "native_wide_hole_fill_policy.h"
 #include "host_osd.h"
+#include "touch_controls.h"
 #include "host_time.h"
 #include "latency_ring.h"
+#ifdef PSX_HD_PNG
+#include "hd_png.h"
+#endif
 
 #include "psx_sdl.h"
 #if defined(PSX_SDL3)
 #include <SDL3/SDL_opengl.h>
 #else
 #include <SDL_opengl.h>
+#endif
+#if defined(__ANDROID__)
+/* Android links GL through libGLESv2, which has no glReadBuffer (a GLES 3
+ * entry point). Resolve it at run time like the other post-1.1 functions. */
+static void psxgl_read_buffer(GLenum mode)
+{
+    static void (*fn)(GLenum);
+    if (!fn) fn = (void (*)(GLenum))SDL_GL_GetProcAddress("glReadBuffer");
+    if (fn) fn(mode);
+}
+#define glReadBuffer psxgl_read_buffer
 #endif
 #include <math.h>
 #include <stddef.h>
@@ -122,6 +137,28 @@
 #define PSXGL_SRC1_ALPHA            0x8589
 #define PSXGL_SYNC_GPU_COMMANDS_COMPLETE 0x9117
 #define PSXGL_TIMEOUT_IGNORED       0xFFFFFFFFFFFFFFFFull
+#define PSXGL_TEXTURE_SWIZZLE_R     0x8E42
+#define PSXGL_TEXTURE_SWIZZLE_B     0x8E44
+#define PSXGL_RED                   0x1903
+#define PSXGL_BLUE                  0x1905
+#define PSXGL_RGBA_INTEGER          0x8D99
+#define PSXGL_IMPL_READ_FORMAT      0x8B9B
+#define PSXGL_IMPL_READ_TYPE        0x8B9A
+
+/* ---- OpenGL ES 3 (Android) -------------------------------------------------
+ * The same renderer runs on desktop GL 3.3 core and on OpenGL ES 3.0, the GL of
+ * phones. s_gles is read from the context at init; where the two differ:
+ *   - shaders: "#version 330" becomes "#version 300 es" with precisions. ES has
+ *     no noperspective (unless GL_NV_shader_noperspective_interpolation): affine
+ *     prims are drawn with w = 1, where smooth interpolation is the same thing;
+ *   - dual-source blending needs GL_EXT_blend_func_extended; without it the
+ *     semi-transparent batches take the two-pass path;
+ *   - no GL_BGRA transfers: uploads swap red and blue in the texture swizzle,
+ *     readbacks swap them on the CPU, RGB readbacks go through RGBA;
+ *   - R16UI readbacks use the read format the driver offers. */
+static int s_gles;
+static int s_gles_noperspective;
+static int s_dual_source = 1;
 
 #ifndef APIENTRY
 #define APIENTRY
@@ -150,6 +187,9 @@ typedef void   (APIENTRY *PFN_glUniform1f)(GLint, GLfloat);
 typedef void   (APIENTRY *PFN_glUniform2i)(GLint, GLint, GLint);
 typedef void   (APIENTRY *PFN_glUniform4i)(GLint, GLint, GLint, GLint, GLint);
 typedef void   (APIENTRY *PFN_glUniform4f)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
+typedef void   (APIENTRY *PFN_glUniform4fv)(GLint, GLsizei, const GLfloat *);
+typedef void   (APIENTRY *PFN_glUniform2f)(GLint, GLfloat, GLfloat);
+typedef void   (APIENTRY *PFN_glUniform2fv)(GLint, GLsizei, const GLfloat *);
 typedef void   (APIENTRY *PFN_glBlendColor)(GLfloat, GLfloat, GLfloat, GLfloat);
 typedef void   (APIENTRY *PFN_glBlendFuncSeparate)(GLenum, GLenum, GLenum, GLenum);
 typedef void   (APIENTRY *PFN_glBlendEquationSeparate)(GLenum, GLenum);
@@ -215,6 +255,9 @@ static PFN_glUniform1f         p_glUniform1f;
 static PFN_glUniform2i         p_glUniform2i;
 static PFN_glUniform4i         p_glUniform4i;
 static PFN_glUniform4f         p_glUniform4f;
+static PFN_glUniform4fv        p_glUniform4fv;
+static PFN_glUniform2f         p_glUniform2f;
+static PFN_glUniform2fv        p_glUniform2fv;
 static PFN_glBlendColor        p_glBlendColor;
 static PFN_glBlendFuncSeparate p_glBlendFuncSeparate;
 static PFN_glBlendEquationSeparate p_glBlendEquationSeparate;
@@ -272,6 +315,8 @@ static int load_modern_gl(void) {
     LOAD(p_glUniform1f, "glUniform1f");
     LOAD(p_glUniform2i, "glUniform2i"); LOAD(p_glUniform4i, "glUniform4i");
     LOAD(p_glUniform4f, "glUniform4f");
+    LOAD(p_glUniform4fv, "glUniform4fv"); LOAD(p_glUniform2f, "glUniform2f");
+    LOAD(p_glUniform2fv, "glUniform2fv");
     LOAD(p_glBlendColor, "glBlendColor");
     LOAD(p_glBlendFuncSeparate, "glBlendFuncSeparate");
     LOAD(p_glBlendEquationSeparate, "glBlendEquationSeparate");
@@ -280,7 +325,8 @@ static int load_modern_gl(void) {
     LOAD(p_glBindBuffer, "glBindBuffer");        LOAD(p_glBufferData, "glBufferData");
     LOAD(p_glVertexAttribPointer, "glVertexAttribPointer");
     LOAD(p_glEnableVertexAttribArray, "glEnableVertexAttribArray");
-    LOAD(p_glBindFragDataLocationIndexed, "glBindFragDataLocationIndexed");
+    if (s_gles) p_glBindFragDataLocationIndexed = NULL;   /* ES: in the shader */
+    else LOAD(p_glBindFragDataLocationIndexed, "glBindFragDataLocationIndexed");
     LOAD(p_glFenceSync, "glFenceSync");
     LOAD(p_glWaitSync, "glWaitSync");
     LOAD(p_glDeleteSync, "glDeleteSync");
@@ -423,19 +469,60 @@ static void skin_invalidate_maps(void) {
     for (int i = 0; i < HD_SKIN_COUNT; ++i) ++s_skin_map[i].generation;
 }
 
-static GLuint hd_load_image(const char *directory, const char *name, int repeat_y) {
-    char path[1200], magic[8]; uint32_t w = 0, h = 0; GLuint tex = 0;
-    snprintf(path, sizeof path, "%s/%s.rgba", directory, name);
+static int hd_size_ok(uint32_t w, uint32_t h) {
+    return w && h && w <= 8192 && h <= 8192 && (uint64_t)w*h <= 16777216;
+}
+
+/* <name>.rgba: HDRGBA01, then the raw RGBA pixels. */
+static unsigned char *hd_read_rgba(const char *path, uint32_t *w, uint32_t *h) {
+    char magic[8]; unsigned char *pixels = NULL;
     FILE *f = fopen(path, "rb");
-    if (!f) return 0;
-    if (fread(magic, 1, 8, f) != 8 || memcmp(magic, "HDRGBA01", 8) ||
-        fread(&w, 4, 1, f) != 1 || fread(&h, 4, 1, f) != 1 ||
-        !w || !h || w > 8192 || h > 8192 || (uint64_t)w*h > 16777216) {
-        fclose(f); return 0;
+    if (!f) return NULL;
+    if (fread(magic, 1, 8, f) == 8 && !memcmp(magic, "HDRGBA01", 8) &&
+        fread(w, 4, 1, f) == 1 && fread(h, 4, 1, f) == 1 && hd_size_ok(*w, *h)) {
+        size_t size = (size_t)*w * *h * 4;
+        pixels = (unsigned char *)malloc(size);
+        if (pixels && (fread(pixels, 1, size, f) != size || fgetc(f) != EOF)) {
+            free(pixels); pixels = NULL;
+        }
     }
-    size_t size = (size_t)w*h*4;
-    unsigned char *pixels = (unsigned char *)malloc(size);
-    if (pixels && fread(pixels, 1, size, f) == size && fgetc(f) == EOF) {
+    fclose(f); return pixels;
+}
+
+#ifdef PSX_HD_PNG
+/* <name>.png (Android only): what the APK ships instead of <name>.rgba, the
+ * same pixels (build_apk.py checks it), read in place from the APK. */
+static unsigned char *hd_read_png(const char *path, uint32_t *w, uint32_t *h) {
+    unsigned char *data = NULL, *pixels = NULL; long size;
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) == 0 && (size = ftell(f)) > 0 && size <= (64L << 20) &&
+        fseek(f, 0, SEEK_SET) == 0 && (data = (unsigned char *)malloc((size_t)size)) &&
+        fread(data, 1, (size_t)size, f) == (size_t)size) {
+        pixels = hd_png_decode(data, (size_t)size, w, h);
+        if (pixels && !hd_size_ok(*w, *h)) { free(pixels); pixels = NULL; }
+    }
+    free(data); fclose(f); return pixels;
+}
+#endif
+
+static GLuint hd_load_image(const char *directory, const char *name, int repeat_y) {
+    char path[1200]; uint32_t w = 0, h = 0; GLuint tex = 0;
+    const char *format = "rgba";
+    const Uint64 start = SDL_GetPerformanceCounter();
+    snprintf(path, sizeof path, "%s/%s.rgba", directory, name);
+    unsigned char *pixels = hd_read_rgba(path, &w, &h);
+#ifdef PSX_HD_PNG
+    if (!pixels) {
+        snprintf(path, sizeof path, "%s/%s.png", directory, name);
+        pixels = hd_read_png(path, &w, &h);
+        format = "png";
+    }
+#endif
+    if (pixels) {
+        size_t size = (size_t)w*h*4;
+        const double ms = (double)(SDL_GetPerformanceCounter() - start) * 1000.0 /
+                          (double)SDL_GetPerformanceFrequency();
         glGenTextures(1, &tex); glBindTexture(GL_TEXTURE_2D, tex);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -455,9 +542,10 @@ static GLuint hd_load_image(const char *directory, const char *name, int repeat_
             glTexParameterf(GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY_EXT */,
                             maximum < 8.0f ? maximum : 8.0f);
         }
-        fprintf(stdout, "HD textures: loaded %s %ux%u (%zu bytes)\n", name, w, h, size);
+        fprintf(stdout, "HD textures: loaded %s %ux%u (%zu bytes, %s read in %.1f ms)\n",
+                name, w, h, size, format, ms);
     }
-    free(pixels); fclose(f); return tex;
+    free(pixels); return tex;
 }
 
 static void hd_load_pack(void) {
@@ -970,6 +1058,69 @@ int gl_renderer_coh_get(uint64_t seq, GlCohEvent *out) {
 static GlPresEvent s_pres_ring[GL_PRES_RING_CAP];
 static uint64_t    s_pres_seq = 0;
 
+/* ---- pixel transfers that differ on OpenGL ES --------------------------- */
+/* RGB bytes (ES only guarantees RGBA reads). */
+static void read_rgb(GLint x, GLint y, GLsizei w, GLsizei h, uint8_t *dst) {
+    if (!s_gles) { glReadPixels(x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE, dst); return; }
+    uint8_t *tmp = (uint8_t *)malloc((size_t)w * h * 4);
+    if (!tmp) return;
+    glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, tmp);
+    for (size_t i = 0, n = (size_t)w * h; i < n; i++) {
+        dst[i * 3 + 0] = tmp[i * 4 + 0];
+        dst[i * 3 + 1] = tmp[i * 4 + 1];
+        dst[i * 3 + 2] = tmp[i * 4 + 2];
+    }
+    free(tmp);
+}
+/* BGRA bytes, as the CPU present buffers hold them. */
+static void read_bgra(GLint x, GLint y, GLsizei w, GLsizei h, void *dst) {
+    if (!s_gles) { glReadPixels(x, y, w, h, GL_BGRA, GL_UNSIGNED_BYTE, dst); return; }
+    glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, dst);
+    uint8_t *p = (uint8_t *)dst;
+    for (size_t i = 0, n = (size_t)w * h; i < n; i++) {
+        uint8_t r = p[i * 4]; p[i * 4] = p[i * 4 + 2]; p[i * 4 + 2] = r;
+    }
+}
+/* BGRA bytes into the bound GL_TEXTURE_2D. ES has no GL_BGRA: the bytes go
+ * in as RGBA and the texture swaps red and blue when sampled. */
+static void tex_image_bgra(int sub, GLint internal, GLsizei w, GLsizei h, const void *px) {
+    GLenum format = GL_BGRA;
+    if (s_gles) {
+        format = GL_RGBA;
+        internal = GL_RGBA8;
+        glTexParameteri(GL_TEXTURE_2D, PSXGL_TEXTURE_SWIZZLE_R, PSXGL_BLUE);
+        glTexParameteri(GL_TEXTURE_2D, PSXGL_TEXTURE_SWIZZLE_B, PSXGL_RED);
+    }
+    if (sub) glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, format, GL_UNSIGNED_BYTE, px);
+    else     glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, format, GL_UNSIGNED_BYTE, px);
+}
+/* Raw 1555 values from the bound R16UI framebuffer. ES guarantees only
+ * RGBA_INTEGER/UNSIGNED_INT for it; most drivers also offer RED_INTEGER/
+ * UNSIGNED_SHORT as their implementation read format, used when they do. */
+static void read_raw16(GLint x, GLint y, GLsizei w, GLsizei h, uint16_t *out) {
+    static int direct = -1;
+    if (!s_gles) direct = 1;
+    if (direct < 0) {
+        GLint format = 0, type = 0;
+        glGetIntegerv(PSXGL_IMPL_READ_FORMAT, &format);
+        glGetIntegerv(PSXGL_IMPL_READ_TYPE, &type);
+        direct = format == PSXGL_RED_INTEGER && type == GL_UNSIGNED_SHORT;
+        fprintf(stdout, "psxrecomp: GLES raw VRAM readback %s\n",
+                direct ? "direct (R16UI)" : "through RGBA_INTEGER");
+    }
+    if (direct) {
+        glPixelStorei(GL_PACK_ALIGNMENT, 2);
+        glReadPixels(x, y, w, h, PSXGL_RED_INTEGER, GL_UNSIGNED_SHORT, out);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        return;
+    }
+    uint32_t *tmp = (uint32_t *)malloc((size_t)w * h * 16);
+    if (!tmp) return;
+    glReadPixels(x, y, w, h, PSXGL_RGBA_INTEGER, GL_UNSIGNED_INT, tmp);
+    for (size_t i = 0, n = (size_t)w * h; i < n; i++) out[i] = (uint16_t)tmp[i * 4];
+    free(tmp);
+}
+
 static void pres_record(int path, int dx, int dy, int w, int h,
                         int lx, int ly, int lw, int lh) {
     /* The ring metadata stays always-on, but pixel probing must not: each
@@ -995,7 +1146,7 @@ static void pres_record(int path, int dx, int dy, int w, int h,
     if (probe_pixels && lw > 0 && lh > 0) {
         glReadBuffer(GL_BACK);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadPixels(lx + lw / 2, ly + lh / 2, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, px);
+        read_rgb(lx + lw / 2, ly + lh / 2, 1, 1, px);
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
     }
     e->px_r = px[0]; e->px_g = px[1]; e->px_b = px[2];
@@ -1006,8 +1157,7 @@ static void pres_record(int path, int dx, int dy, int w, int h,
     if (probe_pixels && (path == GL_PRES_VRAM) && w > 0 && h > 0 && s_hr_fbo) {
         p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_hr_fbo);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadPixels((dx + w / 2) * s_scale, (dy + h / 2) * s_scale,
-                     1, 1, GL_RGB, GL_UNSIGNED_BYTE, sp);
+        read_rgb((dx + w / 2) * s_scale, (dy + h / 2) * s_scale, 1, 1, sp);
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
         p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
         e->src_valid = 1;
@@ -1336,9 +1486,46 @@ static const char *STENCIL_FS =
     "void main(){ vec4 c=texelFetch(u_src,ivec2(gl_FragCoord.xy),0);\n"
     "  if(c.a<0.75) discard; frag=vec4(0.0); }\n";
 
+/* The GLSL ES 3.00 form of one of this file's "#version 330" shaders.
+ * Returns malloc'd source, or NULL to use `src` as it is. */
+static char *gles_shader_source(GLenum type, const char *src) {
+    static const char kDesktop[] = "#version 330\n";
+    if (!s_gles || strncmp(src, kDesktop, sizeof(kDesktop) - 1) != 0) return NULL;
+    const int frag = type == PSXGL_FRAGMENT_SHADER;
+    char head[512];
+    snprintf(head, sizeof head, "#version 300 es\n%s%s%s%s",
+             s_gles_noperspective
+                 ? "#extension GL_NV_shader_noperspective_interpolation : require\n"
+                 : "#define noperspective\n",
+             frag && s_dual_source ? "#extension GL_EXT_blend_func_extended : require\n" : "",
+             "precision highp float;\nprecision highp int;\n",
+             frag ? "precision highp sampler2D;\nprecision highp usampler2D;\n" : "");
+    const char *body = src + sizeof(kDesktop) - 1;
+    /* The textured program's second output: bound by layout index where
+     * dual-source exists, a plain variable where it does not. */
+    static const char kOutputs[] = "out vec4 frag; out vec4 blend_factor;";
+    const char *outputs = strstr(body, kOutputs);
+    const char *es_outputs = s_dual_source
+        ? "layout(location=0, index=0) out vec4 frag; layout(location=0, index=1) out vec4 blend_factor;"
+        : "out vec4 frag; vec4 blend_factor;";
+    size_t len = strlen(head) + strlen(body) + strlen(es_outputs) + 1;
+    char *out = (char *)malloc(len);
+    if (!out) return NULL;
+    if (outputs) {
+        snprintf(out, len, "%s%.*s%s%s", head, (int)(outputs - body), body, es_outputs,
+                 outputs + sizeof(kOutputs) - 1);
+    } else {
+        snprintf(out, len, "%s%s", head, body);
+    }
+    return out;
+}
+
 static GLuint compile_shader(GLenum type, const char *src) {
     GLuint s = p_glCreateShader(type);
+    char *es_src = gles_shader_source(type, src);
+    if (es_src) src = es_src;
     p_glShaderSource(s, 1, &src, NULL);
+    free(es_src);
     p_glCompileShader(s);
     GLint ok = 0; p_glGetShaderiv(s, PSXGL_COMPILE_STATUS, &ok);
     if (!ok) { char log[1024]; log[0]=0; p_glGetShaderInfoLog(s, sizeof log, NULL, log);
@@ -1348,10 +1535,27 @@ static GLuint compile_shader(GLenum type, const char *src) {
 }
 static GLuint build_program_ex(const char *vs, const char *fs, int dual_source) {
     GLuint v = compile_shader(PSXGL_VERTEX_SHADER, vs), f = compile_shader(PSXGL_FRAGMENT_SHADER, fs);
-    if (!v || !f) return 0;
+    if ((!v || !f) && s_gles && s_gles_noperspective) {
+        /* Some drivers list GL_NV_shader_noperspective_interpolation but
+         * their compiler rejects the qualifier (Adreno: "'noperspective' :
+         * Reserved word"). Go on without it, as on GPUs that lack it: both
+         * stages again, so their interpolation qualifiers match. */
+        fprintf(stdout, "psxrecomp: GL ES noperspective refused by the compiler; "
+                        "using perspective-correct interpolation\n");
+        s_gles_noperspective = 0;
+        if (v) p_glDeleteShader(v);
+        if (f) p_glDeleteShader(f);
+        v = compile_shader(PSXGL_VERTEX_SHADER, vs);
+        f = compile_shader(PSXGL_FRAGMENT_SHADER, fs);
+    }
+    if (!v || !f) {
+        if (v) p_glDeleteShader(v);
+        if (f) p_glDeleteShader(f);
+        return 0;
+    }
     GLuint p = p_glCreateProgram();
     p_glAttachShader(p, v); p_glAttachShader(p, f);
-    if (dual_source) {
+    if (dual_source && p_glBindFragDataLocationIndexed) {   /* ES: layout index instead */
         p_glBindFragDataLocationIndexed(p, 0, 0, "frag");
         p_glBindFragDataLocationIndexed(p, 0, 1, "blend_factor");
     }
@@ -1640,7 +1844,7 @@ static void ensure_cpu(void) {
     flush_cpu_upload();
     pack_flush();
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_raw_fbo);
-    glReadPixels(0, 0, VRAM_W, VRAM_H, PSXGL_RED_INTEGER, GL_UNSIGNED_SHORT, s_vram);
+    read_raw16(0, 0, VRAM_W, VRAM_H, s_vram);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     s_gpu_dirty = 0;
     coh_record(GL_COH_ENSURE, 0, 0, VRAM_W - 1, VRAM_H - 1);
@@ -2264,7 +2468,7 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
         int batch_semi;
         if (semi < 0)
             batch_semi = -1;
-        else if (!s_mask_check && semi != 2)
+        else if (!s_mask_check && semi != 2 && s_dual_source)
             batch_semi = 4;
         else
             batch_semi = semi;
@@ -2775,6 +2979,13 @@ static void depth24_clear_skipped_fb(void) {
 static void depth24_upload_policy(void) {
     int d24 = gpu_display_is_depth24();
     if (d24 && !s_depth24_skip_up) {
+        /* Entering 24-bit: from here on the scanout is read from the CPU
+         * mirror, which lags the FBO wherever the GPU last drew or filled.
+         * A movie that uploads only part of the band (Tekken 3: rows 8..231
+         * of 240) leaves the rest showing whatever the mirror held at the
+         * last readback — after a fight, the previous screens' pixels as
+         * RGB888 garbage. Read back once, before any RGB888 is CPU-only. */
+        ensure_cpu();
         s_up_nrects = 0;
         rect_clear(&s_d24_skip_fb);
     } else if (!d24 && s_depth24_skip_up) {
@@ -2790,16 +3001,16 @@ static void depth24_upload_policy(void) {
 
 static void glb_vram_write(int x,int y,uint16_t px){
     ++s_hd_map.generation; skin_invalidate_maps();
+    depth24_upload_policy();   /* before the CPU write: entry reads the FBO back */
     sw_vram_write(x,y,px);
-    depth24_upload_policy();
     /* Point pokes are never MDEC frames — always stage to FBO. */
     up_add(x & (VRAM_W-1), y & (VRAM_H-1), x & (VRAM_W-1), y & (VRAM_H-1));
 }
 static uint16_t glb_vram_read(int x,int y){ ensure_cpu(); return sw_vram_read(x,y); }
 static void glb_vram_transfer_in(int x,int y,int w,int h,const uint16_t *d){
     ++s_hd_map.generation; skin_invalidate_maps();
+    depth24_upload_policy();   /* before the CPU write: entry reads the FBO back */
     sw_vram_transfer_in(x,y,w,h,d);
-    depth24_upload_policy();
     if (s_depth24_skip_up && depth24_is_fb_transfer(x, y, w, h)) {
         /* Full-VRAM restore (boot_state): must stage into the FBO or every
          * texture page outside the movie band is missing after FMV→menus.
@@ -2832,10 +3043,10 @@ static void upload_present_tex(const uint32_t *pixels, int w, int h, int linear)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     if (w != s_present_w || h != s_present_h) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+        tex_image_bgra(0, GL_RGBA, w, h, pixels);
         s_present_w = w; s_present_h = h;
     } else {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+        tex_image_bgra(1, GL_RGBA, w, h, pixels);
     }
 }
 
@@ -2849,13 +3060,28 @@ void gl_renderer_set_display_aspect(int num, int den) {
     s_aspect_num = num; s_aspect_den = den;
 }
 
-/* Letterbox: largest num:den rect centered in the drawable. */
+/* Letterbox: largest num:den rect centered in the drawable. When that rect
+ * would reach into the safe-area insets (a phone's display cutout), the
+ * largest one centered in the safe area instead. The vertical insets are
+ * taken as the larger of the two, so the rect reads the same with the origin
+ * at the top (window) or the bottom (GL). */
 static void letterbox_rect_aspect(int ww, int wh, int num, int den,
                                   int *x, int *y, int *w, int *h) {
     int dw = ww, dh = (ww * den) / num;
     if (dh > wh) { dh = wh; dw = (wh * num) / den; }
     *x = (ww - dw) / 2;
     *y = (wh - dh) / 2;
+    *w = dw; *h = dh;
+    int l, t, r, b;
+    psx_safe_area_px(ww, wh, &l, &t, &r, &b);
+    if (b > t) t = b;
+    if (*x >= l && *x + dw <= ww - r && *y >= t) return;
+    const int sw = ww - l - r, sh = wh - 2 * t;
+    if (sw <= 0 || sh <= 0) return;
+    dw = sw; dh = (sw * den) / num;
+    if (dh > sh) { dh = sh; dw = (sh * num) / den; }
+    *x = l + (sw - dw) / 2;
+    *y = t + (sh - dh) / 2;
     *w = dw; *h = dh;
 }
 static void letterbox_rect(int ww, int wh, int *x, int *y, int *w, int *h) {
@@ -3101,6 +3327,21 @@ int gl_renderer_init_context(SDL_Window *win) {
     glDisable(GL_DEPTH_TEST); glDisable(GL_CULL_FACE);
     const char *ver = (const char *)glGetString(GL_VERSION);
     fprintf(stdout, "psxrecomp: OpenGL context created (%s)\n", ver ? ver : "?");
+    s_gles = ver && strstr(ver, "OpenGL ES") != NULL;
+    if (s_gles) {
+        const char *ext = (const char *)glGetString(0x1F03 /* GL_EXTENSIONS */);
+        s_dual_source = ext && strstr(ext, "GL_EXT_blend_func_extended") != NULL;
+        s_gles_noperspective = ext && strstr(ext, "GL_NV_shader_noperspective_interpolation") != NULL;
+        /* PSX_GLES_NO_EXT=1: act as a GPU with neither extension (tests the
+         * fallbacks many phones take). */
+        const char *no_ext = getenv("PSX_GLES_NO_EXT");
+        if (no_ext && no_ext[0] == '1') s_dual_source = s_gles_noperspective = 0;
+        fprintf(stdout, "psxrecomp: OpenGL ES renderer (dual-source blending %s, "
+                "noperspective %s)\n", s_dual_source ? "yes" : "no",
+                s_gles_noperspective ? "yes" : "no");
+    } else {
+        s_dual_source = 1;
+    }
 
     /* All-or-nothing: any missing entry point / failed shader / bad FBO means
      * the whole GL renderer is unavailable and the runtime stays on the pure
@@ -3375,6 +3616,13 @@ int gl_renderer_present_rect_dirty(int disp_x, int disp_y, int w, int h) {
     return present_dirty_test(disp_x, disp_y, disp_x + w - 1, disp_y + h - 1);
 }
 
+/* A 24-bit present can come before the movie's first CPU write (GP1(08h)
+ * switches first): run the entry readback here too. No-op once in 24-bit. */
+void gl_renderer_depth24_enter(void) {
+    if (!s_raster_ok || s_depth24_skip_up || !gpu_display_is_depth24()) return;
+    depth24_upload_policy();
+}
+
 void gl_renderer_flush_cpu_uploads(void) {
     if (!s_raster_ok) return;
     flush_flat_batch();
@@ -3395,9 +3643,7 @@ int gl_renderer_fbo_peek(int x, int y, int w, int h, uint16_t *out) {
     pack_flush();
     coh_record(GL_COH_PEEK, x, y, x + w - 1, y + h - 1);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_raw_fbo);
-    glPixelStorei(GL_PACK_ALIGNMENT, 2);
-    glReadPixels(x, y, w, h, PSXGL_RED_INTEGER, GL_UNSIGNED_SHORT, out);
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    read_raw16(x, y, w, h, out);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     return 1;
 }
@@ -3420,7 +3666,7 @@ int gl_renderer_vram_diff(uint32_t *count, int bbox[4],
     pack_flush();
     coh_record(GL_COH_DIFF, 0, 0, VRAM_W - 1, VRAM_H - 1);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_raw_fbo);
-    glReadPixels(0, 0, VRAM_W, VRAM_H, PSXGL_RED_INTEGER, GL_UNSIGNED_SHORT, tmp);
+    read_raw16(0, 0, VRAM_W, VRAM_H, tmp);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     uint32_t n = 0;
     int x0 = VRAM_W, y0 = VRAM_H, x1 = -1, y1 = -1, ns = 0;
@@ -3789,7 +4035,7 @@ static int glb_render_wide_display(uint32_t *out, int pitch, int base_x,
     }
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, fbo);
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glReadPixels(0, ry0, W, out_h, GL_BGRA, GL_UNSIGNED_BYTE, tmp);
+    read_bgra(0, ry0, W, out_h, tmp);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
 
     if (hole_fill)
@@ -3855,7 +4101,7 @@ static int glb_wide_dump_full(uint32_t *out, int cap_pixels, int *ow, int *oh,
     }
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, fbo);
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glReadPixels(0, 0, W, H, GL_BGRA, GL_UNSIGNED_BYTE, tmp);
+    read_bgra(0, 0, W, H, tmp);
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     if (hole_fill)
         psx_ws_resolve_margin_holes_argb(
@@ -4411,13 +4657,11 @@ static void gl_draw_osd_image(const uint32_t *px, int ow, int oh,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     if (s_osd_tw != ow || s_osd_th != oh) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, ow, oh, 0,
-                     GL_BGRA, GL_UNSIGNED_BYTE, px);
+        tex_image_bgra(0, GL_RGBA8, ow, oh, px);
         s_osd_tw = ow;
         s_osd_th = oh;
     } else {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ow, oh,
-                        GL_BGRA, GL_UNSIGNED_BYTE, px);
+        tex_image_bgra(1, GL_RGBA8, ow, oh, px);
     }
     if (vx + dw > ww) dw = ww - vx;
     if (vy + dh > wh) dh = wh - vy;
@@ -4503,13 +4747,126 @@ int gl_renderer_capture_gallery(uint8_t **rgb,int *width,int *height) {
  gl_draw_gallery(w,h);
  p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER,0);
  GLint pack=4;glGetIntegerv(GL_PACK_ALIGNMENT,&pack);glPixelStorei(GL_PACK_ALIGNMENT,1);
- glReadBuffer(GL_BACK);glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,pixels);
+ glReadBuffer(GL_BACK);read_rgb(0,0,w,h,pixels);
  glPixelStorei(GL_PACK_ALIGNMENT,pack);
  for(int y=0;y<h/2;y++) {
   uint8_t *a=pixels+(size_t)y*w*3,*b=pixels+(size_t)(h-1-y)*w*3;
   memcpy(row,a,(size_t)w*3);memcpy(a,b,(size_t)w*3);memcpy(b,row,(size_t)w*3);
  }
  free(row);*rgb=pixels;*width=w;*height=h;return 1;
+}
+
+/* ---- touch controls (touch_controls.c) ------------------------------------
+ * Each button is one small draw: the viewport covers its box and the fragment
+ * shader draws a rounded box, circle or convex polygon, its outline and the
+ * glyph inside (line segments, a ring, a grip of dots) with distance fields, so the buttons stay sharp
+ * at any size. Premultiplied alpha over the presented frame. */
+static const char *TOUCH_VS =
+    "#version 330\n"
+    "void main(){ vec2 p=vec2(gl_VertexID==1?3.0:-1.0, gl_VertexID==2?3.0:-1.0);\n"
+    "  gl_Position=vec4(p,0.0,1.0); }\n";
+static const char *TOUCH_FS =
+    "#version 330\n"
+    "uniform vec2 u_center; uniform vec2 u_half; uniform float u_radius;\n"
+    "uniform vec4 u_fill; uniform vec4 u_edge; uniform vec4 u_ink;\n"
+    "uniform float u_border; uniform float u_stroke; uniform float u_ring;\n"
+    "uniform int u_nseg; uniform vec4 u_segs[32];\n"
+    "uniform int u_npoly; uniform vec2 u_poly[8]; uniform float u_dots;\n"
+    "out vec4 frag;\n"
+    "float cover(float d){ return clamp(0.5-d,0.0,1.0); }\n"
+    "vec4 over(vec4 top, vec4 under){ return top+under*(1.0-top.a); }\n"
+    "void main(){\n"
+    "  vec2 p=gl_FragCoord.xy-u_center;\n"
+    "  vec2 q=abs(p)-u_half+vec2(u_radius);\n"
+    "  float d=length(max(q,0.0))+min(max(q.x,q.y),0.0)-u_radius;\n"
+    "  if(u_npoly>2){ vec2 m=vec2(0.0); for(int i=0;i<u_npoly;i++) m+=u_poly[i];\n"
+    "    m/=float(u_npoly); d=-1e6;\n"
+    "    for(int i=0;i<u_npoly;i++){ vec2 a=u_poly[i], b=u_poly[(i+1)%u_npoly];\n"
+    "      vec2 n=normalize(vec2(b.y-a.y,a.x-b.x)); if(dot(n,a-m)<0.0) n=-n;\n"
+    "      d=max(d,dot(p-a,n)); } }\n"
+    "  float body=cover(d);\n"
+    "  float edge=cover(abs(d+u_border*0.5)-u_border*0.5);\n"
+    "  float g=1e6;\n"
+    "  for(int i=0;i<u_nseg;i++){ vec2 a=u_segs[i].xy, b=u_segs[i].zw;\n"
+    "    vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-4),0.0,1.0);\n"
+    "    g=min(g,length(pa-ba*h)); }\n"
+    "  if(u_ring>0.0) g=min(g,abs(length(p)-u_ring));\n"
+    "  float ink=cover(g-u_stroke);\n"
+    "  if(u_dots>0.0){ vec2 k=mod(p,u_dots)-0.5*u_dots;\n"
+    "    ink=max(ink,0.45*cover(length(k)-0.2*u_dots)*cover(d+2.5*u_border)); }\n"
+    "  vec4 c=vec4(u_fill.rgb*u_fill.a,u_fill.a)*body;\n"
+    "  c=over(vec4(u_edge.rgb*u_edge.a,u_edge.a)*edge,c);\n"
+    "  c=over(vec4(u_ink.rgb*u_ink.a,u_ink.a)*ink*body,c);\n"
+    "  frag=c; }\n";
+static GLuint s_touch_prog = 0;
+static int    s_touch_failed = 0;
+static GLint  s_touch_u[14];
+static TouchDrawItem s_touch_items[TOUCH_MAX_ITEMS];
+
+static void gl_draw_touch_controls(int ww, int wh, GLuint vao) {
+    const int count = touch_controls_draw_list(ww, wh, s_touch_items, TOUCH_MAX_ITEMS);
+    if (count <= 0 || s_touch_failed || !p_glUniform4fv || !p_glUniform2f || !p_glUniform2fv) return;
+    if (!s_touch_prog) {
+        static const char *names[14] = { "u_center", "u_half", "u_radius", "u_fill", "u_edge",
+                                         "u_ink", "u_border", "u_stroke", "u_ring", "u_nseg",
+                                         "u_segs", "u_npoly", "u_poly", "u_dots" };
+        s_touch_prog = build_program(TOUCH_VS, TOUCH_FS);
+        if (!s_touch_prog) {
+            s_touch_failed = 1;
+            fprintf(stdout, "psxrecomp: the touch controls' shader failed on this GPU\n");
+            host_osd_push("Touch controls: this GPU refused their shader", 6000);
+            return;
+        }
+        for (int i = 0; i < 14; i++)
+            s_touch_u[i] = p_glGetUniformLocation(s_touch_prog, names[i]);
+    }
+    p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, 0);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    if (p_glBlendEquationSeparate)
+        p_glBlendEquationSeparate(PSXGL_FUNC_ADD, PSXGL_FUNC_ADD);
+    p_glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    p_glUseProgram(s_touch_prog);
+    p_glBindVertexArray(vao);
+    for (int i = 0; i < count; i++) {
+        const TouchDrawItem *it = &s_touch_items[i];
+        /* GL's origin is the bottom left: flip y for the centre and segments. */
+        const float cy = (float)wh - it->cy;
+        const int x0 = (int)floorf(it->cx - it->half_w - 2.0f);
+        const int y0 = (int)floorf(cy - it->half_h - 2.0f);
+        const int x1 = (int)ceilf(it->cx + it->half_w + 2.0f);
+        const int y1 = (int)ceilf(cy + it->half_h + 2.0f);
+        float segs[TOUCH_MAX_SEGS][4], poly[TOUCH_MAX_POLY][2];
+        for (int v = 0; v < it->poly_count; v++) {
+            poly[v][0] = it->poly[v][0]; poly[v][1] = -it->poly[v][1];
+        }
+        for (int s = 0; s < it->seg_count; s++) {
+            segs[s][0] = it->segs[s][0]; segs[s][1] = -it->segs[s][1];
+            segs[s][2] = it->segs[s][2]; segs[s][3] = -it->segs[s][3];
+        }
+        glViewport(x0, y0, x1 - x0, y1 - y0);
+        p_glUniform2f(s_touch_u[0], it->cx, cy);
+        p_glUniform2f(s_touch_u[1], it->half_w, it->half_h);
+        p_glUniform1f(s_touch_u[2], it->radius);
+        p_glUniform4fv(s_touch_u[3], 1, it->fill);
+        p_glUniform4fv(s_touch_u[4], 1, it->edge);
+        p_glUniform4fv(s_touch_u[5], 1, it->ink);
+        p_glUniform1f(s_touch_u[6], it->border);
+        p_glUniform1f(s_touch_u[7], it->stroke);
+        p_glUniform1f(s_touch_u[8], it->ring);
+        p_glUniform1i(s_touch_u[9], it->seg_count);
+        if (it->seg_count > 0) p_glUniform4fv(s_touch_u[10], it->seg_count, &segs[0][0]);
+        p_glUniform1i(s_touch_u[11], it->poly_count);
+        if (it->poly_count > 0) p_glUniform2fv(s_touch_u[12], it->poly_count, &poly[0][0]);
+        p_glUniform1f(s_touch_u[13], it->dots);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    p_glBindVertexArray(0);
+    p_glUseProgram(0);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, ww, wh);
 }
 
 /* Composite host toast + volume bar into the default framebuffer, then swap. */
@@ -4543,6 +4900,13 @@ static void gl_swap_with_osd(void) {
                 int vx = (ww > dw + margin) ? (ww - dw - margin) : margin;
                 int vy = (wh > dh) ? ((wh - dh) / 2) : margin;
                 gl_draw_osd_image(px, ow, oh, dw, dh, vx, vy, ww, wh);
+            }
+            {
+                GLuint vao = s_present_vao;
+                if (s_interp_ctx && SDL_GL_GetCurrentContext() == s_interp_ctx &&
+                    s_interp_thread_vao)
+                    vao = s_interp_thread_vao;
+                gl_draw_touch_controls(ww, wh, vao);
             }
         }
     }

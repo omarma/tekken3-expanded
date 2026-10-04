@@ -17,6 +17,7 @@
 #include <filesystem>
 
 #include "toml.hpp"
+#include "toml_depth_guard.h"
 
 extern "C" uint8_t* memory_get_ram_ptr(void);
 extern "C" { extern uint64_t s_frame_count; }
@@ -487,7 +488,7 @@ void load_tables_locked() {
         if (!de.is_regular_file()) continue;
         if (de.path().extension() != ".toml") continue;
         toml::value data;
-        try { data = toml::parse(de.path().string()); }
+        try { data = toml_depth_guard::parse(de.path()); }
         catch (...) { continue; }
         ++files;
         if (!data.contains("entry")) continue;
@@ -912,8 +913,16 @@ extern "C" void text_xlate_init(const char* project_root, const char* language) 
     else if (language && *language) g_lang = language;
     if (project_root && *project_root)
         g_dir = (fs::path(project_root) / "translations").string();
+    // The capture scans every dispatch's argument registers: ~9% of the main
+    // thread in a fight, ~18% while loading (measured on a 15 W Intel Mac).
+    // Keep it for projects that carry translations/ (authoring); elsewhere it
+    // only costs time. PSX_XLATE_CAPTURE=0/1 still forces either way.
     const char* capenv = std::getenv("PSX_XLATE_CAPTURE");
-    if (capenv && capenv[0] == '0') g_capture_on.store(false);
+    if (capenv && *capenv) g_capture_on.store(capenv[0] != '0');
+    else {
+        std::error_code ec;
+        g_capture_on.store(!g_dir.empty() && fs::is_directory(g_dir, ec));
+    }
     std::lock_guard<std::mutex> lk(g_mtx);
     load_tables_locked();
 }

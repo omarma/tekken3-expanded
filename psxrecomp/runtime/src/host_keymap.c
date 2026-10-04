@@ -18,7 +18,7 @@
 
 typedef struct HostKeyBind {
     int keycode;
-    int mods; /* KMOD_CTRL | KMOD_ALT | KMOD_SHIFT subset */
+    int mods; /* KMOD_CTRL | KMOD_ALT | KMOD_SHIFT | KMOD_GUI subset */
 } HostKeyBind;
 
 typedef struct HostKeyAction {
@@ -77,10 +77,28 @@ static void add_bind(HostKeymapAction action, int keycode, int mods) {
 }
 
 static void apply_defaults(void) {
-    if (s_actions[HOST_KEYMAP_VOLUME_UP].count == 0)
+    /* Keypad +/- and, for keyboards without a keypad, the main-row +/-
+     * (the '+' key is Shift+'=' on US layouts, a plain key on others). */
+    if (s_actions[HOST_KEYMAP_VOLUME_UP].count == 0) {
         add_bind(HOST_KEYMAP_VOLUME_UP, (int)SDLK_KP_PLUS, 0);
-    if (s_actions[HOST_KEYMAP_VOLUME_DOWN].count == 0)
+        add_bind(HOST_KEYMAP_VOLUME_UP, (int)SDLK_EQUALS, 0);
+        add_bind(HOST_KEYMAP_VOLUME_UP, (int)SDLK_PLUS, 0);
+        add_bind(HOST_KEYMAP_VOLUME_UP, (int)SDLK_PLUS, (int)KMOD_SHIFT);
+    }
+    if (s_actions[HOST_KEYMAP_VOLUME_DOWN].count == 0) {
         add_bind(HOST_KEYMAP_VOLUME_DOWN, (int)SDLK_KP_MINUS, 0);
+        add_bind(HOST_KEYMAP_VOLUME_DOWN, (int)SDLK_MINUS, 0);
+    }
+    /* Historic hardcoded hotkeys, kept when [KeyMap] does not set them. */
+    if (s_actions[HOST_KEYMAP_FULLSCREEN].count == 0) {
+        add_bind(HOST_KEYMAP_FULLSCREEN, (int)SDLK_RETURN, (int)KMOD_ALT);
+        add_bind(HOST_KEYMAP_FULLSCREEN, (int)'f', (int)KMOD_GUI);
+        add_bind(HOST_KEYMAP_FULLSCREEN, (int)'f', (int)KMOD_CTRL);
+    }
+    if (s_actions[HOST_KEYMAP_PAUSE].count == 0)
+        add_bind(HOST_KEYMAP_PAUSE, (int)'p', (int)KMOD_SHIFT);
+    if (s_actions[HOST_KEYMAP_TURBO].count == 0)
+        add_bind(HOST_KEYMAP_TURBO, (int)SDLK_TAB, 0);
 }
 
 /* Parse one "Ctrl+Alt+PageUp" token into key+mods. */
@@ -99,6 +117,18 @@ static void parse_one_token(HostKeymapAction action, char *tok) {
         } else if (starts_ci(tok, "Alt+")) {
             mods |= KMOD_ALT;
             tok += 4;
+        } else if (starts_ci(tok, "Cmd+")) {
+            mods |= KMOD_GUI; /* Command on macOS */
+            tok += 4;
+        } else if (starts_ci(tok, "Win+")) {
+            mods |= KMOD_GUI; /* Windows key; same modifier as Cmd+ */
+            tok += 4;
+        } else if (starts_ci(tok, "Super+")) {
+            mods |= KMOD_GUI; /* Linux Super key; same modifier */
+            tok += 6;
+        } else if (starts_ci(tok, "Meta+")) {
+            mods |= KMOD_GUI;
+            tok += 5;
         } else {
             break;
         }
@@ -131,6 +161,10 @@ static void parse_value(HostKeymapAction action, const char *value) {
 static HostKeymapAction action_for_key(const char *name) {
     if (ieq(name, "VolumeUp")) return HOST_KEYMAP_VOLUME_UP;
     if (ieq(name, "VolumeDown")) return HOST_KEYMAP_VOLUME_DOWN;
+    if (ieq(name, "Fullscreen")) return HOST_KEYMAP_FULLSCREEN;
+    if (ieq(name, "Pause")) return HOST_KEYMAP_PAUSE;
+    if (ieq(name, "Turbo")) return HOST_KEYMAP_TURBO;
+    if (ieq(name, "DisplayPerf")) return HOST_KEYMAP_DISPLAY_PERF;
     return HOST_KEYMAP_ACTION_COUNT;
 }
 
@@ -182,15 +216,47 @@ void host_keymap_load(const char *config_ini_path) {
     apply_defaults();
 }
 
+/* SDL reports left/right modifiers separately (KMOD_RSHIFT alone, ...) while
+ * a binding stores the combined mask (KMOD_SHIFT = both). Fold each pair to
+ * "either side held" so Shift/Ctrl/Alt/Cmd bindings match whichever side was
+ * pressed. */
+static int fold_mods(int mod) {
+    int out = 0;
+    if (mod & (int)KMOD_SHIFT) out |= (int)KMOD_SHIFT;
+    if (mod & (int)KMOD_CTRL)  out |= (int)KMOD_CTRL;
+    if (mod & (int)KMOD_ALT)   out |= (int)KMOD_ALT;
+    if (mod & (int)KMOD_GUI)   out |= (int)KMOD_GUI;
+    return out;
+}
+
 int host_keymap_match(HostKeymapAction action, int keycode, int mod) {
     const HostKeyAction *a;
-    const int relevant = (int)(KMOD_CTRL | KMOD_ALT | KMOD_SHIFT);
     int i;
     if (action < 0 || action >= HOST_KEYMAP_ACTION_COUNT) return 0;
     a = &s_actions[action];
     for (i = 0; i < a->count; i++) {
         if (a->binds[i].keycode != keycode) continue;
-        if ((mod & relevant) == a->binds[i].mods) return 1;
+        if (fold_mods(mod) == a->binds[i].mods) return 1;
+    }
+    return 0;
+}
+
+int host_keymap_is_down(HostKeymapAction action) {
+    const HostKeyAction *a;
+    const Uint8 *keys;
+    int i;
+    if (action < 0 || action >= HOST_KEYMAP_ACTION_COUNT) return 0;
+    keys = (const Uint8 *)SDL_GetKeyboardState(NULL);
+    if (!keys) return 0;
+    a = &s_actions[action];
+    for (i = 0; i < a->count; i++) {
+#if defined(PSX_SDL3)
+        SDL_Scancode sc = SDL_GetScancodeFromKey((SDL_Keycode)a->binds[i].keycode, NULL);
+#else
+        SDL_Scancode sc = SDL_GetScancodeFromKey((SDL_Keycode)a->binds[i].keycode);
+#endif
+        if (sc == SDL_SCANCODE_UNKNOWN || !keys[sc]) continue;
+        if (fold_mods((int)SDL_GetModState()) == a->binds[i].mods) return 1;
     }
     return 0;
 }

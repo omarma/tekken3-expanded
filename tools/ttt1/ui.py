@@ -27,7 +27,7 @@ def indexed(image, colors):
     pixels = bytes(0 if a < 128 else i + 1 for i, a in zip(q.tobytes(), image.getchannel('A').tobytes()))
     return words, pixels
 
-def ps1_tim(image, banded=False):
+def ps1_tim(image, banded=False, colors=256):
     image = image.resize((126 if banded else 32, image.height), Image.Resampling.NEAREST)
     if banded:
         palette, pixels = [], bytearray()
@@ -36,7 +36,8 @@ def ps1_tim(image, banded=False):
             palette.extend(words)
             pixels.extend(indices)
     else:
-        palette, pixels = indexed(image, 256)
+        palette, pixels = indexed(image, colors)
+        palette += [0] * (256 - len(palette))
     # Destination is overridden by the native portrait uploader. Icons are
     # uploaded explicitly into the experimental roster's reserved VRAM area.
     return (struct.pack('<III4H', 16, 9, 524, 0, 480, 256, 1)
@@ -45,9 +46,11 @@ def ps1_tim(image, banded=False):
             + pixels)
 
 
-def pack(images: dict) -> tuple[bytes, list[bytes]]:
-    """(the .jui pack, the five TIMs) from the SPECS images."""
-    payloads = [ps1_tim(images[name], name == 'portrait') for name, *_ in SPECS]
+def pack(images: dict, tile_colors=256) -> tuple[bytes, list[bytes]]:
+    """(the .jui pack, the five TIMs) from the SPECS images. tile_colors < 256
+    leaves the tiles' palette entries past it at zero (Panda and Tiger: their
+    tiles take half a palette row, tools/ttt1_panda_tiger.py)."""
+    payloads = [ps1_tim(images[name], name == 'portrait', tile_colors) for name, *_ in SPECS]
     blob = bytearray(struct.pack('<4I', 0x3149554a, 1, len(SPECS), 0) + bytes(len(SPECS) * 8))
     for i, p in enumerate(payloads):
         struct.pack_into('<2I', blob, 16 + i * 8, len(blob), len(p)); blob.extend(p)

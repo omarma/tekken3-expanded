@@ -326,6 +326,31 @@ static int roster_slot_from_cursor(const Tekken3SelectorPacket *p) {
     return dx / 35;
 }
 
+/* A locked roster centres its second row: with an odd number of fighters
+ * there (1, 3, 5, 7 or 9 of them, e.g. Kuma alone at x 168, y 398) the cells
+ * sit at 168 + 35k, off the 35px grid of the first row. Their faces, cursor
+ * halves (cell - 2, cell + 16) and 1P/2P labels (cell - 2, cell + 18) missed
+ * the slot rules, so the wide surface clipped them to the guest's draw area
+ * (y <= 305): empty cells in 16:9 only. */
+static int roster_half_step(int32_t x, int32_t centre) {
+    int32_t d = x - centre;
+    return d >= -4 * 35 && d <= 4 * 35 && d % 35 == 0;
+}
+
+static int roster_centred_cell(const Tekken3SelectorPacket *p,
+                               int32_t display_width) {
+    int32_t cx = display_width / 2 - 16;
+    if (p->opcode == 0x65u)
+        return p->width == 32 && p->height > 0 && roster_half_step(p->x, cx) &&
+               p->y >= 336 && p->y + p->height <= 456;
+    if (p->opcode != 0x64u) return 0;
+    if (p->width == 18 && (p->y == 334 || p->y == 363 || p->y == 396))
+        return roster_half_step(p->x + 2, cx) || roster_half_step(p->x - 16, cx);
+    if (p->width == 20 && (p->y == 328 || p->y == 363 || p->y == 390))
+        return roster_half_step(p->x + 2, cx) || roster_half_step(p->x - 18, cx);
+    return 0;
+}
+
 static Tekken3SelectorPlacement other_menu_place(
     const Tekken3SelectorFrame *f, const Tekken3SelectorPacket *p, int32_t margin) {
     Tekken3SelectorPlacement out = {0};
@@ -622,6 +647,11 @@ Tekken3SelectorPlacement tekken3_selector_place(
         r.role = TEKKEN3_SELECTOR_ROSTER;
         r.group_id = (uint32_t)(4 + slot);
         r.sidecar_dx = roster_delta(slot, 10, margin);
+        r.unclipped_sidecar = margin > 0;
+        return r;
+    } else if (roster_centred_cell(packet, frame->display_width)) {
+        r.role = TEKKEN3_SELECTOR_ROSTER;
+        r.group_id = 17;
         r.unclipped_sidecar = margin > 0;
         return r;
     } else {

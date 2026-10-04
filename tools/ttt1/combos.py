@@ -51,6 +51,10 @@ PRESS, GAP = 4, 12                  # images par appui, delai de depart entre de
 # Pages dont l'invite partage les coups dans TTT1 (movelist.PAGES) ; Devil a
 # aussi les chaines de Kazuya. Tetsujin copie un personnage au hasard.
 BORROW = {'devil': ['kazuya'], 'angel': ['kazuya']}
+# Natives that Unknown never takes (tools/ttt1_import.py, natives section):
+# their own pack in natives/<key>, probed on Unknown carrying it, as the
+# other natives' moves were (unknown@paul...).
+NATIVES = ('kuma', 'ogre', 'gunjack', 'trueogre')
 
 DIRS = {'u': 1, 'f': 2, 'd': 4, 'b': 8, 'u/f': 3, 'd/f': 6, 'd/b': 12, 'u/b': 9}
 BUTTON = {1: 8, 2: 1, 3: 4, 4: 2}   # bouton Tekken -> bit de l'entree du jeu
@@ -83,9 +87,26 @@ def parse(command):
 def pack_prefix(key):
     """(dossier guest, prefixe) d'une cle : 'kazuya' -> Kazuya-TTT1, 'unknown@paul'
     -> Unknown@Paul-TTT1 (le moveset d'un donneur, Tetsujin / Unknown)."""
+    if key in NATIVES: return WORK / 'natives' / key, f'{key.capitalize()}-TTT1'
     guest, _, donor = key.partition('@')
     name = guest.capitalize() + ('@' + donor.capitalize() if donor else '')
     return WORK / guest / 'guest', f'{name}-TTT1'
+
+
+def stage_native(exe, key):
+    """Le moveset du natif `key` comme donneur d'Unknown dans le catalogue du
+    build de test (exe/mods/ttt1) : Unknown@<Nom>-TTT1-*, ligne de donors.txt."""
+    import shutil
+    folder, prefix = pack_prefix(key)
+    cat, name = Path(exe).parent / 'mods/ttt1', key.capitalize()
+    for f in ('combat.jmv', 'tables.jst', 'idle.poses', 'sfx.jus'):
+        shutil.copyfile(folder / f'{prefix}-{f}', cat / f'Unknown@{name}-TTT1-{f}')
+    moveset = json.loads((folder / 'import-report.json').read_text())['keys']['moveset']
+    # First donor: the runtime reads at most 24 (DONOR_MAX), Unknown has 23.
+    donors = cat / 'Unknown-TTT1-donors.txt'
+    lines = [l for l in donors.read_text().splitlines() if l.split()[:1] not in ([n.capitalize()] for n in NATIVES)]
+    head = 1 if lines[:1] == ['switch button'] else 0
+    donors.write_text('\n'.join(lines[:head] + [f'{name} {moveset}'] + lines[head:]) + '\n')
 
 
 def candidates(key):
@@ -289,7 +310,8 @@ class Game:
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0)); self.port = s.getsockname()[1]
         env = dict(os.environ, SDL_AUDIO_DRIVER='dummy', TEKKEN3_TTT1_ROSTER='1',
-                   TEKKEN3_GUEST_NATIVE='1', TEKKEN3_GUEST_UNVERIFIED='1')
+                   TEKKEN3_GUEST_NATIVE='1', TEKKEN3_GUEST_UNVERIFIED='1',
+                   TEKKEN3_NATIVE_MOVES='0')            # Jin picked without the MOVESET card
         for k in ('TEKKEN3_TTT1_ASSETS', 'TEKKEN3_JUN_ASSETS', 'TEKKEN3_GUEST', 'TEKKEN3_GUEST_P2'): env.pop(k, None)
         if guest:
             env['TEKKEN3_GUEST'], _, donor = guest.partition('@')
@@ -602,7 +624,7 @@ def fit(p, steps, log):
     return gaps, moves, steps
 
 
-def probe(key, port=None, only=None, exe=ROOT / 'build-opt-dbg/Tekken_3_Recompiled', command=None, tag=None, dropped=False):
+def probe(key, port=None, only=None, exe=ROOT / 'build-opt-dbg/Tekken_3_Expanded', command=None, tag=None, dropped=False):
     """<cle> invite, ou 't3:jin' (temoin natif, avec command=...)."""
     OUT.mkdir(parents=True, exist_ok=True)
     native = key.startswith('t3:')
@@ -615,7 +637,8 @@ def probe(key, port=None, only=None, exe=ROOT / 'build-opt-dbg/Tekken_3_Recompil
         result = json.loads(saved.read_text())       # --only / --dropped : on remplace ces combos-la
         if dropped: keep = {c['command'] for c in result['combos'] if c['moves']}
         result['combos'] = [c for c in result['combos'] if (only and only not in c['name']) or c['command'] in keep]
-    guest = None if native else key
+    guest = None if native else f'unknown@{key}' if key in NATIVES else key
+    if key in NATIVES and not port: stage_native(exe, key)
     work = RUN / (tag or key.replace(':', '-'))
     g = Game(None, guest, work, port) if port else start(exe, guest, work)
     try:
@@ -657,7 +680,7 @@ def probe(key, port=None, only=None, exe=ROOT / 'build-opt-dbg/Tekken_3_Recompil
     return result
 
 
-def check(key, exe=ROOT / 'build-opt-dbg/Tekken_3_Recompiled', only=None, p2=False):
+def check(key, exe=ROOT / 'build-opt-dbg/Tekken_3_Expanded', only=None, p2=False):
     """En jeu : COMBO TRAINING s'ouvre-t-il pour l'invite, et la
     demonstration de chaque combo realise-t-elle la liste attendue ?
     (le paquet doit etre dans mods/ttt1 du build)."""
@@ -808,7 +831,7 @@ def main():
             running = [(k, p) for k, p in running if p.poll() is None]
     elif cmd == 'probe':
         port = next((int(k[7:]) for k in keys if k.startswith('--port=')), None)
-        exe = next((Path(k[6:]) for k in keys if k.startswith('--exe=')), ROOT / 'build-opt-dbg/Tekken_3_Recompiled')
+        exe = next((Path(k[6:]) for k in keys if k.startswith('--exe=')), ROOT / 'build-opt-dbg/Tekken_3_Expanded')
         only = next((k[7:] for k in keys if k.startswith('--only=')), None)
         command = next((k[6:] for k in keys if k.startswith('--cmd=')), None)
         tag = next((k[6:] for k in keys if k.startswith('--tag=')), None)
@@ -816,7 +839,7 @@ def main():
     elif cmd == 'trace':
         # trace <cle> "<commande>" <delai,delai,...> [...] : chaque changement de coup
         key, commands = keys[0], keys[1].split(';')
-        g = start(ROOT / 'build-opt-dbg/Tekken_3_Recompiled', key, RUN / f'trace-{key}')
+        g = start(ROOT / 'build-opt-dbg/Tekken_3_Expanded', key, RUN / f'trace-{key}')
         try:
             p = Probe(g)
             for command, spec in [(c, sp) for c in commands for sp in keys[2:]]:

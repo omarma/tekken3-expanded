@@ -394,6 +394,33 @@ void dirty_ram_clear_image_baseline(void) {
 static uint8_t *text_ref_image = NULL;
 static uint32_t text_ref_lo = 0, text_ref_hi = 0;
 static uint32_t text_modified_bitmap[DIRTY_RAM_BITMAP_WORDS];
+/* Validation cache for dirty_ram_text_native_ok_ranges_from. Every change of a
+ * text byte bumps its page's generation (guest/DMA stores through
+ * text_guard_note_write, executable-range marks, bless); bulk RAM rewrites
+ * (register, restore, boot reset) bump the epoch. A function whose ranges were
+ * validated at the same generation sum and epoch skips the byte compare, which
+ * was ~10% of the main thread in a fight and ~20% while loading. One cached hit
+ * in TEXT_VCACHE_AUDIT still runs the full compare; a disagreement means a
+ * write path the generations do not see, so the cache is dropped and logged. */
+static uint32_t text_page_gen[DIRTY_RAM_PAGE_COUNT];
+static uint32_t text_vcache_epoch = 1;
+#define TEXT_VCACHE_SIZE  4096u
+#define TEXT_VCACHE_AUDIT 64u
+typedef struct {
+    const uint32_t *ranges;
+    uint32_t exec_pc, gen_sum, epoch;
+} TextVCacheEntry;
+static TextVCacheEntry text_vcache[TEXT_VCACHE_SIZE];
+static uint32_t text_vcache_audit_tick;
+static uint64_t g_text_vcache_hits, g_text_vcache_misses, g_text_vcache_audit_fails;
+
+static inline void text_page_gen_bump_range(uint32_t phys, uint32_t len) {
+    if (len == 0 || phys >= RAM_SIZE) return;
+    uint32_t end = phys + len - 1u;
+    if (end >= RAM_SIZE || end < phys) end = RAM_SIZE - 1u;
+    for (uint32_t pg = phys >> DIRTY_RAM_PAGE_SHIFT; pg <= end >> DIRTY_RAM_PAGE_SHIFT; pg++)
+        text_page_gen[pg]++;
+}
 static uint32_t text_diverged_bitmap[DIRTY_RAM_BITMAP_WORDS];
 static uint64_t g_text_native_blocked = 0;
 static uint32_t g_text_diverged_pages = 0;
@@ -413,6 +440,7 @@ void dirty_ram_register_text_image(uint32_t phys_lo, const uint8_t *bytes,
     text_ref_hi = phys_lo + len;
     memset(text_modified_bitmap, 0, sizeof(text_modified_bitmap));
     memset(text_diverged_bitmap, 0, sizeof(text_diverged_bitmap));
+    text_vcache_epoch++;
     g_text_native_blocked = 0;
     g_text_diverged_pages = 0;
     g_text_exact_mismatches = 0;
@@ -435,6 +463,11 @@ static inline void text_guard_note_write(uint32_t phys, uint32_t val, int size) 
         uint32_t page = phys >> DIRTY_RAM_PAGE_SHIFT;
         text_modified_bitmap[page >> 5] |= (1u << (page & 31u));
     }
+    /* Any store that may change live text invalidates cached validations of
+     * its page (a store back to the reference bytes too: the cache only keeps
+     * successes, so this is merely conservative). */
+    if (memcmp(ram + phys, buf, (size_t)size) != 0)
+        text_page_gen[phys >> DIRTY_RAM_PAGE_SHIFT]++;
 }
 
 int dirty_ram_text_native_ok(uint32_t phys) {
@@ -473,34 +506,53 @@ int dirty_ram_text_native_ok(uint32_t phys) {
 /* A compiled continuation can loop back into instructions before its resume
  * PC. Check the reference (the code the compiled body actually runs), not the
  * patched live instructions. An indirect non-return jump is conservatively
- * treated as a possible backedge. Calls validate their callee separately. */
-static int text_continuation_may_revisit(const uint32_t *ranges,
-                                        uint32_t count, uint32_t at) {
-    for (uint32_t i = 0; i < count; i++) {
-        uint32_t lo = ranges[i * 2u] & 0x1FFFFFFFu;
-        uint32_t end = lo + ranges[i * 2u + 1u];
-        for (uint32_t pc = lo < at ? at : lo; pc < end; pc += 4u) {
-            uint32_t w;
-            memcpy(&w, text_ref_image + pc - text_ref_lo, sizeof w);
-            uint32_t op = w >> 26, target;
-            if (op == 0 && (w & 63u) == 8u && ((w >> 21) & 31u) != 31u)
-                return 1; /* jr register: dynamic switch/local jump. */
-            if (op == 2u) {
-                target = ((pc + 4u) & 0xF0000000u) | ((w & 0x03FFFFFFu) << 2);
-            } else if (op == 1u || (op >= 4u && op <= 7u) ||
-                       (op >= 16u && op <= 18u && ((w >> 21) & 31u) == 8u)) {
-                target = pc + 4u + (int32_t)(int16_t)(w & 65535u) * 4;
-            } else continue;
-            target &= 0x1FFFFFFFu;
-            if (target >= at) continue;
-            for (uint32_t j = 0; j < count; j++) {
-                uint32_t start = ranges[j * 2u] & 0x1FFFFFFFu;
-                if (target >= start && target - start < ranges[j * 2u + 1u])
-                    return 1;
-            }
-        }
+ * treated as a possible backedge. Calls validate their callee separately.
+ *
+ * Only a branch that can reach a CHANGED instruction matters: the reachable
+ * low bound starts at the resume PC and follows every backward branch target
+ * inside the function to a fixed point (a branch in newly reached code may go
+ * further back). A wait loop that jumps back a few instructions, below the
+ * resume PC but above the patched word, keeps its compiled body (Tekken 3's
+ * model loader polls 0x8006C23C that way, ~1M times a second, while a mod
+ * patches the table address earlier in the same function). */
+static int text_in_ranges(const uint32_t *ranges, uint32_t count, uint32_t pc) {
+    for (uint32_t j = 0; j < count; j++) {
+        uint32_t start = ranges[j * 2u] & 0x1FFFFFFFu;
+        if (pc >= start && pc - start < ranges[j * 2u + 1u]) return 1;
     }
     return 0;
+}
+
+static int text_continuation_may_revisit(const uint32_t *ranges,
+                                        uint32_t count, uint32_t at,
+                                        uint32_t last_changed) {
+    uint32_t reach = at;
+    for (;;) {
+        uint32_t lowest = reach;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t lo = ranges[i * 2u] & 0x1FFFFFFFu;
+            uint32_t end = lo + ranges[i * 2u + 1u];
+            for (uint32_t pc = lo < reach ? reach : lo; pc < end; pc += 4u) {
+                uint32_t w;
+                memcpy(&w, text_ref_image + pc - text_ref_lo, sizeof w);
+                uint32_t op = w >> 26, target;
+                if (op == 0 && (w & 63u) == 8u && ((w >> 21) & 31u) != 31u)
+                    return 1; /* jr register: dynamic switch/local jump. */
+                if (op == 2u) {
+                    target = ((pc + 4u) & 0xF0000000u) | ((w & 0x03FFFFFFu) << 2);
+                } else if (op == 1u || (op >= 4u && op <= 7u) ||
+                           (op >= 16u && op <= 18u && ((w >> 21) & 31u) == 8u)) {
+                    target = pc + 4u + (int32_t)(int16_t)(w & 65535u) * 4;
+                } else continue;
+                target &= 0x1FFFFFFFu;
+                if (target < lowest && text_in_ranges(ranges, count, target))
+                    lowest = target;
+            }
+        }
+        if (lowest <= last_changed) return 1;
+        if (lowest == reach) return 0;
+        reach = lowest;
+    }
 }
 
 /* Validate the exact instruction ranges emitted for a static game function.
@@ -515,13 +567,14 @@ static int text_continuation_may_revisit(const uint32_t *ranges,
  * that never fetches the patched bytes. However, a changed prefix is safe to
  * skip only if the compiled continuation cannot branch back into that prefix.
  * In particular, selector loops must not revert to the old grid on player 2. */
-int dirty_ram_text_native_ok_ranges_from(const uint32_t *lo_len_pairs,
-                                         uint32_t count,
-                                         uint32_t exec_pc) {
+static int text_native_ok_ranges_uncached(const uint32_t *lo_len_pairs,
+                                          uint32_t count,
+                                          uint32_t exec_pc) {
     if (!text_ref_image || !lo_len_pairs || count == 0) return 0;
     uint32_t at = exec_pc & 0x1FFFFFFFu;
     if (at & 3u) return 0;
     int changed_prefix = 0;
+    uint32_t last_changed = 0;   /* highest changed word below the resume PC */
     int any = 0;
     /* Validate every range before inspecting branch targets or clipping. */
     for (uint32_t i = 0; i < count; i++) {
@@ -535,11 +588,18 @@ int dirty_ram_text_native_ok_ranges_from(const uint32_t *lo_len_pairs,
         }
         if (phys < at) {
             uint32_t prefix = len < at - phys ? len : at - phys;
-            if (memcmp(ram + phys, text_ref_image + phys - text_ref_lo, prefix))
+            if (memcmp(ram + phys, text_ref_image + phys - text_ref_lo, prefix)) {
                 changed_prefix = 1;
+                uint32_t off = prefix & ~3u;
+                while (off >= 4u && !memcmp(ram + phys + off - 4u,
+                                            text_ref_image + phys - text_ref_lo + off - 4u, 4u))
+                    off -= 4u;
+                if (off >= 4u && phys + off - 4u > last_changed) last_changed = phys + off - 4u;
+            }
         }
     }
-    if (changed_prefix && text_continuation_may_revisit(lo_len_pairs, count, at)) {
+    if (changed_prefix &&
+        text_continuation_may_revisit(lo_len_pairs, count, at, last_changed)) {
         g_text_native_blocked++;
         return 0;
     }
@@ -574,6 +634,61 @@ int dirty_ram_text_native_ok_ranges_from(const uint32_t *lo_len_pairs,
         return 0;
     }
     return 1;
+}
+
+static uint32_t text_ranges_gen_sum(const uint32_t *lo_len_pairs, uint32_t count) {
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t phys = lo_len_pairs[i * 2u] & 0x1FFFFFFFu;
+        uint32_t len = lo_len_pairs[i * 2u + 1u];
+        if (len == 0 || phys >= RAM_SIZE || len > RAM_SIZE - phys) return 0xFFFFFFFFu;
+        for (uint32_t pg = phys >> DIRTY_RAM_PAGE_SHIFT;
+             pg <= (phys + len - 1u) >> DIRTY_RAM_PAGE_SHIFT; pg++)
+            sum += text_page_gen[pg] * (2u * pg + 1u);
+    }
+    return sum;
+}
+
+int dirty_ram_text_native_ok_ranges_from(const uint32_t *lo_len_pairs,
+                                         uint32_t count,
+                                         uint32_t exec_pc) {
+    if (!text_ref_image || !lo_len_pairs || count == 0) return 0;
+    uint32_t h = (uint32_t)(((uintptr_t)lo_len_pairs >> 3) ^ (exec_pc >> 2) * 2654435761u)
+                 & (TEXT_VCACHE_SIZE - 1u);
+    TextVCacheEntry *e = &text_vcache[h];
+    uint32_t sum = text_ranges_gen_sum(lo_len_pairs, count);
+    if (e->ranges == lo_len_pairs && e->exec_pc == exec_pc &&
+        e->epoch == text_vcache_epoch && e->gen_sum == sum) {
+        if (++text_vcache_audit_tick % TEXT_VCACHE_AUDIT != 0) {
+            g_text_vcache_hits++;
+            return 1;
+        }
+        if (text_native_ok_ranges_uncached(lo_len_pairs, count, exec_pc)) {
+            g_text_vcache_hits++;
+            return 1;
+        }
+        /* The cache vouched for bytes that no longer match: some write path
+         * bypassed the generations. Drop everything and say so once. */
+        if (g_text_vcache_audit_fails++ == 0)
+            fprintf(stderr, "psxrecomp: text validation cache missed a code write "
+                    "(ranges at 0x%08X, exec 0x%08X); cache cleared\n",
+                    lo_len_pairs[0], exec_pc);
+        text_vcache_epoch++;
+        return 0;
+    }
+    g_text_vcache_misses++;
+    int ok = text_native_ok_ranges_uncached(lo_len_pairs, count, exec_pc);
+    if (ok && sum != 0xFFFFFFFFu) {
+        e->ranges = lo_len_pairs; e->exec_pc = exec_pc;
+        e->gen_sum = sum; e->epoch = text_vcache_epoch;
+    }
+    return ok;
+}
+
+void dirty_ram_text_vcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *audit_fails) {
+    if (hits) *hits = g_text_vcache_hits;
+    if (misses) *misses = g_text_vcache_misses;
+    if (audit_fails) *audit_fails = g_text_vcache_audit_fails;
 }
 
 /* Preserve the generated-code ABI used by existing game projects. */
@@ -614,6 +729,7 @@ void dirty_ram_text_bless(uint32_t phys, const uint8_t *bytes, uint32_t len) {
     const uint8_t *src = bytes + (lo - phys);
     if (memcmp(ref, src, hi - lo) == 0) return;                     /* already in sync */
     memcpy(ref, src, hi - lo);
+    text_page_gen_bump_range(lo, hi - lo);
     /* Re-open the affected pages: clear the sticky diverged bit so the next
      * dispatch re-runs the compare against the now-updated reference. */
     uint32_t first_page = lo >> DIRTY_RAM_PAGE_SHIFT;
@@ -643,6 +759,7 @@ void dirty_ram_mark_executable_range(uint32_t phys, uint32_t len) {
     uint32_t last_page = end >> DIRTY_RAM_PAGE_SHIFT;
     for (uint32_t page = first_page; page <= last_page; page++) {
         dirty_ram_bitmap[page >> 5] |= (1u << (page & 31u));
+        text_page_gen[page]++;
     }
     g_dirty_ram_code_gen++;
 }
@@ -730,6 +847,7 @@ static uint32_t overlay_watch_bitmap[DIRTY_RAM_BITMAP_WORDS];
 static uint32_t overlay_page_gen[DIRTY_RAM_PAGE_COUNT];
 
 void dirty_ram_reset_for_boot(void) {
+    text_vcache_epoch++;
     memset(dirty_ram_bitmap, 0, sizeof(dirty_ram_bitmap));
     memset(text_modified_bitmap, 0, sizeof(text_modified_bitmap));
     memset(text_diverged_bitmap, 0, sizeof(text_diverged_bitmap));
@@ -794,6 +912,7 @@ void dirty_ram_text_guard_resync_after_restore(void) {
     memset(text_modified_bitmap, 0, sizeof(text_modified_bitmap));
     memset(text_diverged_bitmap, 0, sizeof(text_diverged_bitmap));
     g_text_diverged_pages = 0;
+    text_vcache_epoch++;
 }
 
 void overlay_watch_invalidate_after_ram_restore(void) {

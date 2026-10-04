@@ -2,7 +2,7 @@
 # Review before shipping. Runtime quirks / overlay seeds still need hand work.
 
 [game]
-name = "Tekken 3"
+name = "Tekken 3 Expanded"
 id = "SLUS-00402"
 players = 2
 exe = "disc/SLUS_004.02"
@@ -32,7 +32,7 @@ out_dir = "generated"
 strict = true
 
 [runtime]
-window_title = "Tekken 3 Recompiled"
+window_title = "Tekken 3 Expanded"
 memcard_dir = "saves"
 idle_skip = true
 

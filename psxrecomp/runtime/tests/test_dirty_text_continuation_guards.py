@@ -10,13 +10,20 @@ def main() -> int:
     memory = (root / "runtime/src/memory.c").read_text(encoding="utf-8")
     interp = (root / "runtime/src/dirty_ram_interp.c").read_text(encoding="utf-8")
 
-    start = memory.index("int dirty_ram_text_native_ok_ranges_from(")
+    start = memory.index("static int text_native_ok_ranges_uncached(")
     end = memory.index("\n/* Preserve the generated-code ABI", start)
     range_guard = memory[start:end]
+    revisit = memory[memory.index("static int text_continuation_may_revisit("):start]
+    # A backward branch only blocks the compiled continuation when the code it
+    # can reach (followed to a fixed point) includes a changed word.
+    for fragment in ("uint32_t last_changed", "if (lowest <= last_changed) return 1;",
+                     "if (lowest == reach) return 0;", "return 1; /* jr register"):
+        if fragment not in revisit:
+            raise AssertionError(f"missing continuation reach guard: {fragment}")
 
     required_range_fragments = (
         "uint32_t exec_pc",
-        "changed_prefix && text_continuation_may_revisit(lo_len_pairs, count, at)",
+        "text_continuation_may_revisit(lo_len_pairs, count, at, last_changed)",
         "if (phys + len <= at) continue;",
         "len -= at - phys;",
         "if (!any)",

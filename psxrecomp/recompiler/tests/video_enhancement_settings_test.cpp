@@ -163,6 +163,33 @@ static void test_user_settings_round_trip() {
     fs::remove(p);
 }
 
+/* Bug #23: the launcher's master volume was applied but never written to
+ * settings.toml, so it reset to 100 on every restart. */
+static void test_master_volume_round_trip() {
+    PSXRecompV4::UserSettings out;
+    out.spu_hq = false;       out.has_spu_hq = true;
+    out.master_volume = 35;   out.has_master_volume = true;
+    fs::path p = fs::temp_directory_path() / "psxrecomp_volume_roundtrip.toml";
+    check(PSXRecompV4::save_user_settings(p, out), "volume save writes");
+    auto back = PSXRecompV4::load_user_settings(p);
+    check(!back.parse_error, "volume settings.toml re-parses");
+    check(back.has_master_volume && back.master_volume == 35,
+          "master_volume survives a save/load round trip");
+    fs::remove(p);
+
+    fs::path q = write_temp("psxrecomp_volume_clamp.toml",
+                            "[audio]\nmaster_volume = 250\n");
+    auto hi = PSXRecompV4::load_user_settings(q);
+    check(hi.has_master_volume && hi.master_volume == 100,
+          "master_volume above 100 is clamped");
+    fs::remove(q);
+
+    fs::path r = write_temp("psxrecomp_volume_absent.toml", "[audio]\nspu_hq = false\n");
+    auto none = PSXRecompV4::load_user_settings(r);
+    check(!none.has_master_volume, "absent master_volume leaves the default alone");
+    fs::remove(r);
+}
+
 int main() {
     test_defaults_off();
     test_game_toml_opt_in();
@@ -170,6 +197,7 @@ int main() {
     test_user_settings_read();
     test_user_settings_absent_key();
     test_user_settings_round_trip();
+    test_master_volume_round_trip();
 
     if (failures) {
         std::fprintf(stderr, "video_enhancement_settings_test: %d failure(s)\n",

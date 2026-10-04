@@ -61,7 +61,7 @@ class Session:
         self.run = run = WORK / f'run-{os.getpid()}'
         if run.exists(): shutil.rmtree(run)
         run.mkdir(parents=True)
-        shutil.copy2(build / 'Tekken_3_Recompiled', run / 'Tekken_3_Recompiled')
+        shutil.copy2(build / 'Tekken_3_Expanded', run / 'Tekken_3_Expanded')
         for name in ('bios', 'mods'): shutil.copytree(build / name, run / name)
         (run / 'settings.toml').write_text('[video]\nsupersampling=1\n[controller]\np1_device="keyboard"\np2_device="none"\n')
         self.saves = saves = WORK / f'saves-{os.getpid()}'
@@ -69,7 +69,7 @@ class Session:
         shutil.copytree(SAVES, saves)
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0)); port = listener.getsockname()[1]
-        args = [str(run / 'Tekken_3_Recompiled'), '--game', str(ROOT / 'game.toml'),
+        args = [str(run / 'Tekken_3_Expanded'), '--game', str(ROOT / 'game.toml'),
                 '--disc', str(ROOT / 'disc/Tekken 3 (USA).cue'), '--no-launcher', '--renderer', 'software',
                 '--debug-port', str(port), '--memcard-dir', str(saves)]
         if not visible: args.append('--headless')

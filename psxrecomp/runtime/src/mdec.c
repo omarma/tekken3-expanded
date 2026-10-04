@@ -1128,15 +1128,21 @@ void mdec_snapshot_write(uint8_t *p) {
 
 int mdec_snapshot_read(const uint8_t *p, uint32_t len) {
     PstR r;
-    uint32_t ver = 0, input_count = 0, output_size = 0, reserved;
+    uint32_t ver = 0, input_count = 0, output_size = 0, reserved, expected = 0;
     uint64_t age = 1000ull;
     int16_t s16;
     if (!p || len < mdec_snap_fixed_bytes()) return 0;
     pst_r_init(&r, p, len);
     if (!pst_r_u32(&r, &ver) || ver != MDEC_SNAP_VER) return 0;
-    if (!pst_r_u32(&r, &mdec.command) ||
-        !pst_r_u32(&r, &mdec.expected_halfwords) ||
-        !pst_r_u32(&r, &mdec.last_status) ||
+    if (!pst_r_u32(&r, &mdec.command) || !pst_r_u32(&r, &expected))
+        return 0;
+    /* write_data() fills input[] up to expected_halfwords, relying on
+     * begin_command having reserved that much. Cap at the largest live value
+     * (DECODE: 0xFFFF words) and reserve it before it becomes visible. */
+    if (expected > 0xFFFFu * 2u || !ensure_input_capacity(expected))
+        return 0;
+    mdec.expected_halfwords = expected;
+    if (!pst_r_u32(&r, &mdec.last_status) ||
         !pst_r_u32(&r, &mdec.decode_macroblocks) ||
         !pst_r_u32(&r, &mdec.decode_blocks) ||
         !pst_r_u32(&r, &mdec.decode_stop_reason) ||

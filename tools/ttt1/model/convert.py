@@ -203,6 +203,8 @@ G2_READS = {}       # evenement de lecture G2 -> (ligne TTT1 lectrice, rang dans
 DROPPED = set()     # soudures G2 retirees : (ligne TTT1 lectrice, rang dans G2)
 SLOTMAP = {}        # ligne TTT1 lectrice -> {ancien emplacement: nouveau} apres retrait
 CUR_T = [0]         # temps de la ligne en cours de conversion
+LEG_ROWS = range(3, 11)   # lignes PS1 du bassin et des deux jambes (parties 2..8) : faces doubles, voir double_sided
+WELDS = {}          # ligne TTT1 lectrice -> anciens emplacements dont la soudure (poids 12/4, ...) devient 8/8
 def natural_prev(t):
     """Ligne TTT1 dont la liste occupait le tampon avant t dans l'ordre TTT1."""
     return max((x for x in TORDER if x < t), default=None)
@@ -385,6 +387,7 @@ def convert_positions(a, reader=None, prev_reader=None, half=None, track=False):
     for gi, grp in enumerate(tails[:5]):
         for j, f in enumerate(grp):
             low = f & 0xff; w = (f >> 8) & 0x1f
+            if track and w not in (0, 8, 16): WELDS.setdefault(reader, set()).add(s0 + v)
             dead = gi == 3 and (CUR_T[0] + 1.5, low, 'w') not in ALLOC   # depot jamais relu, cache plein
             if dead: fate[v] = ('drop',)
             elif gi == 1 and j in drops: fate[v] = ('drop',)
@@ -492,6 +495,25 @@ def convert_texture(c):
             if kk == k: body += bytes([mi] + idx)
     return pad4(body)
 
+DOUBLE_SIDED = 0x01000000   # bit 24 du mot 0 (triangles, 0x8003739C) ou du mot 1 (quadrilateres, 0x8003749C) : dessine meme de dos
+
+def double_sided(b, welds):
+    """Marque double face les polygones dont un sommet est une soudure approximee. Le PS1 ne sait
+    melanger qu'a parts egales : une soudure 12/4 devenue 8/8 deplace le sommet, et sur une jambe
+    pliee elle retourne la face ; le moteur ecarte les faces de dos (NCLIP <= 0), d'ou un trou derriere
+    le genou de Lee. Aucun polygone n'utilise ce bit dans les modeles importes."""
+    b = bytearray(b); p = 0
+    for k in range(4):
+        n = struct.unpack_from('<I', b, p)[0]; p += 4; st = 12 if k == 3 else 8
+        for i in range(n):
+            w = struct.unpack_from('<I', b, p + i * st)[0]
+            sh = (0, 7, 14) if k in (0, 2) else (0, 7, 14, 23)
+            if any(((w >> s) & 0x1fc) // 4 in welds for s in sh):
+                at = p + i * st + (4 if k in (1, 3) else 0)      # le mot 0 d'un quadrilatere porte le 4e sommet jusqu'au bit 31
+                struct.pack_into('<I', b, at, struct.unpack_from('<I', b, at)[0] | DOUBLE_SIDED)
+        p += n * st
+    return bytes(b)
+
 def remap_prims(b, mp):
     if not mp: return b
     b = bytearray(b); p = 0
@@ -522,9 +544,24 @@ def convert(src):
             errors.append(f'{sorted(s2t.items())[21:]} : {e}')
     raise ValueError('aucun placement ne se convertit :\n' + '\n'.join(errors))
 
+HAND_ROWS = (13, 17)      # PS1 rows of the two hands (the engine's 0x80034844 callers)
+
+
+def hand_steps(ents, n):
+    """Table des poses de main. Le moteur PS1 n'utilise que les indices 0..3 (ouverte,
+    deux demi-poses, poing ferme ; 4 et plus = poses speciales, la pose 0 chez Jin). TTT1
+    range 17 poses en progression reguliere ouvert -> poing : recopiees telles quelles,
+    l'indice 3 n'etait qu'a un quart de la fermeture et les mains restaient ouvertes.
+    Les quatre premiers indices prennent donc les poses 0, 1/3, 2/3 et la derniere ; les
+    suivants la pose 0, comme les natifs. Les listes de sommets ne changent pas."""
+    if n < 8: return ents
+    steps = [round(i * (n - 1) / 3) for i in range(4)]
+    return [ents[s] for s in steps] + [ents[0]] * (len(ents) - 4)
+
+
 def convert_layout(src):
     T = src; ALLOC.clear(); G2_READS.clear(); DROPPED.clear(); SLOTMAP.clear()
-    HALF['c'].clear(); HALF['s'].clear(); HALF['moved'] = 0
+    HALF['c'].clear(); HALF['s'].clear(); HALF['moved'] = 0; WELDS.clear()
     times = plan_cache(T, TORDER)
     blocks = bytearray(); rows = {}; relocs = [16]
     def put(b):
@@ -554,14 +591,16 @@ def convert_layout(src):
             new[3:6] = [0, 0, 0]; new[7:10] = [0, 0, 0]   # os integre aux sommets
             new[6] = next(q for q, r in SECOND.items() if r == s)   # partie hote (mot 6, lu par le runtime)
         if w[0] > 2: new[0] = put(block(T, w[0]))          # normales : recopiees
-        if w[1] > 2: new[1] = put(remap_prims(block(T, w[1]), SLOTMAP.get(t, {})))
+        prims = double_sided(block(T, w[1]), WELDS.get(t, set())) if s in LEG_ROWS and w[1] > 2 else block(T, w[1]) if w[1] > 2 else b''
+        if w[1] > 2: new[1] = put(remap_prims(prims, SLOTMAP.get(t, {})))
         if w[2] > 2: new[2] = put(convert_texture(block(T, w[2])))
         nxt = S2T.get(s + 1)
         src_t = (nxt - 1) if nxt is not None else t
         if src_t in pos_off: new[12] = pos_off[src_t][0]
         elif row(T, src_t)[12] == 2: new[12] = 2
-        if w[13] > 2 and src_t in pos_off:                   # table des poses de main
-            e = struct.unpack_from(f'<{len(block(T, w[13])) // 4}I', block(T, w[13]))
+        tab = row(T, src_t)[13]                              # la table va avec les positions qu'elle choisit
+        if tab > 2 and src_t in pos_off:                     # table des poses (mains, ailes)
+            e = struct.unpack_from(f'<{len(block(T, tab)) // 4}I', block(T, tab))
             olds = [x for x in SM.variants(block(T, row(T, src_t)[12]), True)]
             # decalages TTT1 des variantes -> decalages convertis
             p = row(T, src_t)[12]; starts = []
@@ -572,7 +611,9 @@ def convert_layout(src):
                     per = {16: 2, 8: 4}[bits]; q += 4 + 4 * ((len(vals) + per - 1) // per)
                 p += q
             remap = dict(zip(starts, pos_off[src_t]))
-            new[13] = put(b''.join(struct.pack('<I', remap.get(x, pos_off[src_t][0])) for x in e))
+            ents = [remap.get(x, pos_off[src_t][0]) for x in e]
+            if s in HAND_ROWS: ents = hand_steps(ents, len(olds))     # not the wings
+            new[13] = put(b''.join(struct.pack('<I', x) for x in ents))
             relocs += [new[13] + 4 * i for i in range(len(e))]
         rows[s] = new
         relocs += [24 + s * 56 + 4 * k for k in (0, 1, 2, 12, 13) if new[k] > 2]

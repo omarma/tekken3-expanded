@@ -17,7 +17,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_TGA
 #define STBI_ONLY_PNG
+#ifndef __ANDROID__
+// Box art (PC). Android's launcher is native screens: no JPEG decoder there.
 #define STBI_ONLY_JPEG
+#endif
 #include "third_party/stb_image.h"
 
 // Shared upload path. `colorkey_tol` < 0 disables color-keying.

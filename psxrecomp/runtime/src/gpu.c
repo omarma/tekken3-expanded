@@ -6193,24 +6193,35 @@ static int gpu_snap_emit(PstW *w) {
 }
 static int gpu_snap_parse(PstR *r) {
     uint32_t u; int32_t i; uint16_t h;
+    uint32_t st; int32_t got, need;
 #define RU(f) do { if (!pst_r_u32(r, &u)) return 0; (f) = u; } while (0)
 #define RI(f) do { if (!pst_r_i32(r, &i)) return 0; (f) = i; } while (0)
 #define RH(f) do { if (!pst_r_u16(r, &h)) return 0; (f) = h; } while (0)
-    RU(texpage_x); RU(texpage_y); RU(semi_transparency); RU(texpage_colors);
+/* Register fields the live setters mask (GP0 E1/E3/E4, GP1 05h): refuse
+ * anything wider before it lands, VRAM/page coordinates feed host offsets. */
+#define RUM(f, m) do { if (!pst_r_u32(r, &u) || (u & ~(uint32_t)(m))) return 0; (f) = u; } while (0)
+    RUM(texpage_x, 0xF); RUM(texpage_y, 1); RUM(semi_transparency, 3); RUM(texpage_colors, 3);
     RU(dither_enabled); RU(draw_to_display); RU(texture_disable); RU(texture_window_value);
     RU(set_mask_bit); RU(check_mask_bit);
     RU(interlace_field); RU(reverse_flag);
-    RU(draw_area_left); RU(draw_area_top); RU(draw_area_right); RU(draw_area_bottom);
+    RUM(draw_area_left, 0x3FF); RUM(draw_area_top, 0x3FF);
+    RUM(draw_area_right, 0x3FF); RUM(draw_area_bottom, 0x3FF);
     RI(draw_offset_x); RI(draw_offset_y);
     RU(hres1); RU(hres2); RU(vres); RU(video_mode); RU(display_depth); RU(vertical_interlace);
     RU(display_disabled); RU(irq1_flag); RU(dma_direction); RU(lcf);
-    RU(display_area_x); RU(display_area_y);
+    RUM(display_area_x, 0x3FF); RUM(display_area_y, 0x1FF);
     RU(h_display_x1); RU(h_display_x2); RU(v_display_y1); RU(v_display_y2);
     RU(gpuread_latch);
-    if (!pst_r_u32(r, &u)) return 0;
-    gp0_state = (Gp0State)u;
+    if (!pst_r_u32(r, &st)) return 0;
     for (int k = 0; k < 16; k++) RU(gp0_cmd_buf[k]);
-    RI(gp0_words_collected); RI(gp0_words_needed);
+    if (!pst_r_i32(r, &got) || !pst_r_i32(r, &need)) return 0;
+    /* GP0 collection cursor indexes gp0_cmd_buf[16]: live it is
+     * 0 <= collected <= needed <= 16, strictly below needed while COLLECTING. */
+    if (need < 0 || need > 16 || got < 0 || got > need ||
+        (st == GP0_COLLECTING && got >= need))
+        return 0;
+    gp0_state = (Gp0State)st;
+    gp0_words_collected = got; gp0_words_needed = need;
     RU(gp0_next_source_addr); RU(gp0_cmd_source_addr);
     RH(polyline_color); RI(polyline_prev_x); RI(polyline_prev_y); RH(polyline_prev_c);
     RI(polyline_semi_trans); RI(polyline_has_prev);
@@ -6222,6 +6233,7 @@ static int gpu_snap_parse(PstR *r) {
 #undef RU
 #undef RI
 #undef RH
+#undef RUM
     return 1;
 }
 

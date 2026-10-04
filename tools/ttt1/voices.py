@@ -2,10 +2,13 @@
 
 The character's sound profile (0x29EF00 + 0x14) points at its voice table:
 four category counts (attack, damage, KO, victory) and the sample IDs. Each
-sample is decoded from the C352 ROM at the frequency measured by the MAME
-oracle (tools/ttt1_voice_oracle.lua): the driver's pitch field does not
-predict it, and above ID 673 (P. Jack) the driver table no longer matches
-what the chip plays, so the oracle's registers win and the report says so.
+sample is decoded from the C352 ROM with the registers the chip was given
+at key-on, measured once in MAME by tools/ttt1_voice_oracle.lua and kept, as
+numbers only, in tools/data/ttt1_voice_registers.json: the driver's pitch
+field does not predict the frequency, and above ID 673 (P. Jack) the driver
+table no longer matches what the chip plays, so the measured registers win
+and the report says so. A new voice: run the oracle, then
+`python3 tools/ttt1/voices.py --measure <key>-voice-oracle.csv...`.
 
 C352 mu-law and interpolation follow MAME's BSD-3-Clause implementation by
 R. Belmont and superctr (commit aab5dcadb6025303ba019d0189344a5df536a623):
@@ -18,6 +21,8 @@ from __future__ import annotations
 import csv, hashlib, json, struct, wave
 from pathlib import Path
 
+REGISTERS = Path(__file__).resolve().parents[1] / 'data/ttt1_voice_registers.json'
+FIELDS = ('frequency', 'bank', 'start', 'end', 'flags')
 SUB_SHA = '5b5ffddf6df97be32919462c23a7d0896498bbf01af547566ff45449ae0811f8'
 C352_SHA = 'cb68614775f792b6bf97149396a1cf12645802f8ec1b8da014554142e579f281'
 FREQUENCY = 0x18af       # Jun's twelve samples; the oracle measures each one
@@ -88,11 +93,35 @@ def read_oracle(path: Path) -> dict:
     for r in csv.DictReader(path.open()):
         sid = int(r['requested_id'])
         if sid:
-            oracle[sid] = {k: int(r[k]) for k in ('frequency', 'bank', 'start', 'end', 'flags')}
+            oracle[sid] = {k: int(r[k]) for k in FIELDS}
     return oracle
 
 
-def build(ram: bytes, profile: int, oracle_path: Path, sub: bytes, c352: bytes,
+def read_registers(path: Path = REGISTERS) -> dict:
+    """The measured table: sample ID -> registers at key-on."""
+    return {int(i): dict(zip(FIELDS, v)) for i, v in json.loads(path.read_text())['voices'].items()}
+
+
+def measure(oracles) -> None:
+    """Adds the IDs of oracle CSVs to the measured table; an ID measured
+    twice must match."""
+    table = json.loads(REGISTERS.read_text()) if REGISTERS.is_file() else dict(
+        _comment='Registres du C352 au key-on de chaque voix TTT1 que l import utilise, '
+                 'releves une fois dans MAME (tools/ttt1_voice_oracle.lua) : identifiant -> '
+                 '[frequence, banque, debut, fin, drapeaux]. Des nombres seulement, aucun echantillon.',
+        voices={})
+    for path in oracles:
+        for sid, o in read_oracle(Path(path)).items():
+            row, old = [o[k] for k in FIELDS], table['voices'].get(str(sid))
+            if old not in (None, row): raise SystemExit(f'{path}: ID {sid} {row}, deja mesure {old}')
+            table['voices'][str(sid)] = row
+    rows = sorted(table['voices'].items(), key=lambda kv: int(kv[0]))
+    REGISTERS.write_text('{\n "_comment": %s,\n "voices": {\n%s\n }\n}\n' % (
+        json.dumps(table['_comment']), ',\n'.join(f'  "{i}": {json.dumps(v)}' for i, v in rows)))
+    print(f'{REGISTERS.name}: {len(table["voices"])} voix')
+
+
+def build(ram: bytes, profile: int, sub: bytes, c352: bytes,
           out: Path, name: str) -> dict:
     """Writes out/<name>-TTT1-voices.juv, out/voices/*.wav and
     out/voice-report.json. sub, c352: the TTT1 sound ROMs."""
@@ -100,7 +129,7 @@ def build(ram: bytes, profile: int, oracle_path: Path, sub: bytes, c352: bytes,
         raise ValueError('expected a 4 MiB RAM capture')
     if hashlib.sha256(sub).hexdigest() != SUB_SHA or hashlib.sha256(c352).hexdigest() != C352_SHA:
         raise ValueError('unexpected TTT1 sound ROMs')
-    oracle = read_oracle(oracle_path)
+    measured = read_registers()
     moves, body, sound, asset2 = struct.unpack_from('<4H', ram, KEYS + 0x10)
     groups, ids = sound_table(ram, profile)
     if not 1 <= len(ids) <= 32:                    # MAX_SAMPLES of the runtime
@@ -118,13 +147,13 @@ def build(ram: bytes, profile: int, oracle_path: Path, sub: bytes, c352: bytes,
     report = []
     for i, (sample_id, group, index) in enumerate(slots):
         bank, flags, start, end, pitch = struct.unpack_from('<5H', sub, 0x9436 + sample_id * 10)
-        if sample_id not in oracle:
-            raise ValueError(f'sample {sample_id} missing from the oracle {oracle_path}')
-        o = oracle[sample_id]
+        if sample_id not in measured:
+            raise ValueError(f'sample {sample_id} not measured in {REGISTERS.name} (run the voice oracle)')
+        o = measured[sample_id]
         # The driver table (sub 0x9436) describes the lower IDs; for the
         # higher ones (P. Jack: 673..683) it no longer matches what the C352
-        # plays. The oracle recorded the voice actually programmed: it wins,
-        # and the difference is reported.
+        # plays. The measured registers are the voice actually programmed: they
+        # win, and the difference is reported.
         if (bank, start, end) != (o['bank'], o['start'], o['end']):
             bank, start, end = o['bank'], o['start'], o['end']
             flags = o['flags'] & 0xff                  # without the key-on bit 0x4000
@@ -151,9 +180,15 @@ def build(ram: bytes, profile: int, oracle_path: Path, sub: bytes, c352: bytes,
                   group_counts=list(groups), group_ids=list(ids),
                   distinct_ids=sorted(set(ids)),
                   character_keys=dict(moveset=moves, body=body, sound=sound, asset=asset2 // 2),
-                  frequencies=sorted({o['frequency'] for o in oracle.values()}),
-                  oracle_sha256=hashlib.sha256(oracle_path.read_bytes()).hexdigest(),
+                  frequencies=sorted({measured[i]['frequency'] for i in ids}),
+                  registers_sha256=hashlib.sha256(REGISTERS.read_bytes()).hexdigest(),
                   source_c352_sha256=C352_SHA, source_sub_sha256=SUB_SHA,
                   capture_sha256=hashlib.sha256(ram).hexdigest())
     (out / 'voice-report.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
+
+
+if __name__ == '__main__':
+    import sys
+    if sys.argv[1:2] != ['--measure'] or len(sys.argv) < 3: raise SystemExit(__doc__)
+    measure(sys.argv[2:])

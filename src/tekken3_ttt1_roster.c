@@ -32,6 +32,7 @@ typedef struct {
     char key[32],prefix[48],data_prefix[48],label[48],name[48];
     unsigned generation,catalog_index,name_halfwords,moveset;
     unsigned arena_owner;         /* Tekken 3 fighter whose arena it takes; NO_ARENA: the donor's (Jin's) */
+    char hands[2];                /* grip of its two hands: F fist, O open, D follows the attacks, else the engine's own */
     int third_costume;            /* <data prefix>-arcade-P3.3dm exists: Start picks it */
     /* `moves_generation` changes with the identity and with each moveset
      * drawn; `donor` is 0 for the guest's own moveset, else donor k+1. */
@@ -51,6 +52,7 @@ static Tekken3Guest guests[2];
 enum { CATALOG_MAX=32, NO_MOVESET=32, JUN_MOVESET=28, NO_ARENA=0xff, STOCK_FIGHTERS=22 };
 static char catalog[CATALOG_MAX][32];
 static unsigned catalog_moveset[CATALOG_MAX],catalog_arena[CATALOG_MAX],catalog_count;
+static char catalog_hands[CATALOG_MAX][2];
 /* The Tag page holds 18 cells: 8 x 2, then a ninth column of two (see
  * tag_place), so 18 guests: IDs 23..40. */
 enum { GUEST_MAX=18 };
@@ -153,7 +155,7 @@ static int describe(Tekken3Guest *g,const char *e) {
     /* The catalogue tells the moveset key; Jun's is 28 when launched alone. */
     g->moveset=!strcmp(e,"jun")?JUN_MOVESET:NO_MOVESET;
     g->arena_owner=NO_ARENA;
-    for(unsigned i=0;i<catalog_count;i++)if(!strcmp(catalog[i],e)){g->moveset=catalog_moveset[i];g->arena_owner=catalog_arena[i];}
+    for(unsigned i=0;i<catalog_count;i++)if(!strcmp(catalog[i],e)){g->moveset=catalog_moveset[i];g->arena_owner=catalog_arena[i];memcpy(g->hands,catalog_hands[i],2);}
     return 1;
 }
 /* TTT1 catalogue: see above. */
@@ -177,7 +179,11 @@ static void read_catalog(void) {
         catalog_moveset[catalog_count]=end!=p && key<32?(unsigned)key:NO_MOVESET;
         p+=strcspn(p," \t\r\n");p+=strspn(p," \t");
         unsigned long owner=strtoul(p,&end,10);
-        catalog_arena[catalog_count++]=end!=p && owner<STOCK_FIGHTERS?(unsigned)owner:NO_ARENA;
+        catalog_arena[catalog_count]=end!=p && owner<STOCK_FIGHTERS?(unsigned)owner:NO_ARENA;
+        /* Fourth: the grip of its two hands, e.g. FD (see Tekken3Guest). */
+        p+=strcspn(p," \t\r\n");p+=strspn(p," \t");
+        for(unsigned h=0;h<2;h++)catalog_hands[catalog_count][h]=(p[h]=='F'||p[h]=='O'||p[h]=='D')?p[h]:0;
+        catalog_count++;
     }
     fclose(f);
     if(catalog_count)fprintf(stderr,"TTT1 characters: %u guests in %s\n",catalog_count,path);
@@ -450,6 +456,12 @@ extern int tekken3_ranking_guest_slot(unsigned id);
 int tekken3_guest_character(unsigned id) {
     return id>=GUEST_ID && id<GUEST_ID+roster_count?(int)(id-GUEST_ID):-1;
 }
+/* Grip of a guest's hand (0 first, 1 second: rows 13 and 17 of its model): 'F' fist,
+ * 'O' open, 'D' follows the attacks, 0 when the engine's own applies. */
+char tekken3_guest_hand(unsigned id,unsigned hand) {
+    int k=tekken3_guest_character(id);
+    return k<0||hand>1?0:roster[k].hands[hand];
+}
 /* Character ID of a guest key, else -1. */
 int tekken3_guest_id(const char *key) {
     for(unsigned k=0;key && k<roster_count;k++)if(!strcmp(roster[k].key,key))return (int)(GUEST_ID+k);
@@ -566,7 +578,8 @@ static void bound(uint32_t address,unsigned stock,unsigned target) {
     if(cur==target || cur<stock || cur>target)return;
     patch(address,op,(op&0xffff0000)|target);
 }
-static int load_ui(Tekken3Guest *g) {
+/* The interface pack (<prefix>-ui.jui) alone: portrait, tiles, loading card. */
+static int load_ui_pack(Tekken3Guest *g) {
     const char *root=tekken3_ttt1_asset_root();char path[4096];
     g->ui=NULL;
     if(!root || snprintf(path,sizeof path,"%s/%s-ui.jui",root,g->prefix)>=(int)sizeof path)return 0;
@@ -587,8 +600,17 @@ static int load_ui(Tekken3Guest *g) {
         g->ui_offsets[i]=o;g->ui_lengths[i]=n;
     }
     if(!ok){free(g->ui);g->ui=NULL;return 0;}
+    /* Arcade loading thumbnails have half-height pixels. The PS1's framed
+     * team cards use 58 rows, so preserve their aspect ratio. */
+    const unsigned char *small=g->ui+g->ui_offsets[4]+544;
+    for(unsigned y=0;y<58;y++)memcpy(g->loading_pixels+y*16,small+(y/2)*32,32);
+    return 1;
+}
+static int load_ui(Tekken3Guest *g) {
+    const char *root=tekken3_ttt1_asset_root();char path[4096];
+    if(!load_ui_pack(g))return 0;
     if(snprintf(path,sizeof path,"%s/%s-name.4bpp",root,g->prefix)>=(int)sizeof path)return 0;
-    f=fopen(path,"rb");if(!f){fprintf(stderr,"%s interface: missing %s\n",g->name,path);free(g->ui);g->ui=NULL;return 0;}
+    FILE *f=fopen(path,"rb");if(!f){fprintf(stderr,"%s interface: missing %s\n",g->name,path);free(g->ui);g->ui=NULL;return 0;}
     /* 16 rows of 4bpp, so the width is size / 32. */
     long size=(fseek(f,0,SEEK_END)==0)?ftell(f):-1;rewind(f);
     if(size<=0 || size%32 || size/32<1 || size/32>NAME_MAX_HALFWORDS){
@@ -597,13 +619,50 @@ static int load_ui(Tekken3Guest *g) {
     }
     g->name_halfwords=(unsigned)(size/32);
     unsigned name_bytes=g->name_halfwords*16*2;   /* halfwords x 16 rows */
-    ok=fread(g->name_pixels,1,name_bytes,f)==name_bytes && fgetc(f)==EOF;fclose(f);
+    int ok=fread(g->name_pixels,1,name_bytes,f)==name_bytes && fgetc(f)==EOF;fclose(f);
     if(!ok){free(g->ui);g->ui=NULL;return 0;}
-    /* Arcade loading thumbnails have half-height pixels. The PS1's framed
-     * team cards use 58 rows, so preserve their aspect ratio. */
-    const unsigned char *small=g->ui+g->ui_offsets[4]+544;
-    for(unsigned y=0;y<58;y++)memcpy(g->loading_pixels+y*16,small+(y/2)*32,32);
     return 1;
+}
+/* Panda (Kuma, ID 11, kick costume) and Tiger (Eddy, ID 8, third costume):
+ * the PS1 game only changes their name, and keeps Kuma's and Eddy's faces.
+ * TTT1's loading portraits give them their own (tools/ttt1_panda_tiger.py,
+ * Panda-T3-ui.jui and Tiger-T3-ui.jui, the guests' pack format). They show
+ * once the costume is confirmed, like the name: the cell under the cursor
+ * stays Kuma's or Eddy's. */
+enum { ALT_FACES=2 };
+static Tekken3Guest alt_faces[ALT_FACES];
+static const unsigned alt_face_id[ALT_FACES]={11,8},alt_face_costume[ALT_FACES]={1,2};
+static void alt_faces_load(void) {
+    static int loaded;
+    if(loaded)return;loaded=1;
+    static const char *const prefix[ALT_FACES]={"Panda-T3","Tiger-T3"};
+    for(unsigned i=0;i<ALT_FACES;i++) {
+        Tekken3Guest *g=&alt_faces[i];
+        strcpy(g->prefix,prefix[i]);strcpy(g->name,i?"Tiger":"Panda");
+        if(!load_ui_pack(g))fprintf(stderr,"TTT1 characters: no %s portrait, %s keeps %s's\n",g->name,g->name,i?"Eddy":"Kuma");
+    }
+}
+/* The face for character `id` in `costume` (0 punch, 1 kick, 2 Start), or NULL. */
+static const Tekken3Guest *alt_face(unsigned id,unsigned costume) {
+    for(unsigned i=0;i<ALT_FACES;i++)
+        if(alt_faces[i].ui && id==alt_face_id[i] && costume==alt_face_costume[i])return &alt_faces[i];
+    return NULL;
+}
+static int alt_face_character(unsigned id){return id==alt_face_id[0] || id==alt_face_id[1];}
+/* Survival's results (state 14) list the fighters beaten by character, ID
+ * * 4 with no costume, and a count each. The CPU's fighter of each fight
+ * won is noted here (survival_tick): a character beaten only as Panda or
+ * Tiger shows that face; beaten in both, it keeps the stock one, the
+ * screen having a single cell for the two. */
+enum { BEATEN_STOCK=1, BEATEN_ALT=2 };
+static uint8_t survival_beaten[23];
+static int survival_end(unsigned state) {
+    return state==14 && psx_mod_read_word(0x800afa88)==4;
+}
+static const Tekken3Guest *survival_face(unsigned id) {
+    if(id>=sizeof survival_beaten || survival_beaten[id]!=BEATEN_ALT)return NULL;
+    for(unsigned a=0;a<ALT_FACES;a++)if(alt_face_id[a]==id)return alt_face(id,alt_face_costume[a]);
+    return NULL;
 }
 /* Guest k's descriptor: 12 bytes copied from Jin's, then its label. */
 enum { DESC_STRIDE=80 };
@@ -673,6 +732,7 @@ static void initialize(void) {
     psx_mod_write_word(ui_color,0xead8b395); /* original portrait index 21, warm pale tint */
     for(unsigned i=0;i<STOCK_GRID_CELLS;i++)team_order[i]=psx_mod_read_byte(0x80022768+i*6+4);
     write_grid_page();
+    alt_faces_load();
     initialized=1;
     fprintf(stderr,"TTT1 characters: %u guests registered as character 23 to %u / model 52; P1 %s, P2 %s\n",
             roster_count,GUEST_ID+roster_count-1,guests[0].name,guests[1].name);
@@ -798,6 +858,7 @@ static unsigned grid_width(unsigned y) {
 }
 /* Availability bits. The game shifts by the ID modulo 32: guests 32..38
  * land on stock fighters 0..6, which are always available. */
+enum { OPTIONS_STATE=5 };
 static uint32_t guest_bits(void) {
     uint32_t bits=0;
     for(unsigned k=0;k<roster_count && GUEST_ID+k<32;k++)bits|=1u<<(GUEST_ID+k);
@@ -825,7 +886,17 @@ static void patch_tables(void) {
             else if(imm==0x16)patch(a,w,(w&0xffff0000)|select_bound());
         }
     }
-    psx_mod_write_word(0x80097ef0,psx_mod_read_word(0x80097ef0)|guest_bits());
+    /* OPTION MODE (state 5) is the one screen that counts the set bits of this
+     * word: RECORDS sizes its CHARACTER USAGE list with a population count
+     * and sorts that many {ID, games} pairs from a stack array of 22, copying
+     * as many IDs back; with the guests' bits (23..31) the count passed 22
+     * and the overrun ended the game at PC 0 (B01). The screen never offers a
+     * guest, so the bits are taken off there and put back outside it. */
+    {
+        uint32_t word=psx_mod_read_word(0x80097ef0),bits=guest_bits();
+        word=psx_mod_read_word(0x800ae204)==OPTIONS_STATE?word&~bits:word|bits;
+        if(word!=psx_mod_read_word(0x80097ef0))psx_mod_write_word(0x80097ef0,word);
+    }
     /* Every reference to the grid table is redirected to team_table, whose
      * characters follow the page. The grid itself stays the stock one:
      * seven columns, index y * 7 + x. */
@@ -851,12 +922,19 @@ static void patch_tables(void) {
  * and the palette rows 480..495; the guests past them take the tiles at
  * (384,144), same texture page, and the rows 498 and 499 (x 0..255). Both
  * measured empty at the selector (2026-09-25); the loading screen keeps
- * 496/497 for its cards and 502/503 for its background. */
+ * 496/497 for its cards and 502/503 for its background.
+ * Panda's and Tiger's tiles (alt_faces) follow the extra guests' at
+ * (416,144); their palettes have 128 colours, one row each at (384,136),
+ * then their grey copies (rows 138, 139). x 384..447 x y 136..201 measured
+ * empty at the Team Battle grid and its first FIGHT screen (2026-10-01);
+ * the loading cards start at x 448 (ICON_X). */
 enum { TILE_W=16, TILE_H=58, AREA_W=TAG_BASE_COLS*TILE_W, AREA_H=2*TILE_H,
-       EXTRA_Y=144, EXTRA_PALETTE_Y=498, EXTRA_MAX=GUEST_MAX-TAG_BASE };
+       EXTRA_Y=144, EXTRA_PALETTE_Y=498, EXTRA_MAX=GUEST_MAX-TAG_BASE,
+       ALT_TILE_X=TILE_X+EXTRA_MAX*TILE_W, ALT_PALETTE_X=384, ALT_PALETTE_Y=136, ALT_COLOURS=128 };
 typedef struct { unsigned x,y,w,h; } VramArea;
-static const VramArea tile_areas[2]={{TILE_X,TILE_Y,AREA_W,AREA_H},{TILE_X,EXTRA_Y,EXTRA_MAX*TILE_W,TILE_H}};
-static const VramArea palette_areas[2]={{0,TILE_PALETTE_Y,256,TAG_BASE},{0,EXTRA_PALETTE_Y,256,EXTRA_MAX}};
+static const VramArea tile_areas[2]={{TILE_X,TILE_Y,AREA_W,AREA_H},{TILE_X,EXTRA_Y,(EXTRA_MAX+ALT_FACES)*TILE_W,TILE_H}};
+static const VramArea palette_areas[3]={{0,TILE_PALETTE_Y,256,TAG_BASE},{0,EXTRA_PALETTE_Y,256,EXTRA_MAX},
+                                        {ALT_PALETTE_X,ALT_PALETTE_Y,ALT_COLOURS,2*ALT_FACES}};
 /* Guest k's tile (x, y in VRAM) and palette row. */
 static unsigned tile_x(unsigned k){return TILE_X+(k<TAG_BASE?k%TAG_BASE_COLS:k-TAG_BASE)*TILE_W;}
 static unsigned tile_y(unsigned k){return k<TAG_BASE?TILE_Y+(k/TAG_BASE_COLS)*TILE_H:EXTRA_Y;}
@@ -867,7 +945,7 @@ static uint32_t tile_uv(unsigned k) {
 }
 static uint16_t tile_pixels[2][AREA_H*AREA_W],tile_backup[2][AREA_H*AREA_W];
 /* Palettes share the tiles' buffer size: one helper moves either. */
-static uint16_t palette_pixels[2][AREA_H*AREA_W],palette_backup[2][AREA_H*AREA_W];
+static uint16_t palette_pixels[3][AREA_H*AREA_W],palette_backup[3][AREA_H*AREA_W];
 static int tiles_active;
 /* Palette row lent to guest k's grey icon, 0 if none (grey_palette_row). */
 static int grey_row[GUEST_MAX];
@@ -878,28 +956,83 @@ static void areas_in(const VramArea *a,uint16_t (*pixels)[AREA_H*AREA_W],unsigne
 static void areas_out(const VramArea *a,uint16_t (*pixels)[AREA_H*AREA_W],unsigned n) {
     for(unsigned i=0;i<n;i++)gr_vram_transfer_out(a[i].x,a[i].y,a[i].w,a[i].h,pixels[i]);
 }
-/* Areas in use: the second only when there are guests past sixteen. */
-static unsigned tile_area_count(void){return roster_count>TAG_BASE?2:1;}
+static int alt_faces_present(void){return alt_faces[0].ui || alt_faces[1].ui;}
+/* Areas in use: the second only when there are guests past sixteen, or
+ * Panda's and Tiger's tiles; their palettes are the third. */
+static unsigned tile_area_count(void){return roster_count>TAG_BASE || alt_faces_present()?2:1;}
+static unsigned palette_area_count(void){return alt_faces_present()?3:tile_area_count();}
+/* Panda's or Tiger's icon word (a = 0 Panda, 1 Tiger), texture page TILE_PAGE. */
+static uint32_t alt_tile_uv(unsigned a,int grey) {
+    unsigned y=ALT_PALETTE_Y+(grey?ALT_FACES:0)+a;
+    return ((uint32_t)((y<<6)|(ALT_PALETTE_X>>4))<<16)|(EXTRA_Y<<8)|((ALT_TILE_X+a*TILE_W-TILE_X)*2);
+}
 /* While the tiles are up, whatever the game writes under them (a Team
  * Battle's FIGHT screen loads the next fighters' textures into player 1's
  * band) goes into the backup: the tiles go back on top each frame, and the
  * game's content returns when they are released. */
-static void tiles_merge(void) {
-    unsigned n=tile_area_count();
-    static uint16_t now[AREA_H*AREA_W];
+/* Reading back costs a whole-VRAM glReadPixels on the OpenGL renderer: only
+ * areas the runtime saw written since the tiles went back (gr_vram_watch) are
+ * read, and only those are uploaded again. Returns the areas to upload. */
+static int tile_watch[2]={-1,-1},palette_watch[3]={-1,-1,-1};
+/* The selector copies a 2-pixel column (x 0..1, the whole VRAM height,
+ * GP0 0x80) every frame, over colours 0 and 1 of the guest palette rows.
+ * Those two columns stay out of the watch (they would flag every frame and
+ * bring the readback back) and are simply put back each frame; the game
+ * rewrites that column itself once the tiles are gone. */
+enum { PALETTE_COPY_COLS=2 };
+static void palette_copy_columns_in(unsigned n) {
+    static uint16_t col[AREA_H*PALETTE_COPY_COLS];
     for(unsigned a=0;a<n;a++) {
-        gr_vram_transfer_out(tile_areas[a].x,tile_areas[a].y,tile_areas[a].w,tile_areas[a].h,now);
-        for(unsigned i=0;i<tile_areas[a].w*tile_areas[a].h;i++)if(now[i]!=tile_pixels[a][i])tile_backup[a][i]=now[i];
-        gr_vram_transfer_out(palette_areas[a].x,palette_areas[a].y,palette_areas[a].w,palette_areas[a].h,now);
-        for(unsigned i=0;i<palette_areas[a].w*palette_areas[a].h;i++)if(now[i]!=palette_pixels[a][i])palette_backup[a][i]=now[i];
+        if(palette_areas[a].x)continue;              /* Panda's and Tiger's: away from the column */
+        unsigned h=palette_areas[a].h;
+        for(unsigned y=0;y<h;y++)for(unsigned x=0;x<PALETTE_COPY_COLS;x++)
+            col[y*PALETTE_COPY_COLS+x]=palette_pixels[a][y*palette_areas[a].w+x];
+        gr_vram_transfer_in(palette_areas[a].x,palette_areas[a].y,PALETTE_COPY_COLS,h,col);
+    }
+}
+static void tiles_watch_clear(unsigned n,unsigned pn) {
+    for(unsigned a=0;a<n;a++)gr_vram_watch_take(tile_watch[a]);
+    for(unsigned a=0;a<pn;a++)gr_vram_watch_take(palette_watch[a]);
+}
+static unsigned tiles_merge(void) {
+    unsigned n=tile_area_count(),pn=palette_area_count(),dirty=0;
+    static uint16_t now[AREA_H*AREA_W];
+    for(unsigned a=0;a<n;a++)
+        if(gr_vram_watch_take(tile_watch[a])) {
+            gr_vram_transfer_out(tile_areas[a].x,tile_areas[a].y,tile_areas[a].w,tile_areas[a].h,now);
+            for(unsigned i=0;i<tile_areas[a].w*tile_areas[a].h;i++)if(now[i]!=tile_pixels[a][i])tile_backup[a][i]=now[i];
+            dirty|=1u<<a;
+        }
+    for(unsigned a=0;a<pn;a++) {
+        if(gr_vram_watch_take(palette_watch[a])) {
+            gr_vram_transfer_out(palette_areas[a].x,palette_areas[a].y,palette_areas[a].w,palette_areas[a].h,now);
+            for(unsigned i=0;i<palette_areas[a].w*palette_areas[a].h;i++)if(now[i]!=palette_pixels[a][i])palette_backup[a][i]=now[i];
+            dirty|=4u<<a;
+        }
+    }
+    return dirty;
+}
+/* A palette greyed as the stock grey ramp is (see grey_palette_row). */
+static void grey_colours(const unsigned char *p,uint16_t *grey,unsigned n) {
+    for(unsigned i=0;i<n;i++) {
+        unsigned c=p[i*2]|(unsigned)p[i*2+1]<<8,r=c&31,g=(c>>5)&31,b=(c>>10)&31;
+        unsigned l=(r*299+g*587+b*114)*77/100000,lb=l?l+1:0;
+        grey[i]=(uint16_t)((c&0x8000)|l|l<<5|lb<<10);
+        if(c && !grey[i])grey[i]=0x8000;          /* black, not transparent */
     }
 }
 static void tiles_upload(void) {
-    unsigned n=tile_area_count();
+    unsigned n=tile_area_count(),pn=palette_area_count();
+    for(unsigned a=0;a<2;a++)if(tile_watch[a]<0)
+        tile_watch[a]=gr_vram_watch(tile_areas[a].x,tile_areas[a].y,tile_areas[a].w,tile_areas[a].h);
+    for(unsigned a=0;a<3;a++)if(palette_watch[a]<0) {
+        unsigned skip=palette_areas[a].x?0:PALETTE_COPY_COLS;
+        palette_watch[a]=gr_vram_watch(palette_areas[a].x+skip,palette_areas[a].y,palette_areas[a].w-skip,palette_areas[a].h);
+    }
     if(!tiles_active) {
         for(unsigned k=0;k<GUEST_MAX;k++)grey_row[k]=0;
         grey_rows_used=0;
-        areas_out(tile_areas,tile_backup,n);areas_out(palette_areas,palette_backup,n);
+        areas_out(tile_areas,tile_backup,n);areas_out(palette_areas,palette_backup,pn);
         memcpy(tile_pixels,tile_backup,sizeof tile_pixels);memcpy(palette_pixels,palette_backup,sizeof palette_pixels);
         for(unsigned k=0;k<roster_count;k++) {
             const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2];
@@ -908,9 +1041,28 @@ static void tiles_upload(void) {
             for(unsigned y=0;y<TILE_H;y++)
                 memcpy(&tile_pixels[a][(y0+y)*tile_areas[a].w+x],p+544+y*TILE_W*2,TILE_W*2);
         }
+        for(unsigned a=0;a<ALT_FACES;a++) {
+            if(!alt_faces[a].ui)continue;
+            const unsigned char *p=alt_faces[a].ui+alt_faces[a].ui_offsets[2];
+            unsigned x=ALT_TILE_X+a*TILE_W-tile_areas[1].x,w=tile_areas[1].w;
+            memcpy(&palette_pixels[2][a*ALT_COLOURS],p+20,ALT_COLOURS*2);
+            grey_colours(p+20,&palette_pixels[2][(ALT_FACES+a)*ALT_COLOURS],ALT_COLOURS);
+            for(unsigned y=0;y<TILE_H;y++)
+                memcpy(&tile_pixels[1][y*w+x],p+544+y*TILE_W*2,TILE_W*2);
+        }
         tiles_active=1;
-    } else tiles_merge();
-    areas_in(tile_areas,tile_pixels,n);areas_in(palette_areas,palette_pixels,n);
+    } else {
+        unsigned dirty=tiles_merge();
+        for(unsigned a=0;a<n;a++)
+            if(dirty&1u<<a)gr_vram_transfer_in(tile_areas[a].x,tile_areas[a].y,tile_areas[a].w,tile_areas[a].h,tile_pixels[a]);
+        for(unsigned a=0;a<pn;a++)
+            if(dirty&4u<<a)gr_vram_transfer_in(palette_areas[a].x,palette_areas[a].y,palette_areas[a].w,palette_areas[a].h,palette_pixels[a]);
+        palette_copy_columns_in(pn);
+        tiles_watch_clear(n,pn);
+        return;
+    }
+    areas_in(tile_areas,tile_pixels,n);areas_in(palette_areas,palette_pixels,pn);
+    tiles_watch_clear(n,pn);
 }
 /* A defeated team member's icon (Team Battle's FIGHT screen and results):
  * the icon routine's flag 0x20 swaps its palette for the stock grey ramp
@@ -937,14 +1089,8 @@ static int grey_palette_row(unsigned k) {
         int taken=team_member_guest(f);
         for(unsigned g=0;g<roster_count && !taken;g++)taken=grey_row[g]==(int)y;
         if(taken)continue;
-        const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2]+20;
         uint16_t grey[256];
-        for(unsigned i=0;i<256;i++) {
-            unsigned c=p[i*2]|(unsigned)p[i*2+1]<<8,r=c&31,g=(c>>5)&31,b=(c>>10)&31;
-            unsigned l=(r*299+g*587+b*114)*77/100000,lb=l?l+1:0;
-            grey[i]=(uint16_t)((c&0x8000)|l|l<<5|lb<<10);
-            if(c && !grey[i])grey[i]=0x8000;          /* black, not transparent */
-        }
+        grey_colours(roster[k].ui+roster[k].ui_offsets[2]+20,grey,256);
         palette_row_set(y,grey);
         grey_row[k]=(int)y;grey_rows_used=1;
         return (int)y;
@@ -974,11 +1120,15 @@ static int team_screen(unsigned state) {
     return psx_mod_read_word(0x800afa88)==2 &&
         (state==11 || (state==8 && psx_mod_read_half(0x800ae224)<6));
 }
+/* The tiles' areas are the runtime's while they are up: player 2's strong-hit
+ * pack (x 496, tekken3_ttt1_combat.c) under Panda's and Tiger's palettes
+ * waits for tiles_release, which hands it back. */
+int tekken3_ttt1_tiles_up(void){return tiles_active;}
 static void tiles_release(void) {
     if(!tiles_active)return;
     unsigned n=tile_area_count();
     tiles_merge();
-    areas_in(tile_areas,tile_backup,n);areas_in(palette_areas,palette_backup,n);
+    areas_in(tile_areas,tile_backup,n);areas_in(palette_areas,palette_backup,palette_area_count());
     tiles_active=0;
 }
 /* The attract CHARACTERS ranking lists a guest under a stock fighter's slot
@@ -1011,17 +1161,22 @@ int tekken3_ranking_face_ok(unsigned slot) {
     }
     return 1;
 }
-void tekken3_ranking_face(unsigned slot,unsigned id) {
-    int k=tekken3_guest_character(id);unsigned x,y,cx,cy;
-    if(k<0 || slot>=RANKING_FACE_SLOTS || !roster[k].ui || !icon_place(slot,&x,&y,&cx,&cy))return;
+/* Face g's tile and palette over stock icon `slot`. */
+static void face_lend(unsigned slot,const Tekken3Guest *g) {
+    unsigned x,y,cx,cy;
+    if(!g || !g->ui || slot>=RANKING_FACE_SLOTS || !icon_place(slot,&x,&y,&cx,&cy))return;
     if(!face_lent[slot]) {
         gr_vram_transfer_out(x,y,TILE_W,TILE_H,face_backup[slot]);
         gr_vram_transfer_out(cx,cy,256,1,face_palette_backup[slot]);
         face_lent[slot]=1;
     }
-    const unsigned char *p=roster[k].ui+roster[k].ui_offsets[2];
+    const unsigned char *p=g->ui+g->ui_offsets[2];
     gr_vram_transfer_in(x,y,TILE_W,TILE_H,(const uint16_t*)(p+544));
     gr_vram_transfer_in(cx,cy,256,1,(const uint16_t*)(p+20));
+}
+void tekken3_ranking_face(unsigned slot,unsigned id) {
+    int k=tekken3_guest_character(id);
+    if(k>=0)face_lend(slot,&roster[k]);
 }
 /* Set while Time Attack's end screens lend icons (time_attack_beaten). */
 static int faces_held;
@@ -1284,18 +1439,51 @@ static void lend_third_costume_bits(int cabinet) {
 /* Strong-hit effect length. At round start (0x8007641C) each player's
  * effect entry (0x800A35C8 + 16 * player) points at a six-byte header in a
  * per-character table, 0x80027950 + ID * 6, whose first halfword is the
- * number of images of its pack (Jin 22, Xiaoyu 30). The table stops after
- * the stock fighters: a guest's header fell in the data that follows, 0
- * for Jun, so its animation died after one frame, and some other count
- * elsewhere. The guests' packs have Jin's 22 images: give them his header. */
-enum { EFFECT_HEADERS=0x80027950, EFFECT_HEADER=6, EFFECT_ROWS=0x800a35c8, JIN_ID=9 };
+ * number of images of its pack (Jin 22, Xiaoyu 30), followed by a colour
+ * (R, G, B bytes: Jin's blue, Paul's orange). The table stops after the
+ * stock fighters: a guest's header fell in the data that follows, 0 for
+ * Jun, so its animation died after one frame, and some other count
+ * elsewhere. A guest gets the stock header with its own pack's length (30,
+ * 22 for the Mishima, as in TTT1; issue #14: every guest had Jin's 22, and
+ * the end of the TTT1 effects was cut) and the colour nearest its palette;
+ * Jin's without a pack. */
+enum { EFFECT_HEADERS=0x80027950, EFFECT_HEADER=6, EFFECT_STOCK=22, EFFECT_ROWS=0x800a35c8, JIN_ID=9 };
+extern unsigned tekken3_ttt1_hit_effect_frames(unsigned player,unsigned rgb[3]);
+static uint32_t effect_header(unsigned row) {
+    uint32_t best=EFFECT_HEADERS+JIN_ID*EFFECT_HEADER;
+    unsigned rgb[3],frames=row<2?tekken3_ttt1_hit_effect_frames(row,rgb):0,far=~0u;
+    for(unsigned id=0;frames && id<EFFECT_STOCK;id++) {
+        uint32_t h=EFFECT_HEADERS+id*EFFECT_HEADER;
+        if(psx_mod_read_half(h)!=frames)continue;
+        unsigned d=0;
+        for(unsigned k=0;k<3;k++){int e=(int)psx_mod_read_byte(h+2+k)-(int)rgb[k];d+=(unsigned)(e*e);}
+        if(d<far){far=d;best=h;}
+    }
+    return best;
+}
 static void effect_headers(void) {
-    uint32_t jin=EFFECT_HEADERS+JIN_ID*EFFECT_HEADER;
-    if(psx_mod_read_half(jin)!=22)return;
+    if(psx_mod_read_half(EFFECT_HEADERS+JIN_ID*EFFECT_HEADER)!=22)return;
     for(unsigned row=0;row<3;row++) {
         uint32_t at=EFFECT_ROWS+row*16,ptr=psx_mod_read_word(at);
         if(ptr<EFFECT_HEADERS+GUEST_ID*EFFECT_HEADER || (ptr-EFFECT_HEADERS)%EFFECT_HEADER)continue;
-        if(tekken3_guest_character((ptr-EFFECT_HEADERS)/EFFECT_HEADER)>=0)psx_mod_write_word(at,jin);
+        if(tekken3_guest_character((ptr-EFFECT_HEADERS)/EFFECT_HEADER)>=0)psx_mod_write_word(at,effect_header(row));
+    }
+}
+/* The Embu (state 6) sets the headers itself, Jin's for player 1 and
+ * Yoshimitsu's for player 2 (0x8007644C), and loads their packs. The
+ * header's colour is the impact's light (0x80039F0C: a GTE point light at
+ * the hit for 48 frames), which lit Kunimitsu standing in for Yoshimitsu in
+ * his green (issue #29). A guest playing that native's part takes the
+ * header and pack it has in a fight. */
+extern int tekken3_ttt1_embu_native(unsigned player);
+extern void tekken3_ttt1_embu_hit_effect(unsigned player);
+static void embu_effect_headers(unsigned state) {
+    static const int owner[2]={JIN_ID,4};   /* Yoshimitsu */
+    for(unsigned row=0;state==6 && row<2;row++) {
+        if(tekken3_ttt1_embu_native(row)!=owner[row])continue;
+        uint32_t at=EFFECT_ROWS+row*16,header=effect_header(row);
+        if(psx_mod_read_word(at)!=header)psx_mod_write_word(at,header);
+        tekken3_ttt1_embu_hit_effect(row);
     }
 }
 /* TEAM BATTLE RESULTS history (overlay loaded in state 12): each fight's
@@ -1306,7 +1494,13 @@ static void effect_headers(void) {
  * u | v << 8 | palette << 16, then the texture page),
  * each icon a 32 x 58 tile drawn at half size. Let the guests through: no
  * clamp, only 22 itself on the "?" path, and a copy of the table extended
- * with each guest's Tag page tile, which state 12 keeps in VRAM. */
+ * with each guest's Tag page tile, which state 12 keeps in VRAM.
+ * The routine gets ID * 4 + costume (s4) and looks up ID: the copy has an
+ * entry per costume instead (sll v1,s4,3), so that Panda and Tiger get
+ * their tiles, and a second table follows with each entry's defeated
+ * (flag 0x20) icon, read in place of the stock grey ramp's palette
+ * (0x7D50, kept for all but Panda and Tiger, whose palettes have grey
+ * copies of their own). */
 static uint32_t results_icons;
 static int results_overlay_stock(void) {
     return psx_mod_read_word(0x800ee368)==0x24060058 && psx_mod_read_word(0x800ee374)==0x24120058 &&
@@ -1327,14 +1521,20 @@ static int results_overlay_patched(void) {
  * the list names that fighter until the end screens are gone. The run is
  * over, the list only feeds these screens by then. */
 enum { TA_LIST=0x800afb18, TA_STAGES=10 };
-static int ta_beaten_active;
-static uint8_t ta_beaten_list[TA_STAGES],ta_beaten_slot[TA_STAGES];
+static int ta_beaten_active,sv_beaten_active;
+static uint8_t ta_beaten_list[TA_STAGES],ta_beaten_costume[TA_STAGES],ta_beaten_slot[TA_STAGES];
+/* The face a list entry shows on its own: a guest's, or Panda's or Tiger's
+ * (the CPU fights in a costume too), else none. */
+static const Tekken3Guest *ta_beaten_face(unsigned i) {
+    int k=tekken3_guest_character(ta_beaten_list[i]);
+    return k>=0?&roster[k]:alt_face(ta_beaten_list[i],ta_beaten_costume[i]);
+}
 static void time_attack_beaten(unsigned state) {
     int end=time_attack_end(state) && results_overlay_stock();
     if(!end) {
         if(!ta_beaten_active)return;
         for(unsigned i=0;i<TA_STAGES;i++)if(ta_beaten_slot[i])psx_mod_write_byte(TA_LIST+i*4,ta_beaten_list[i]);
-        ta_beaten_active=0;faces_held=0;tekken3_ranking_faces_restore();
+        ta_beaten_active=0;faces_held=sv_beaten_active;if(!faces_held)tekken3_ranking_faces_restore();
         return;
     }
     if(!ta_beaten_active) {
@@ -1343,7 +1543,8 @@ static void time_attack_beaten(unsigned state) {
             unsigned id=psx_mod_read_byte(TA_LIST+i*4);
             if(id<GUEST_ID)used[id]=1;
             ta_beaten_slot[i]=0;ta_beaten_list[i]=psx_mod_read_byte(TA_LIST+i*4);
-            any|=tekken3_guest_character(id)>=0;
+            ta_beaten_costume[i]=psx_mod_read_byte(TA_LIST+i*4+1);
+            any|=ta_beaten_face(i)!=NULL;
         }
         unsigned player=psx_mod_read_byte(0x800afb14);
         if(player<GUEST_ID)used[player]=1;
@@ -1352,8 +1553,7 @@ static void time_attack_beaten(unsigned state) {
          * (Crow / Hawk) its own way. */
         int next=19;
         for(unsigned i=0;i<TA_STAGES;i++) {
-            unsigned id=ta_beaten_list[i];
-            if(tekken3_guest_character(id)<0)continue;
+            if(!ta_beaten_face(i))continue;
             while(next>=0 && (used[next] || !tekken3_ranking_face_ok((unsigned)next)))next--;
             if(next<0)break;
             used[next]=1;ta_beaten_slot[i]=(uint8_t)(next+1);
@@ -1363,28 +1563,81 @@ static void time_attack_beaten(unsigned state) {
     }
     /* Every frame, as the rankings do: the screen may reload its sheet. */
     for(unsigned i=0;i<TA_STAGES;i++)
-        if(ta_beaten_slot[i])tekken3_ranking_face(ta_beaten_slot[i]-1u,ta_beaten_list[i]);
+        if(ta_beaten_slot[i])face_lend(ta_beaten_slot[i]-1u,ta_beaten_face(i));
+}
+/* SURVIVAL RESULTS (state 14 in Survival, mode 4) shows each fighter beaten
+ * with how many times, from the run's counters (0x800AFA88 + 0x60 + 2 * ID,
+ * a halfword each), and totals them: it walks IDs 0..21 only, so a guest
+ * beaten (its counter past the table) was neither shown nor counted. Each
+ * such guest borrows a stock fighter not beaten in the run (counter 0): the
+ * guest's count goes in that fighter's counter and the guest's tile over
+ * its icon, as on TIME ATTACK CLEAR, until the screen is gone. */
+enum { SURVIVAL_MODE=4, SURVIVAL_RESULTS_STATE=14, SURVIVAL_COUNTS=0x800afa88+0x60 };
+static uint8_t sv_lent_to[GUEST_ID];                 /* stock slot -> guest ID + 1 */
+static uint16_t sv_guest_wins[GUEST_MAX];            /* fights won against each guest, this run */
+static void survival_guests_beaten(unsigned state) {
+    int on=state==SURVIVAL_RESULTS_STATE && psx_mod_read_word(0x800afa88)==SURVIVAL_MODE;
+    if(!on) {
+        if(!sv_beaten_active)return;
+        for(unsigned s=0;s<GUEST_ID;s++)if(sv_lent_to[s]) {
+            if(psx_mod_read_word(0x800afa88)==SURVIVAL_MODE)psx_mod_write_half(SURVIVAL_COUNTS+s*2,0);
+            sv_lent_to[s]=0;
+        }
+        sv_beaten_active=0;faces_held=ta_beaten_active;if(!faces_held)tekken3_ranking_faces_restore();
+        return;
+    }
+    if(!sv_beaten_active) {
+        memset(sv_lent_to,0,sizeof sv_lent_to);
+        int next=19;
+        for(unsigned id=GUEST_ID;id<GUEST_ID+roster_count;id++) {
+            unsigned n=sv_guest_wins[id-GUEST_ID];
+            if(!n)continue;
+            while(next>=0 && (psx_mod_read_half(SURVIVAL_COUNTS+next*2) || !tekken3_ranking_face_ok((unsigned)next)))next--;
+            if(next<0)break;
+            psx_mod_write_half(SURVIVAL_COUNTS+next*2,(uint16_t)n);
+            sv_lent_to[next]=(uint8_t)(id+1);next--;
+        }
+        sv_beaten_active=1;faces_held=1;
+    }
+    for(unsigned s=0;s<GUEST_ID;s++)if(sv_lent_to[s])tekken3_ranking_face(s,sv_lent_to[s]-1u);
 }
 static void results_history_patch(void) {
     if(psx_mod_read_word(0x800afa88)!=2 || !roster_count)return;
     int stock=results_overlay_stock(),patched=results_overlay_patched();
     if(!stock && !patched)return;
-    enum { RESULT_ICONS=GUEST_ID+GUEST_MAX };
-    if(!results_icons && !(results_icons=psx_mod_alloc_guest_memory(RESULT_ICONS*8,16)))return;
+    enum { RESULT_ICONS=GUEST_ID+GUEST_MAX, RESULT_ENTRIES=RESULT_ICONS*4, GREY_TABLE=RESULT_ENTRIES*8,
+           GREY_RAMP=0x7d50 };
+    if(!results_icons && !(results_icons=psx_mod_alloc_guest_memory(2*GREY_TABLE,16)))return;
     /* The overlay's table is its own copy of the game's icon table
      * (0x8002152C), filled after the overlay loads: take the stock table,
      * with entry 21 as it was before __wrap_func_8004B928 borrowed it. */
-    for(unsigned i=0;i<GUEST_ID*8;i+=4)psx_mod_write_word(results_icons+i,psx_mod_read_word(0x8002152c+i));
-    psx_mod_write_word(results_icons+21*8,stock_icon_uv);
-    psx_mod_write_word(results_icons+21*8+4,stock_icon_page);
-    for(unsigned k=0;k<roster_count;k++) {
-        uint32_t e=results_icons+(GUEST_ID+k)*8;
-        psx_mod_write_word(e,tile_uv(k));
-        psx_mod_write_word(e+4,TILE_PAGE);
+    for(unsigned v=0;v<RESULT_ENTRIES;v++) {
+        /* 0x59 (22 * 4 + 1) reads ID 23's entry (0x800F0E0C). */
+        unsigned id=v==0x59?GUEST_ID:v>>2;
+        uint32_t uv,page;
+        const Tekken3Guest *alt=alt_face(id,v&3);
+        if(alt){unsigned a=(unsigned)(alt-alt_faces);uv=alt_tile_uv(a,0);page=TILE_PAGE;}
+        else if(id>=GUEST_ID){int k=tekken3_guest_character(id);uv=k<0?stock_icon_uv:tile_uv((unsigned)k);page=k<0?stock_icon_page:TILE_PAGE;}
+        else if(id==21){uv=stock_icon_uv;page=stock_icon_page;}
+        else {uv=psx_mod_read_word(0x8002152c+id*8);page=psx_mod_read_word(0x8002152c+id*8+4);}
+        uint32_t e=results_icons+v*8;
+        psx_mod_write_word(e,uv);psx_mod_write_word(e+4,page);
+        psx_mod_write_word(e+GREY_TABLE,alt?alt_tile_uv((unsigned)(alt-alt_faces),1):(uv&0xffff)|(uint32_t)GREY_RAMP<<16);
+        psx_mod_write_word(e+GREY_TABLE+4,page);
     }
     patch(0x800ee368,0x24060058,0);                 /* no "?" clamp for player 1 */
     patch(0x800ee374,0x24120058,0);                 /* nor for player 2 */
     patch(0x800f0e50,0x28820016,0x38820016);        /* slti -> xori: only 22 is "?" */
+    patch(0x800f0e24,0x000418c0,0x001418c0);        /* sll v1,a0,3 -> sll v1,s4,3 */
+    /* andi v0,s3,0x20; lw s4,0(v1); then: beq v0,zero,+4; lhu s3,4(v1);
+     * lw s4,GREY_TABLE(v1); nop; nop (was lui v0,0x7D50; or s4,v1,v0). */
+    if(psx_mod_read_word(0x800f0e44)==0x0062a025) {
+        patch(0x800f0e34,0x94730004,0x10400004);
+        patch(0x800f0e38,0x10400003,0x94730004);
+        patch(0x800f0e3c,0x3283ffff,0x8c740000|GREY_TABLE);
+        patch(0x800f0e40,0x3c027d50,0);
+        patch(0x800f0e44,0x0062a025,0);
+    }
     patch(0x800f0e1c,0x3c02800c,0x3c020000|(results_icons>>16));
     patch(0x800f0e20,0x24429158,0x34420000|(results_icons&65535));
 }
@@ -1446,14 +1699,57 @@ static void devil_jin_selector_name(void) {
         psx_mod_write_word(SELECTOR_NAME_ID+4+p*0x7c,devil_name_halfwords*4);
     }
 }
+/* The selector loads the big portrait when the character under the cursor
+ * differs from the one shown (+0x14): once a player confirms Panda or
+ * Tiger, or cancels them, mark it as none so the portrait loads again,
+ * through the decoder (__wrap_func_80031BFC). */
+static int alt_face_shown[2];
+static void alt_face_selector(void) {
+    for(unsigned p=0;p<2;p++) {
+        uint32_t block=PLAYER_STATE+p*0x7c;
+        int want=confirmed((int)p) && alt_face(cursor_character((int)p),psx_mod_read_word(block+0x20));
+        if(want==alt_face_shown[p])continue;
+        alt_face_shown[p]=want;
+        psx_mod_write_word(SHOWN_CHARACTER+p*0x7c,NO_CHARACTER);
+    }
+}
+/* The loading screen's card of player p: their guest's, or Panda's or
+ * Tiger's for the costume they fight in; NULL for any other fighter. */
+static const Tekken3Guest *card_face(unsigned p) {
+    unsigned id=psx_mod_read_half(0x800add5c+p*2);
+    if(tekken3_guest_character(id)>=0)return &guests[p];
+    return alt_face(id,psx_mod_read_half(0x800add98+p*2));
+}
 static void loading_card_palette(unsigned p) {
-    const Tekken3Guest *g=&guests[p];
+    const Tekken3Guest *g=card_face(p);
+    if(!g)return;
     ttt1_ui_palette_upload(&loading_palette[p],LOADING_PALETTE_Y+p,(const uint16_t*)(g->ui+g->ui_offsets[4]+20));
 }
 static void arena_tick(unsigned state);
 static void opponents_tick(unsigned state);
 static void team_tick(unsigned state);
 static void portraits_tick(unsigned state);
+/* The CPU's fighter of the current Survival fight (ID * 4 + costume), noted
+ * as beaten when the next fight loads. A new run starts at the selector. */
+static void survival_tick(unsigned state) {
+    static int current=-1;
+    if(psx_mod_read_word(0x800afa88)!=4){current=-1;return;}
+    /* The wins above the health bars (0x800AFACC) is the sum of the counters
+     * of IDs 0..21, set when a fight is won (0x800B16A8): a guest's win goes
+     * in a counter past the table and is left out. The bottom line and the
+     * ranking read the stage count (0x800AFAAC), which is right. */
+    if(psx_mod_read_word(0x800afacc)!=psx_mod_read_word(0x800afaac))psx_mod_write_word(0x800afacc,psx_mod_read_word(0x800afaac));
+    if(state==9){memset(survival_beaten,0,sizeof survival_beaten);memset(sv_guest_wins,0,sizeof sv_guest_wins);current=-1;return;}
+    if(state==8 && psx_mod_read_half(0x800ae224)>=6) {
+        for(unsigned p=0;p<2;p++)if(!psx_mod_read_half(0x800ae1f8+p*2))
+            current=(int)(psx_mod_read_half(0x800add5c+p*2)*4+(psx_mod_read_half(0x800add98+p*2)&3));
+    } else if(state==11 && current>=0) {
+        unsigned id=(unsigned)current>>2;
+        if(id<sizeof survival_beaten)survival_beaten[id]|=alt_face(id,(unsigned)current&3)?BEATEN_ALT:BEATEN_STOCK;
+        else if(id-GUEST_ID<GUEST_MAX)sv_guest_wins[id-GUEST_ID]++;
+        current=-1;
+    }
+}
 void tekken3_ttt1_roster_tick(void) {
     if(enabled<0)enabled=roster_setting();
     if(!enabled)return;
@@ -1482,7 +1778,7 @@ void tekken3_ttt1_roster_tick(void) {
     }
     if(was_cabinet && !cabinet)closed_on_tag=page;
     was_cabinet=cabinet;
-    if(!cabinet){page=stock_saved=reopened=0;confirmed_page[0]=confirmed_page[1]=-1;}
+    if(!cabinet){page=stock_saved=reopened=0;confirmed_page[0]=confirmed_page[1]=-1;alt_face_shown[0]=alt_face_shown[1]=0;}
     /* Reopening on the Tag page is for coming back to the selector from a
      * fight (Practice's player select, a continue), not for a new mode. */
     if(state==4)closed_on_tag=0;
@@ -1491,7 +1787,9 @@ void tekken3_ttt1_roster_tick(void) {
      * composition: its tiles must still be there. */
     static unsigned away;
     away=(cabinet || state==10 || state==11 || team_screen(state) ||
-          (state==12 && psx_mod_read_word(0x800afa88)==2) || time_attack_end(state))?0:away+1;
+          (state==12 && psx_mod_read_word(0x800afa88)==2) || time_attack_end(state) ||
+          (survival_end(state) && tiles_active))?0:away+1;
+    survival_tick(state);
     if(away>=3)tiles_release();
     if(state==10){grid_availability();grid_park_prompt_cursor();grey_rows_release();}
     if(state!=10){
@@ -1527,6 +1825,7 @@ void tekken3_ttt1_roster_tick(void) {
         patch_name_lookup();
         write_names();
         devil_jin_selector_name();
+        alt_face_selector();
     }
     lend_third_costume_bits(cabinet);
     if(cabinet || state==10)tiles_upload();
@@ -1541,8 +1840,10 @@ void tekken3_ttt1_roster_tick(void) {
     else if(state==12 && psx_mod_read_word(0x800afa88)==2 && !tiles_active)tiles_upload();
     else if(team_screen(state) && tiles_active)tiles_upload();
     time_attack_beaten(state);
+    survival_guests_beaten(state);
     if(state==12 && tiles_active)results_history_patch();
     if(state==8)effect_headers();
+    embu_effect_headers(state);
     if(state==11) {
         /* Arcade loading thumbnails have half-height pixels. The PS1's framed
          * team cards use 58 rows, so preserve their aspect ratio. One card
@@ -1550,7 +1851,13 @@ void tekken3_ttt1_roster_tick(void) {
          * beside it. */
         for(unsigned p=0;p<2;p++) {
             unsigned id=psx_mod_read_half(0x800add5c+p*2);
-            if(tekken3_guest_character(id)<0)continue;
+            if(tekken3_guest_character(id)<0) {
+                const Tekken3Guest *alt=card_face(p);
+                if(!alt)continue;
+                if(loading_card_drawn[p])loading_card_palette(p);
+                gr_vram_transfer_in(ICON_X+p*16,ICON_Y,16,58,alt->loading_pixels);
+                continue;
+            }
             follow(p,id);
             follow_costume(p,psx_mod_read_half(0x800add98+p*2));
             reset_button_donor(p);
@@ -1609,8 +1916,12 @@ void __wrap_func_80052940(CPUState *cpu) {
         /* Every grid mode (VS 1, Team Battle 2, Tekken Ball 7): the native
          * path rejects IDs of 22 and above with a compiled-in bound
          * (0x80052EB0) that a code patch does not reach. */
-        /* Punch or kick, like any fighter; Start for a third costume. */
-        int third=id && (input&0x800) && roster[id-GUEST_ID].third_costume;
+        /* Punch or kick, like any fighter; Start for a third costume, or
+         * triangle in Team Battle, where the game takes Start first
+         * (0x80053968, a random team) and triangle gives a native its
+         * third costume. */
+        uint32_t third_key=psx_mod_read_word(0x800afa88)==2?0x10:0x800;
+        int third=id && (input&third_key) && roster[id-GUEST_ID].third_costume;
         if(id && ((input&0xf0) || third) && n<8 &&
            (psx_mod_read_word(state+36)&(1u<<(id&31)))) {
             /* Append the guest to the real native choice array;
@@ -1685,7 +1996,11 @@ void __wrap_func_8004B928(CPUState *cpu) {
             unsigned size=psx_mod_read_byte(team+12),stage=psx_mod_read_byte(team+8);
             if(!size || size>8)size=8;
             unsigned m=(stage+1+j)%size;
-            if(j+1<size && (psx_mod_read_half(0x800ae1f8+p*2) || m<stage)) {
+            /* A player's own picks (team + 10 of them) show; the places the game
+             * drew for the Random fill stay "?" until fought, like the stock
+             * fighters drawn there. */
+            unsigned picked=psx_mod_read_half(0x800ae1f8+p*2)?psx_mod_read_byte(team+10):0;
+            if(j+1<size && (m<picked || m<stage)) {
                 unsigned member=psx_mod_read_byte(team+m);
                 if(tekken3_guest_character(member>>2)>=0)psx_mod_write_word(slot,member&~3u);
             }
@@ -1697,8 +2012,13 @@ void __wrap_func_8004B928(CPUState *cpu) {
             unsigned member=psx_mod_read_byte(cpu->gpr[21]+cpu->gpr[16]);
             if(tekken3_guest_character(member>>2)>=0)psx_mod_write_word(slot,member&~3u);
         }
-        unsigned id=psx_mod_read_word(slot)>>2;
+        unsigned id=psx_mod_read_word(slot)>>2,costume=psx_mod_read_word(slot)&3;
         int k=tekken3_guest_character(id);
+        /* Panda, Tiger: the icon is asked for with the costume (ID * 4 +
+         * costume: the team panel, the FIGHT screen). Not in the attract
+         * rankings, which list a character, not a costume. */
+        const Tekken3Guest *alt=k<0 && psx_mod_read_word(0x800ae204)!=17?alt_face(id,costume):NULL;
+        if(k<0 && !alt && cpu->gpr[31]==0x800f0420 && survival_end(psx_mod_read_word(0x800ae204)))alt=survival_face(id);
         /* The attract rankings (state 17): the guest's face lies over the
          * icon of a stock fighter they do not list (tekken3_ttt1_records.c). */
         if(k>=0 && psx_mod_read_word(0x800ae204)==17) {
@@ -1733,6 +2053,32 @@ void __wrap_func_8004B928(CPUState *cpu) {
             psx_mod_write_word(slot,21*4);
             psx_mod_write_word(0x8002152c+21*8,uv);
             psx_mod_write_half(0x8002152c+21*8+4,tpage);
+        } else if(alt) {
+            /* Slot 21 as for a guest: Panda's or Tiger's tile beside the
+             * guests' (tiles_upload), greyed in its own palette row for a
+             * defeated member; on the loading screen, the player's card. */
+            unsigned a=(unsigned)(alt-alt_faces),state=psx_mod_read_word(0x800ae204);
+            if((team_screen(state) || time_attack_end(state) || survival_end(state)) && !tiles_active)tiles_upload();
+            int team_loading=(team_screen(state) || state==12) && psx_mod_read_word(0x800afa88)==2 && tiles_active;
+            uint32_t uv=0,tpage=TILE_PAGE;
+            if(state==11 && !team_loading) {
+                unsigned p=psx_mod_read_half(0x800add5c)==id && psx_mod_read_half(0x800add98)==costume?0:1;
+                if(card_face(p)==alt) {
+                    if(!loading_card_drawn[p]){loading_card_drawn[p]=1;loading_card_palette(p);}
+                    uv=((uint32_t)((LOADING_PALETTE_Y+p)<<6)<<16)|(ICON_Y<<8)|(p*32);
+                    tpage=ICON_PAGE;
+                }
+            } else if(tiles_active) {
+                uint32_t flags=psx_mod_read_word(cpu->gpr[29]+20);
+                int grey=team_loading && (flags&0x20);
+                if(grey)psx_mod_write_word(cpu->gpr[29]+20,flags&~0x20u);
+                uv=alt_tile_uv(a,grey);
+            }
+            if(uv) {
+                psx_mod_write_word(slot,21*4);
+                psx_mod_write_word(0x8002152c+21*8,uv);
+                psx_mod_write_half(0x8002152c+21*8+4,tpage);
+            }
         } else if(id==21) {
             psx_mod_write_word(0x8002152c+21*8,stock_icon_uv);
             psx_mod_write_word(0x8002152c+21*8+4,stock_icon_page);
@@ -1751,6 +2097,23 @@ void __wrap_func_80031BFC(CPUState *cpu) {
         const Tekken3Guest *g=&roster[tekken3_guest_character(id)];
         copy_host(cpu->gpr[5],g->ui+g->ui_offsets[0],g->ui_lengths[0]);
         cpu->gpr[2]=g->ui_lengths[0];cpu->pc=cpu->gpr[31];return;
+    }
+    /* Panda, Tiger: the stock portrait (Kuma's, Eddy's) was read and goes
+     * through the decoder; the confirmed costume's face comes out instead.
+     * Selector: s0 is the player block (+0 state, +0x1C character, +0x20
+     * costume); loading screen: s4 is the player. */
+    if(tekken3_ttt1_roster_enabled() && (cpu->pc==0 || cpu->pc==0x80031bfc)) {
+        const Tekken3Guest *g=NULL;
+        if(cpu->gpr[31]==0x8010e574) {
+            unsigned state=psx_mod_read_word(cpu->gpr[16]);
+            if(state!=CHOOSING && state!=CHOOSING_CPU)
+                g=alt_face(psx_mod_read_word(cpu->gpr[16]+0x1c),psx_mod_read_word(cpu->gpr[16]+0x20));
+        } else if(cpu->gpr[31]==0x8004c814 && cpu->gpr[20]<2)
+            g=alt_face(psx_mod_read_half(0x800add5c+cpu->gpr[20]*2),psx_mod_read_half(0x800add98+cpu->gpr[20]*2));
+        if(g) {
+            copy_host(cpu->gpr[5],g->ui+g->ui_offsets[0],g->ui_lengths[0]);
+            cpu->gpr[2]=g->ui_lengths[0];cpu->pc=cpu->gpr[31];return;
+        }
     }
     __real_func_80031BFC(cpu);
 }
@@ -1863,6 +2226,19 @@ static int hidden_boss(unsigned k) {
     const char *n=roster[k].key;
     return !strcmp(n,"devil") || !strcmp(n,"angel") || !strcmp(n,"unknown");
 }
+/* Mokujin (15) is the one stock fighter the game's own draws leave out of
+ * Time Attack, Survival, Tekken Ball and the CPU's Team Battle team: they
+ * may swap a drawn fighter for him as for a guest (pool entry NO_GUEST),
+ * once he is unlocked (bit 15 of the available fighters, 0x80097EF0). */
+enum { MOKUJIN=15, AVAILABLE=0x80097ef0, NO_GUEST=0xff };
+static int mokujin_unlocked(void){return (psx_mod_read_word(AVAILABLE)>>MOKUJIN&1)!=0;}
+static const char *fighter_name(unsigned id) {
+    static const char *stock[STOCK_FIGHTERS]={"Paul","Law","Lei","King","Yoshimitsu","Nina","Hwoarang","Xiaoyu",
+        "Eddy","Jin","Julia","Kuma","Bryan","Heihachi","Ogre","Mokujin","Gun Jack","Gon","Anna","Dr. Bosconovitch",
+        "True Ogre","Crow"};
+    int k=tekken3_guest_character(id);
+    return k>=0?roster[k].name:id<STOCK_FIGHTERS?stock[id]:"?";
+}
 static void opponents_tick(unsigned state) {
     static unsigned char written[OPPONENT_COUNT*4];
     static int configured;
@@ -1878,18 +2254,20 @@ static void opponents_tick(unsigned state) {
     for(unsigned i=0;i<sizeof list;i++)list[i]=psx_mod_read_byte(OPPONENTS+i);
     if(list[9*4]!=14 || !memcmp(list,written,sizeof list))return;      /* not built yet, or ours */
     unsigned human=psx_mod_read_half(0x800ae1f8)?0:1,player=psx_mod_read_half(0x800add5c+human*2);
-    unsigned pool[GUEST_MAX],bosses[GUEST_MAX],n=0,nb=0;
+    unsigned pool[GUEST_MAX+1],bosses[GUEST_MAX],n=0,nb=0;
     for(unsigned k=0;k<roster_count;k++) {
         if(GUEST_ID+k==player)continue;
         if(hidden_boss(k))bosses[nb++]=k;else pool[n++]=k;
     }
+    if(mode==3 && player!=MOKUJIN && mokujin_unlocked())pool[n++]=NO_GUEST;   /* Arcade's own draw has him */
     unsigned count=guests_max>guests_min?guests_min+draw(guests_max-guests_min+1):guests_min;
     unsigned stages[4]={4,5,6,7};
     for(unsigned i=0;i<count && n;i++) {
         unsigned s=i+draw(4-i),tmp=stages[i];stages[i]=stages[s];stages[s]=tmp;   /* a stage not yet taken */
         unsigned g=draw(n),k=pool[g];pool[g]=pool[--n];                             /* a guest not yet taken */
-        list[stages[i]*4]=(unsigned char)(GUEST_ID+k);
-        fprintf(stderr,"TTT1 characters: %s is the CPU's stage %u opponent\n",roster[k].name,stages[i]+1);
+        unsigned id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
+        list[stages[i]*4]=(unsigned char)id;
+        fprintf(stderr,"TTT1 characters: %s is the CPU's stage %u opponent\n",fighter_name(id),stages[i]+1);
     }
     if(nb && boss_one_in && !draw(boss_one_in)) {
         unsigned k=bosses[draw(nb)];
@@ -1927,8 +2305,14 @@ static void portrait_reload(unsigned player) {
 }
 static void portraits_tick(unsigned state) {
     if(state==9 || state==10)return;
-    for(unsigned p=0;p<2;p++)
-        if(tekken3_guest_character(psx_mod_read_half(0x800add5c+p*2))>=0)portrait_reload(p);
+    for(unsigned p=0;p<2;p++) {
+        unsigned id=psx_mod_read_half(0x800add5c+p*2);
+        if(tekken3_guest_character(id)>=0)portrait_reload(p);
+        /* Kuma and Panda, Eddy and Tiger ask for the same portrait: always
+         * reload theirs, so the costume's face comes out (alt_face). Not
+         * during the loading screen itself, which would load it again. */
+        else if(state!=11 && alt_face_character(id))psx_mod_write_byte(HELD_PORTRAIT+p,NO_PORTRAIT);
+    }
 }
 enum { SURVIVAL=4, SURVIVAL_DRAW_RETURN=0x800b0c00, SURVIVAL_GUESTS_FROM=7, SURVIVAL_BOSSES_FROM=17 };
 static unsigned survival_guest_one_in=4,survival_boss_one_in=8;
@@ -1952,7 +2336,7 @@ void __wrap_func_8004F0E4(CPUState *cpu) {
     if((cpu->pc==0 || cpu->pc==0x8004f0e4) && player<2 && cpu->gpr[31]==SURVIVAL_DRAW_RETURN &&
        psx_mod_read_word(GAME_MODE)==SURVIVAL && tekken3_ttt1_roster_enabled() && roster_count) {
         unsigned stage=psx_mod_read_word(STAGE_INDEX),mine=psx_mod_read_half(0x800add5c+(player^1)*2);
-        unsigned pool[GUEST_MAX],n=0;
+        unsigned pool[GUEST_MAX+1],n=0;
         int boss=stage>=SURVIVAL_BOSSES_FROM && survival_boss_one_in && !draw(survival_boss_one_in);
         int guest=!boss && stage>=SURVIVAL_GUESTS_FROM && survival_guest_one_in && !draw(survival_guest_one_in);
         for(unsigned k=0;k<roster_count && (boss || guest);k++) {
@@ -1960,27 +2344,47 @@ void __wrap_func_8004F0E4(CPUState *cpu) {
             for(unsigned r=0;r<4;r++)if(recent[r]==(int)k)seen=1;
             if(GUEST_ID+k!=mine && !seen && hidden_boss(k)==boss)pool[n++]=k;
         }
+        if(guest && mine!=MOKUJIN && mokujin_unlocked()) {
+            int seen=0;
+            for(unsigned r=0;r<4;r++)if(recent[r]==(int)NO_GUEST)seen=1;
+            if(!seen)pool[n++]=NO_GUEST;
+        }
         if(n) {
-            unsigned k=pool[draw(n)];
-            psx_mod_write_half(0x800add5c+player*2,(uint16_t)(GUEST_ID+k));
+            unsigned k=pool[draw(n)],id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
+            psx_mod_write_half(0x800add5c+player*2,(uint16_t)id);
             recent[next_recent++%4]=(int)k;
-            fprintf(stderr,"TTT1 characters: %s is the CPU's Survival opponent (stage %u)\n",roster[k].name,stage+1);
+            fprintf(stderr,"TTT1 characters: %s is the CPU's Survival opponent (stage %u)\n",fighter_name(id),stage+1);
         }
     }
     __real_func_8004F0E4(cpu);
 }
-/* Guests in the CPU's Team Battle team. 0x800B225C builds each team at
- * 0x800AFA88 + 89 + 13 * player (bytes 0..7: members, ID * 4 + costume, 88
- * empty; +11 costume; +12 size): the CPU's, player flag 0x800AE1F8 + 2 * p
- * at 0, from stock fighters only. While the first fight loads (its first
- * member is already in), each other member takes a guest's place with a
- * chance of 1 / TEAM_ONE_IN, at most TEAM_MAX guests, costume kept; no guest
- * twice, none from the player's team, no Devil / Angel / Unknown.
- * TEKKEN3_TEAM_GUESTS="one_in,max" overrides (max 0 = never). */
-enum { TEAM_BATTLE=2, TEAMS=0x800afa88+89, TEAM_STRIDE=13, TEAM_EMPTY=88 };
+/* Team Battle teams. 0x800B0808 builds both teams when the grid is left
+ * (0x800B225C fills the places nobody picked): at 0x800AFA88 + 89 + 13 *
+ * player, bytes 0..7 the members (ID * 4 + costume, 88 empty), +10 how many
+ * the player picked by hand, +11 costume, +12 size. A CPU team picks
+ * nothing; a human's Start with an incomplete team (the Random fill) leaves
+ * the rest to the game, whose pool is the stock fighters but Mokujin (mask
+ * 0x1F7FFF) and, in the CPU's case, never a guest. Right after 0x800B0808
+ * returns, before the loading screen copies the first members to the
+ * fighters (0x800ADD5C), this takes over the places the game filled:
+ *  - a human's Random fill redraws each place over everything, guests (all
+ *    of them, Devil, Angel and Unknown too) and Mokujin included, in
+ *    proportion to the stock fighters left, so a place is as likely to be
+ *    a guest as any one fighter is;
+ *  - the CPU's team keeps its stock fighters, each place having a chance
+ *    of 1 / TEAM_ONE_IN to be a guest (not Devil, Angel, Unknown) or
+ *    Mokujin, at most TEAM_MAX such places.
+ * No fighter is twice in either team; the costume stays. Every native left
+ * in a filled place (the CPU's, a Random fill's) tosses its moves, Tekken 3
+ * or TTT1, kept for the match (tekken3_native_moves_assign). Mokujin is
+ * subject to his unlock. TEKKEN3_TEAM_GUESTS="one_in,max" sets the CPU's
+ * rate (max 0 = never). */
+enum { TEAM_BATTLE=2, TEAMS=0x800afa88+89, TEAM_STRIDE=13, TEAM_EMPTY=88, RANDOM_FILL_POOL=0x1f7fff };
+extern int tekken3_native_moves_assign(unsigned slot,unsigned id,int ttt1);
 static unsigned team_one_in=4,team_max=2;
 static void team_tick(unsigned state) {
     static unsigned char written[2][8];
+    static int built;
     static int configured;
     if(!configured) {
         configured=1;
@@ -1988,32 +2392,60 @@ static void team_tick(unsigned state) {
         unsigned a,b;
         if(e && sscanf(e,"%u,%u",&a,&b)==2 && a){team_one_in=a;team_max=b;}
     }
-    if(state!=11 || psx_mod_read_word(GAME_MODE)!=TEAM_BATTLE || !team_max)return;
+    if(state==10){built=0;return;}
+    if(state!=11 || psx_mod_read_word(GAME_MODE)!=TEAM_BATTLE || !tekken3_ttt1_roster_enabled())return;
+    if(built){
+        int same=1;
+        for(unsigned p=0;p<2;p++)for(unsigned i=0;i<8;i++)if(psx_mod_read_byte(TEAMS+p*TEAM_STRIDE+i)!=written[p][i])same=0;
+        if(same)return;
+    }
     for(unsigned p=0;p<2;p++) {
-        if(psx_mod_read_half(0x800ae1f8+p*2))continue;                   /* a player's team */
-        uint32_t team=TEAMS+p*TEAM_STRIDE,other=TEAMS+(p^1)*TEAM_STRIDE;
-        unsigned size=psx_mod_read_byte(team+12);
+        int human=psx_mod_read_half(0x800ae1f8+p*2)!=0;
+        uint32_t team=TEAMS+p*TEAM_STRIDE;
+        unsigned size=psx_mod_read_byte(team+12),chosen=human?psx_mod_read_byte(team+10):0;
+        if(size<1 || size>8 || chosen>=size)continue;                    /* nothing left to the game */
         unsigned char members[8];
         for(unsigned i=0;i<8;i++)members[i]=psx_mod_read_byte(team+i);
-        if(size<2 || size>8 || !memcmp(members,written[p],8))continue;
-        int guest_in=0;
-        for(unsigned i=0;i<size;i++)if(tekken3_guest_character(members[i]>>2)>=0)guest_in=1;
-        if(guest_in)continue;                                             /* already ours */
-        unsigned pool[GUEST_MAX],n=0,placed=0;
-        for(unsigned k=0;k<roster_count;k++) {
-            int theirs=0;
-            for(unsigned i=0;i<8;i++)if((psx_mod_read_byte(other+i)>>2)==GUEST_ID+k)theirs=1;
-            if(!theirs && !hidden_boss(k))pool[n++]=k;
-        }
-        for(unsigned i=1;i<size && n && placed<team_max;i++) {
-            if(members[i]==TEAM_EMPTY || draw(team_one_in))continue;
-            unsigned g=draw(n),k=pool[g];pool[g]=pool[--n];
-            members[i]=(unsigned char)((GUEST_ID+k)*4+(members[i]&3));
+        unsigned placed=0;
+        for(unsigned i=chosen;i<size;i++) {
+            if(members[i]==TEAM_EMPTY)continue;
+            /* Who is in either team, this place left out. */
+            unsigned stock_taken=0;
+            unsigned char guest_taken[GUEST_MAX]={0};
+            for(unsigned q=0;q<2;q++)for(unsigned j=0;j<8;j++) {
+                uint32_t b=TEAMS+q*TEAM_STRIDE;
+                unsigned m=(q==p && j==i)?TEAM_EMPTY:q==p?members[j]:psx_mod_read_byte(b+j);
+                if(m==TEAM_EMPTY)continue;
+                int g=tekken3_guest_character(m>>2);
+                if(g>=0)guest_taken[g]=1;else if((m>>2)<32)stock_taken|=1u<<(m>>2);
+            }
+            unsigned extras[GUEST_MAX+1],n=0;
+            for(unsigned k=0;k<roster_count;k++)
+                if(!guest_taken[k] && (human || !hidden_boss(k)))extras[n++]=k;
+            if(!(stock_taken>>MOKUJIN&1) && mokujin_unlocked())extras[n++]=NO_GUEST;
+            unsigned stock_left=0;
+            for(uint32_t pool=psx_mod_read_word(AVAILABLE)&RANDOM_FILL_POOL&~stock_taken;pool;pool&=pool-1)stock_left++;
+            int swap;
+            if(human)swap=n && draw(n+stock_left)<n;
+            else swap=n && placed<team_max && !draw(team_one_in);
+            if(!swap)continue;
+            unsigned k=extras[draw(n)],id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
+            members[i]=(unsigned char)(id*4+(members[i]&3));
             psx_mod_write_byte(team+i,members[i]);placed++;
-            fprintf(stderr,"TTT1 characters: %s joins the CPU's team (member %u)\n",roster[k].name,i+1);
+            /* The loading screen has copied the first member already. */
+            if(i==0){psx_mod_write_half(0x800add5c+p*2,(uint16_t)id);psx_mod_write_half(0x800add98+p*2,(uint16_t)(members[i]&3));}
+            fprintf(stderr,"TTT1 characters: %s joins %s P%u's team (member %u)\n",fighter_name(id),
+                    human?"Random fill, ":"the CPU's team, ",p+1,i+1);
         }
-        memcpy(written[p],members,8);
+        for(unsigned i=chosen;i<size;i++) {
+            unsigned id=members[i]>>2;
+            if(members[i]==TEAM_EMPTY || id>=STOCK_FIGHTERS)continue;
+            if(tekken3_native_moves_assign(p,id,(int)draw(2)))
+                fprintf(stderr,"Native moves: P%u's %s fights on TTT1 moves (toss)\n",p+1,fighter_name(id));
+        }
     }
+    for(unsigned p=0;p<2;p++)for(unsigned i=0;i<8;i++)written[p][i]=psx_mod_read_byte(TEAMS+p*TEAM_STRIDE+i);
+    built=1;
 }
 /* Guests as the CPU's Tekken Ball opponent. The grid overlay draws it
  * (0x800B4DC8, TIPS.md section 25): Gon, and nobody else, on a save's very
@@ -2046,14 +2478,15 @@ static void ball_swap(unsigned player) {
     uint32_t slot=ball_choice;ball_choice=0;
     unsigned drawn=psx_mod_read_word(slot),mine=psx_mod_read_half(0x800add5c+(player^1)*2);
     if(!ball_one_in || (drawn>>2)>=STOCK_FIGHTERS || draw(ball_one_in))return;
-    unsigned pool[GUEST_MAX],n=0;
+    unsigned pool[GUEST_MAX+1],n=0;
     for(unsigned k=0;k<roster_count;k++)if(GUEST_ID+k!=mine && !hidden_boss(k))pool[n++]=k;
+    if(mine!=MOKUJIN && mokujin_unlocked())pool[n++]=NO_GUEST;
     if(!n)return;
-    unsigned k=pool[draw(n)];
-    psx_mod_write_word(slot,(GUEST_ID+k)*4+(drawn&3));
-    psx_mod_write_half(0x800add5c+player*2,(uint16_t)(GUEST_ID+k));
+    unsigned k=pool[draw(n)],id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
+    psx_mod_write_word(slot,id*4+(drawn&3));
+    psx_mod_write_half(0x800add5c+player*2,(uint16_t)id);
     portrait_reload(player);
-    fprintf(stderr,"TTT1 characters: %s is the CPU's Tekken Ball opponent\n",roster[k].name);
+    fprintf(stderr,"TTT1 characters: %s is the CPU's Tekken Ball opponent\n",fighter_name(id));
 }
 static void arena_tick(unsigned state) {
     if(!arena_pending)return;

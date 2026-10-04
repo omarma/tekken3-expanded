@@ -1,15 +1,11 @@
-"""Images d'interface d'un personnage, reprises de TTT1 (releve de tools/ttt1_ui_capture.lua).
+"""Images d'interface d'un personnage, reprises de TTT1.
 
 - grand portrait de l'ecran de chargement : 152 x 256 px, 256 couleurs ;
 - vignette de la grille de selection : 64 x 32 px, 256 couleurs.
 
-La vignette du personnage se reconnait sur les captures de selection : entre
-la capture du temoin (curseur sur Xiaoyu) et celle du personnage, la case qui
-change le plus, hors celle de Xiaoyu, est la sienne (grille reguliere, voir
-cell_box). On compare cette case, prise sur la capture du temoin (sans
-curseur), a chaque vignette.
+Les deux viennent de la ROM (tools/ttt1/rom_ram.py, thumbnail de
+tools/data/ttt1_characters.json).
 """
-import csv, struct
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
@@ -22,79 +18,6 @@ def rgba(data, w, h, pal, clear_zero=True):
     r, g, b = ((P & 31) << 3), (((P >> 5) & 31) << 3), (((P >> 10) & 31) << 3)
     a = np.where((P == 0) & clear_zero, 0, 255)
     return Image.fromarray(np.stack([r, g, b, a], 2).astype(np.uint8), 'RGBA')
-
-
-def uploads(folder):
-    """(vignettes, grand portrait) ; chaque image est precedee de sa palette."""
-    rows = list(csv.DictReader(open(folder / 'ui-uploads.csv')))
-    pal, thumbs, portrait = None, [], None
-    for r in rows:
-        w, h = int(r['w']), int(r['h']); data = (folder / r['file']).read_bytes()
-        if (w, h) == (256, 1): pal = struct.unpack('<256H', data[:512]); continue
-        if pal is None: continue
-        if (w, h) == (32, 32): thumbs.append(rgba(data, 32, 32, pal, clear_zero=False).convert('RGB'))
-        elif (w, h) == (76, 256) and portrait is None: portrait = rgba(data, 76, 256, pal)
-        pal = None
-    return thumbs, portrait
-
-
-def thumbnail_at(folder, x, y):
-    """Vignette de grille envoyee a (x, y) en VRAM : pour un personnage sans case
-    au selecteur (Unknown, envoyee en (960, 960) avec les autres)."""
-    rows = list(csv.DictReader(open(folder / 'ui-uploads.csv')))
-    pal = None
-    for r in rows:
-        w, h = int(r['w']), int(r['h']); data = (folder / r['file']).read_bytes()
-        if (w, h) == (256, 1): pal = struct.unpack('<256H', data[:512]); continue
-        if (w, h) == (32, 32) and pal is not None and (int(r['x']), int(r['y'])) == (x, y):
-            return rgba(data, 32, 32, pal, clear_zero=False).convert('RGB')
-        pal = None
-    raise ValueError(f'pas de vignette envoyee en ({x}, {y})')
-
-
-GRID_X0, GRID_Y0, PITCH_X, PITCH_Y, CELL_W, CELL_H = 55, 10, 42, 26.5, 42, 27   # capture 512 x 240
-
-
-# colonnes d'ecran occupees par ligne (memoire ttt1-select-grid-navigation)
-ROW_COLS = {1: range(2, 10), 2: range(1, 11), 3: range(1, 11), 4: range(3, 9)}
-
-
-def cell_box(r, c):
-    x, y = round(GRID_X0 + PITCH_X * (c - 1)), round(GRID_Y0 + PITCH_Y * (r - 1))
-    return x, y, x + CELL_W, y + CELL_H
-
-
-def cursor_cell(witness_png, character_png):
-    """Case de grille (ligne, colonne) ou le curseur a bouge : celle, hors case de
-    depart de Xiaoyu (3, 1), dont l'interieur change le plus entre les captures."""
-    a = np.asarray(Image.open(witness_png).convert('RGB'), dtype=np.int16)
-    b = np.asarray(Image.open(character_png).convert('RGB'), dtype=np.int16)
-    mask = np.abs(a - b).max(2) > 40
-    best = None
-    for r, cols in ROW_COLS.items():
-        for c in cols:
-            x0, y0, x1, y1 = cell_box(r, c)
-            score = int(mask[y0 + 3:y1 - 3, x0 + 3:x1 - 3].sum())
-            if (r, c) != (3, 1) and (best is None or score > best[0]): best = (score, r, c)
-    if best[0] < 50: raise ValueError(f'case du personnage introuvable (meilleure : {best})')
-    return best[1], best[2]
-
-
-def find_thumbnail(thumbs, witness_png, character_png):
-    r, c = cursor_cell(witness_png, character_png)
-    x0, y0, x1, y1 = cell_box(r, c)
-    shot = np.asarray(Image.open(witness_png).convert('RGB'), dtype=np.float32)
-    best = None
-    for k, t in enumerate(thumbs):
-        T = np.asarray(t, dtype=np.float32)
-        bb = t.getbbox() or (0, 0, 64, 32)                       # partie non noire
-        T = T[bb[1]:bb[3], bb[0]:bb[2]]; th, tw = T.shape[:2]
-        for dy in range(y0 - 6, y1 - th + 7):
-            for dx in range(x0 - 6, x1 - tw + 7):
-                if dy < 0 or dx < 0 or dy + th > shot.shape[0] or dx + tw > shot.shape[1]: continue
-                e = float(np.mean((shot[dy:dy + th, dx:dx + tw] - T) ** 2))
-                if best is None or e < best[0]: best = (e, k)
-    return thumbs[best[1]], best[0]
 
 
 BACKGROUND = (54, 24, 90)       # fond des vignettes, celui des invites precedents

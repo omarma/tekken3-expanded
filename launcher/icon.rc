@@ -1,0 +1,2 @@
+// The T3E icon (packaging/icon.png) for the Windows executables.
+1 ICON "../packaging/windows/icon.ico"

@@ -10,6 +10,8 @@
 
 namespace PS1 {
 
+static constexpr uint32_t kMaxDirectorySize = 16u * 1024 * 1024;
+
 // PS1 CD-ROM sector size (Mode 2, Form 1 user data)
 constexpr size_t SECTOR_SIZE = 2048;
 
@@ -562,8 +564,8 @@ bool ISOReader::ParseDirectoryRecord(const uint8_t* data, ISOFileEntry& entry) c
 
     // Extract filename length (offset 32)
     uint8_t name_len = data[32];
-    if (name_len == 0) {
-        return false;  // Invalid record
+    if (name_len == 0 || 33u + name_len > record_len) {
+        return false;  // Invalid record (the name must fit in it)
     }
 
     // Extract filename (offset 33)
@@ -595,7 +597,9 @@ bool ISOReader::ParseDirectoryRecord(const uint8_t* data, ISOFileEntry& entry) c
 std::vector<ISOFileEntry> ISOReader::ListFilesByLBA(uint32_t lba, uint32_t dir_size) {
     std::vector<ISOFileEntry> results;
 
-    if (!is_open_ || lba == 0 || dir_size == 0) {
+    // A directory is a few sectors; a bigger size is damage (and near 4 GB
+    // it would wrap the sector count below).
+    if (!is_open_ || lba == 0 || dir_size == 0 || dir_size > kMaxDirectorySize) {
         return results;
     }
 

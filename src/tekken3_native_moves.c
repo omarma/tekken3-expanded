@@ -15,9 +15,12 @@
 #include "psx_runtime.h"
 #include "tekken3_ttt1_assets.h"
 #include "gpu.h"
+#include "memcard.h"
+#include "tekken3_moveset_draw.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 extern int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset);
 extern unsigned tekken3_native_moves_id(unsigned player);
@@ -32,7 +35,19 @@ enum { PAD_SELECT=0x0001, PAD_START=0x0008, PAD_RIGHT=0x0020, PAD_LEFT=0x0080,
        PICK=PAD_START|PAD_TRIANGLE|PAD_CIRCLE|PAD_CROSS|PAD_SQUARE,
        CARD_KEYS=PICK|PAD_SELECT|PAD_LEFT|PAD_RIGHT, INJECT_POLLS=3 };
 
-static struct { char key[32];unsigned moveset;int present; } natives[NATIVES];
+/* A native's other movesets, one per line of natives.txt: its source (the
+ * optional fourth column, "ttt1" without) is a value of the Options menu's
+ * CPU MOVESET row and a share of the CPU's draw. */
+enum { MAX_ALT=4, MAX_SOURCES=4 };
+static char sources[MAX_SOURCES][24];
+static unsigned source_count;
+static struct { unsigned count;struct { char key[32];unsigned moveset;int source; } alt[MAX_ALT]; } natives[NATIVES];
+static int source_of(const char *name) {
+    for(unsigned i=0;i<source_count;i++)if(!strcmp(sources[i],name))return (int)i;
+    if(source_count>=MAX_SOURCES)return -1;
+    snprintf(sources[source_count],sizeof sources[0],"%s",name);
+    return (int)source_count++;
+}
 static void read_natives(void) {
     static int read;
     if(read)return;read=1;
@@ -42,24 +57,29 @@ static void read_natives(void) {
     FILE *f=fopen(path,"rb");if(!f)return;
     char line[96];unsigned count=0;
     while(fgets(line,sizeof line,f)) {
-        unsigned id,moveset;char key[32];
-        if(sscanf(line,"%u %31s %u",&id,key,&moveset)!=3 || id>=NATIVES)continue;
+        unsigned id,moveset;char key[32],source[24]="ttt1";
+        int fields=sscanf(line,"%u %31s %u %23s",&id,key,&moveset,source);
+        if(fields<3 || id>=NATIVES || natives[id].count>=MAX_ALT)continue;
         /* The combat file must be there: a line without it is left out. */
-        char name[32];snprintf(name,sizeof name,"%s",key);
+        char name[32],tag[24];snprintf(name,sizeof name,"%s",key);snprintf(tag,sizeof tag,"%s",source);
         if(name[0]>='a' && name[0]<='z')name[0]=(char)(name[0]-'a'+'A');
+        for(char *c=tag;*c;c++)if(*c>='a' && *c<='z')*c=(char)(*c-'a'+'A');
         char combat[4096];FILE *c;
-        if(snprintf(combat,sizeof combat,"%s/%s-TTT1-combat.jmv",root,name)>=(int)sizeof combat ||
+        if(snprintf(combat,sizeof combat,"%s/%s-%s-combat.jmv",root,name,tag)>=(int)sizeof combat ||
            !(c=fopen(combat,"rb")))continue;
         fclose(c);
-        snprintf(natives[id].key,sizeof natives[id].key,"%s",key);
-        natives[id].moveset=moveset;natives[id].present=1;count++;
+        int src=source_of(source);
+        if(src<0)continue;
+        unsigned at=natives[id].count++;
+        snprintf(natives[id].alt[at].key,sizeof natives[id].alt[at].key,"%s",key);
+        natives[id].alt[at].moveset=moveset;natives[id].alt[at].source=src;count++;
     }
     fclose(f);
-    fprintf(stderr,"Native moves: %u native fighters have their TTT1 moves\n",count);
+    fprintf(stderr,"Native moves: %u other movesets for native fighters, %u source(s)\n",count,source_count);
 }
 int tekken3_native_moves_available(unsigned id) {
     read_natives();
-    return id<NATIVES && natives[id].present;
+    return id<NATIVES && natives[id].count;
 }
 
 /* Arcade, VS, Team Battle (a card for each member picked), Time Attack,
@@ -193,8 +213,17 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
     /* Start with Select held leaves the mode: the game's, not a pick. */
     int leaving=!(buttons&PAD_SELECT) && (edges&PAD_START);
     if((uint16_t)~buttons&PAD_SQUARE && (uint16_t)~buttons&PAD_TRIANGLE)leaving=1;   /* Devil Jin */
-    if(!confirmed(slot) && (edges&PICK) && !leaving && tekken3_native_moves_available(cursor_character(slot))) {
-        uint16_t pick=edges&PICK;
+    /* Start picks a costume only for a native with a third costume (its bit
+     * in the unlock mask, 0x8010DAE0): the game ignores it for the others,
+     * and so does the card. In Team Battle Start is never a pick: the game
+     * reads it first (0x80053968) and draws a random team; triangle takes
+     * the third costume there. */
+    uint16_t picks=edges&PICK;
+    unsigned under=cursor_character(slot);
+    if(team_grid_open() || (under<NATIVES && !(psx_mod_read_word(0x80097ef4)>>(under&31)&1)))
+        picks&=(uint16_t)~PAD_START;
+    if(!confirmed(slot) && picks && !leaving && tekken3_native_moves_available(under)) {
+        uint16_t pick=picks;
         card[slot]=(uint16_t)(pick&-pick);         /* one button: its costume */
         hold[p]=CARD_KEYS;
         fprintf(stderr,"Native moves: P%u opens the MOVESET card\n",slot+1);
@@ -203,9 +232,200 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
     return buttons|hold[p];
 }
 
-/* The loading screen names the fighters (0x800ADD5C + 2 * player): a
- * slot whose card was taken for this fighter fights on the moves it chose;
- * any other (the CPU of Arcade, a guest) keeps its own. */
+/* A native the game drew for a Team Battle team (the player's Random fill,
+ * the CPU's team) takes the moves the caller tossed for it, kept for the
+ * match like a card's pick. Returns 1 when it fights on its TTT1 moves, 0
+ * on Tekken 3's (also when it has no TTT1 moves, or a test bench decides). */
+int tekken3_native_moves_assign(unsigned slot,unsigned id,int ttt1) {
+    if(slot>1 || id>=NATIVES)return 0;
+    if(bench()>=0)return bench();
+    ttt1=ttt1 && tekken3_native_moves_available(id);
+    picked[slot][id]=(signed char)ttt1;
+    return ttt1;
+}
+
+/* The CPU's moves. In the modes where the CPU has no card (Arcade, Time
+ * Attack, Survival, Team Battle; Practice lets the player pick the CPU's, VS
+ * has none), a native with other movesets imported draws the ones it fights
+ * on, once per fight, each choice with the same chance (its own Tekken 3
+ * moves are one): the Options menu's CPU MOVESET row sets ORIGINAL, one
+ * source, or RANDOM. TEKKEN3_CPU_MOVESET (original, random or a source)
+ * overrides the menu, TEKKEN3_CPU_MOVESET_SEED fixes the draw (benches). */
+enum { OPTIONS=5, DESCRIPTOR=0x800ead78, ROWS=0x800b908c, ROW_COUNT=9, ROW_SIZE=20,
+       MENU_ITEMS=10, CPU_MODES=0x1d };
+static uint64_t draw_state;
+static int cpu_setting=-2;                 /* -1 original, 0.. a source, -2 not read, RANDOM below */
+enum { RANDOM=99 };
+static uint32_t menu_byte,menu_rows;
+static void setting_path(char *out,size_t size) {
+    const char *card=NULL;out[0]=0;
+    if(memcard_debug_info(0,&card,NULL,NULL,NULL) || !card || !*card)return;
+    const char *slash=strrchr(card,'/'),*back=strrchr(card,'\\');
+    if(back && (!slash || back>slash))slash=back;
+    int n=slash?(int)(slash-card):1;
+    snprintf(out,size,"%.*s/ttt1-cpu-moveset.txt",n,slash?card:".");
+}
+static int parse_setting(const char *word) {
+    if(!strcmp(word,"original"))return -1;
+    if(!strcmp(word,"random"))return RANDOM;
+    for(unsigned i=0;i<source_count;i++)if(!strcmp(word,sources[i]))return (int)i;
+    return RANDOM;
+}
+static const char *setting_word(int value) {
+    return value==-1?"original":value==RANDOM?"random":sources[value];
+}
+static int menu_value(void) {                  /* the menu's byte: 0 original, 1.. sources, then random */
+    unsigned v=psx_mod_read_byte(menu_byte);
+    return v==0?-1:v<=source_count?(int)v-1:RANDOM;
+}
+static void saved_setting(int store,int *value) {
+    char path[4096];setting_path(path,sizeof path);
+    if(!path[0])return;
+    if(store) {
+        FILE *f=fopen(path,"wb");if(!f)return;
+        fprintf(f,"%s\n",setting_word(*value));fclose(f);
+    } else {
+        FILE *f=fopen(path,"rb");char word[32]="";
+        if(f){if(fscanf(f,"%31s",word)==1)*value=parse_setting(word);fclose(f);}
+    }
+}
+static int cpu_choice_setting(void) {
+    read_natives();
+    if(cpu_setting==-2) {
+        cpu_setting=RANDOM;
+        const char *e=getenv("TEKKEN3_CPU_MOVESET");
+        if(e && *e)cpu_setting=parse_setting(e);
+        else saved_setting(0,&cpu_setting);
+        const char *seed=getenv("TEKKEN3_CPU_MOVESET_SEED");
+        tekken3_moveset_seed(&draw_state,seed && *seed?strtoull(seed,NULL,0):(uint64_t)time(NULL)*1000003u+(uint64_t)clock()+(uint64_t)(uintptr_t)&draw_state);
+    }
+    return cpu_setting;
+}
+/* The alternative a CPU fighter fights on: -1 its own Tekken 3 moves. */
+static int draw_alternative(unsigned id) {
+    unsigned n=natives[id].count;
+    int setting=cpu_choice_setting();
+    if(!n || setting==-1)return -1;
+    if(setting!=RANDOM) {
+        for(unsigned k=0;k<n;k++)if(natives[id].alt[k].source==setting)return (int)k;
+        return -1;
+    }
+    return (int)tekken3_moveset_draw(n+1,&draw_state)-1;
+}
+static int cpu_slot(unsigned p) {
+    unsigned mode=psx_mod_read_word(MODE);
+    return !psx_mod_read_half(0x800ae1f8+p*2) && mode<PRACTICE;
+}
+
+/* The CPU MOVESET row: the game's GAME OPTION page is a table of ten
+ * 20-byte entries (nine rows, then EXIT) named by a page descriptor
+ * (DESCRIPTOR: entries, title, item count); the table is followed by other
+ * data, so a copy with one row more, before EXIT, is made in guest memory and
+ * the descriptor pointed at it. Rows are
+ * copied again every frame (the difficulty mod edits its row in the original). */
+static uint32_t labels_for_menu(void) {
+    char label[MAX_SOURCES+2][32];unsigned n=0;
+    snprintf(label[n++],sizeof label[0],"ORIGINAL");
+    for(unsigned i=0;i<source_count;i++) {
+        if(!strcmp(sources[i],"ttt1"))snprintf(label[n],sizeof label[0],"TEKKEN TAG TOURNAMENT");
+        else {
+            snprintf(label[n],sizeof label[0],"%s",sources[i]);
+            for(char *c=label[n];*c;c++){if(*c>='a' && *c<='z')*c=(char)(*c-'a'+'A');if(*c=='_')*c=' ';}
+        }
+        n++;
+    }
+    snprintf(label[n++],sizeof label[0],"RANDOM");
+    uint32_t size=n*4+16;
+    for(unsigned i=0;i<n;i++)size+=(uint32_t)strlen(label[i])+1;
+    uint32_t list=psx_mod_alloc_guest_memory(size,4);
+    if(!list)return 0;
+    uint32_t text=list+n*4;
+    for(unsigned i=0;i<n;i++) {
+        psx_mod_write_word(list+i*4,text);
+        for(const char *c=label[i];;c++){psx_mod_write_byte(text++,(uint8_t)*c);if(!*c)break;}
+    }
+    return list;
+}
+static void options_row(void) {
+    read_natives();
+    if(!source_count)return;
+    uint32_t rows=psx_mod_read_word(DESCRIPTOR);
+    if(rows!=ROWS && rows!=menu_rows)return;
+    if(rows==ROWS && psx_mod_read_word(DESCRIPTOR+8)!=MENU_ITEMS)return;
+    /* The table of the game's overlay: first row the difficulty, last the
+     * speaker (value bytes 0x80097F06 and 0x80097F04). */
+    if(psx_mod_read_word(ROWS)!=0x80097f06 || psx_mod_read_word(ROWS+(ROW_COUNT-1)*ROW_SIZE)!=0x80097f04)return;
+    if(!menu_rows) {
+        uint32_t list=labels_for_menu();
+        menu_rows=psx_mod_alloc_guest_memory((ROW_COUNT+2)*ROW_SIZE,4);
+        menu_byte=psx_mod_alloc_guest_memory(4,4);
+        uint32_t name=psx_mod_alloc_guest_memory(16,4);
+        if(!list || !menu_rows || !menu_byte || !name){menu_rows=0;return;}
+        const char *title="CPU MOVESET";
+        for(unsigned i=0;i<=strlen(title);i++)psx_mod_write_byte(name+i,(uint8_t)title[i]);
+        int saved=cpu_choice_setting();
+        unsigned value=saved==-1?0:saved==RANDOM?source_count+1:(unsigned)saved+1;
+        psx_mod_write_word(menu_byte,value);
+        uint32_t row=menu_rows+ROW_COUNT*ROW_SIZE;
+        psx_mod_write_word(row,menu_byte);
+        psx_mod_write_word(row+4,name);
+        psx_mod_write_word(row+8,list);
+        psx_mod_write_word(row+12,1u|(source_count+2)<<8);       /* as BGM SELECT: one byte, its values */
+        psx_mod_write_word(row+16,((uint32_t)CPU_MODES<<16)|2u);  /* modes lit in the box on the right */
+        fprintf(stderr,"Native moves: CPU MOVESET row added to GAME OPTION (%u values)\n",source_count+2);
+    }
+    /* Entry 9 of the game's table is EXIT: it goes after our row. */
+    for(unsigned i=0;i<ROW_COUNT*ROW_SIZE/4;i++) {
+        uint32_t w=psx_mod_read_word(ROWS+i*4);
+        if(psx_mod_read_word(menu_rows+i*4)!=w)psx_mod_write_word(menu_rows+i*4,w);
+    }
+    for(unsigned i=0;i<ROW_SIZE/4;i++) {
+        uint32_t w=psx_mod_read_word(ROWS+ROW_COUNT*ROW_SIZE+i*4);
+        uint32_t at=menu_rows+(ROW_COUNT+1)*ROW_SIZE+i*4;
+        if(psx_mod_read_word(at)!=w)psx_mod_write_word(at,w);
+    }
+    if(rows!=menu_rows) {
+        psx_mod_write_word(DESCRIPTOR,menu_rows);
+        psx_mod_write_word(DESCRIPTOR+8,MENU_ITEMS+1);
+    }
+    /* The player's choice, kept beside the memory card. */
+    int shown=menu_value();
+    if(shown!=cpu_setting && !getenv("TEKKEN3_CPU_MOVESET")){cpu_setting=shown;saved_setting(1,&cpu_setting);}
+}
+
+/* The moves a player fights on, chosen for character `id`: a slot whose
+ * card was taken for this fighter fights on the moves it chose, a CPU slot
+ * on the moves it drew (once per fighter it loads); any other (a guest)
+ * keeps its own. */
+static int drawn_id[2]={-1,-1},drawn_alt[2],chosen_id[2]={-1,-1};
+static void choose(unsigned p,unsigned id) {
+    int alt=-1;
+    if(bench()>=0)alt=bench() && id<NATIVES && natives[id].count?0:-1;
+    else if(id<NATIVES && cpu_slot(p)) {
+        if(drawn_id[p]!=(int)id) {
+            drawn_id[p]=(int)id;drawn_alt[p]=draw_alternative(id);
+            if(natives[id].count)
+                fprintf(stderr,"Native moves: CPU P%u fighter %u draws %u choice(s) -> %s\n",p+1,id,natives[id].count+1,
+                        drawn_alt[p]<0?"T3":sources[natives[id].alt[drawn_alt[p]].source]);
+        }
+        alt=drawn_alt[p];
+    } else if(id<NATIVES && picked[p][id]==1 && natives[id].count)alt=0;
+    if(tekken3_devil_jin_requested(p))alt=-1;      /* his own moves */
+    if(active() && alt>=0)
+        tekken3_native_moves_set(p,id,natives[id].alt[alt].key,natives[id].alt[alt].moveset);
+    else tekken3_native_moves_set(p,0,NULL,0);
+    chosen_id[p]=(int)id;
+}
+/* A fighter reloaded in the fight, without a loading screen (0x8002A40C:
+ * True Ogre after Ogre's cutscene, our endings' partner): the choice made
+ * for the one it replaces is made again for it, before its moves load. */
+void tekken3_native_moves_reload(unsigned p,unsigned id) {
+    if(p>1 || (int)id==chosen_id[p])return;
+    drawn_id[p]=-1;
+    choose(p,id);
+}
+
+/* The loading screen names the fighters (0x800ADD5C + 2 * player). */
 void tekken3_native_moves_tick(void) {
     unsigned screen=psx_mod_read_word(SCREEN);
     /* A new visit of a selector starts without picks. */
@@ -213,21 +433,17 @@ void tekken3_native_moves_tick(void) {
     int open=selector_open();
     if(open && !was_open)forget_picks();
     was_open=open;
+    /* The CPU draws once per loading of a fight. */
+    if(screen!=LOADING)drawn_id[0]=drawn_id[1]=-1;
+    if(screen==OPTIONS)options_row();
     if(screen==MENU) {
-        for(unsigned p=0;p<2;p++){want[p]=0;tekken3_native_moves_set(p,0,NULL,0);}
+        for(unsigned p=0;p<2;p++){want[p]=0;tekken3_native_moves_set(p,0,NULL,0);chosen_id[p]=-1;}
         forget_picks();
         close_cards();
         return;
     }
     if(screen!=LOADING)return;
-    for(unsigned p=0;p<2;p++) {
-        unsigned id=psx_mod_read_half(0x800add5c+p*2);
-        int ttt1=bench()>=0?bench():id<NATIVES && picked[p][id]==1;
-        if(tekken3_devil_jin_requested(p))ttt1=0;      /* his own moves */
-        if(active() && ttt1 && tekken3_native_moves_available(id))
-            tekken3_native_moves_set(p,id,natives[id].key,natives[id].moveset);
-        else tekken3_native_moves_set(p,0,NULL,0);
-    }
+    for(unsigned p=0;p<2;p++)choose(p,psx_mod_read_half(0x800add5c+p*2));
 }
 
 /* The MOVESET card, drawn by the game's GPU over the top of the portrait

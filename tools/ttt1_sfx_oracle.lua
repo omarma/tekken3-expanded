@@ -29,6 +29,21 @@ local FIRST = tonumber(os.getenv('TTT1_FIRST') or '1500')
 local STEP = tonumber(os.getenv('TTT1_STEP') or '240')
 local tick, pending, blocked = 0, nil, 0
 
+-- TTT1_REGS : journal du C352 pour la table de mesures (tools/ttt1/sfx.py).
+-- Apres la liberation qui precede la premiere demande : l'etat des 32 voix
+-- (lignes init), puis chaque ecriture dans la puce (echantillon du C352 en
+-- cours, adresse, valeur, masque). Dans une ecriture du H8, machine.time est
+-- l'heure locale du H8, a l'instruction pres ; as_ticks(88200) fait le calcul
+-- entier de MAME (sound_stream::get_current_sample_index) : le H8 ecrit
+-- souvent pile sur une frontiere d'echantillon, une heure arrondie ne suffit pas.
+local regs = os.getenv('TTT1_REGS') and assert(io.open(os.getenv('TTT1_REGS'), 'w'))
+local logging = false
+if regs then
+    ttt1_sfx_regs = sub:install_write_tap(0x280000, 0x28040f, 'ttt1-sfx-regs', function(offset, data, mask)
+        if logging then regs:write(string.format('%d,%x,%x,%x\n', machine.time:as_ticks(88200), offset, data, mask)) end
+    end)
+end
+
 -- Les cases de requete 0x080100..0x08013F : bit 0x4000 = demande, 0x8000 =
 -- prise en compte. Seule la demande de l'oracle passe, jusqu'a sa prise en
 -- compte ; les autres sont lues sans leur bit de demande.
@@ -50,6 +65,13 @@ ttt1_sfx_frames = emu.add_machine_frame_notifier(function()
             sub:write_u16(f, (sub:read_u16(f) & ~0x4000) | 0x2000)
         end
         sub:write_u16(0x280404, 0)
+        if regs and not logging then
+            for a = 0x280000, 0x2801fe, 2 do
+                regs:write(string.format('init,%x,%x\n', a, sub:read_u16(a)))
+            end
+            regs:write(string.format('start,%d\n', machine.time:as_ticks(88200)))
+            logging = true
+        end
     end
     local k = (tick - FIRST) // STEP + 1
     if tick >= FIRST and k <= #list and (tick - FIRST) % STEP == 0 then
@@ -64,6 +86,6 @@ ttt1_sfx_frames = emu.add_machine_frame_notifier(function()
     end
     if tick == FIRST + #list * STEP + 60 then
         out:write(string.format('blocked,%d\n', blocked))
-        out:close(); machine:exit()
+        out:close(); if regs then regs:close() end; machine:exit()
     end
 end)

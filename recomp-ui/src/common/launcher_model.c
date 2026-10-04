@@ -56,7 +56,7 @@ static const char* kViewNames[7] = {
     "Dashboard", "Settings", "Controller", "Netplay", "Mods",
     "Assist Tools", "Credits"
 };
-static const char* kSrcNames[3]  = { "None", "Keyboard", "Gamepad" };
+static const char* kSrcNames[4]  = { "None", "Keyboard", "Gamepad", "Touch" };
 
 static void safe_copy(char* dst, size_t cap, const char* src) {
     if (!dst || cap == 0) return;
@@ -317,6 +317,14 @@ void launcher_model_init(LauncherModel* m,
                                  m->profile->controller.max_players);
     }
 
+#if defined(__ANDROID__)
+    // ---- a phone has no keyboard: a stored Keyboard source (settings of an
+    // older build, or of the PC copy of the game) becomes the touch screen for
+    // player 1 and None for the others ----
+    for (int p = 0; p < LNG_MAX_PLAYERS; ++p)
+        if (m->s.player_src[p] == 1) m->s.player_src[p] = p == 0 ? 3 : 0;
+#endif
+
     // ---- gate pad_mode per player ----
     if (m->pad_mode_supported) {
         const SystemProfile* pm_prof = (const SystemProfile*)m->profile;
@@ -337,8 +345,8 @@ void launcher_model_init(LauncherModel* m,
                  * persisted value. The mod requests it at runtime instead. */
                 m->s.pad_mode[p] = 1;
             }
-            /* Keyboard cannot drive Analog/Hybrid — force D-Pad. */
-            if (m->s.player_src[p] == 1 &&
+            /* Keyboard and touch cannot drive Analog/Hybrid — force D-Pad. */
+            if ((m->s.player_src[p] == 1 || m->s.player_src[p] == 3) &&
                 !(pm_spec && pm_spec->modes && pm_spec->mode_count > 0))
                 m->s.pad_mode[p] = 2;
         }
@@ -2528,7 +2536,7 @@ static void apply_default_pad_mode_for_source(LauncherModel* m, int player) {
     if (!m->pad_mode_supported || !m->pad_mode_selectable) return;
     player = clampi(player, 0, LNG_MAX_PLAYERS - 1);
     if (!pad_mode_is_psx_legacy(m)) return;
-    if (m->s.player_src[player] == 1)
+    if (m->s.player_src[player] == 1 || m->s.player_src[player] == 3)
         m->s.pad_mode[player] = 2;   // D-Pad / digital (no sticks)
     else if (m->s.player_src[player] == 2)
         m->s.pad_mode[player] = 1;   // Analog / DualShock
@@ -2545,8 +2553,8 @@ void launcher_model_set_pad_mode(LauncherModel* m, int player, int mode) {
             if (spec->modes[i].mode == mode) { m->s.pad_mode[player] = mode; return; }
         return;
     }
-    /* Keyboard has no sticks — Analog is unavailable. */
-    if (m->s.player_src[player] == 1 && mode != 2) return;
+    /* Keyboard and touch have no sticks — Analog is unavailable. */
+    if ((m->s.player_src[player] == 1 || m->s.player_src[player] == 3) && mode != 2) return;
     mode = clampi(mode, 0, 2);
     if (mode == 0) mode = 1;   /* Hybrid is mod-only -> snap to Analog */
     m->s.pad_mode[player] = mode;
@@ -2571,6 +2579,9 @@ int launcher_model_active_button_count(const LauncherModel* m, int player) {
 void launcher_model_cycle_player_src(LauncherModel* m, int player) {
     player = clampi(player, 0, LNG_MAX_PLAYERS - 1);
     m->s.player_src[player] = (m->s.player_src[player] + 1) % 3;  // None/Kbd/Pad
+#if defined(__ANDROID__)
+    if (m->s.player_src[player] == 1) m->s.player_src[player] = 2;  // no keyboard
+#endif
     apply_default_pad_mode_for_source(m, player);
 }
 
@@ -2583,7 +2594,10 @@ void launcher_model_set_source(LauncherModel* m, int player, int kind,
                                uint32_t pad_id, const char* pad_name,
                                const char* pad_guid) {
     player = clampi(player, 0, LNG_MAX_PLAYERS - 1);
-    m->s.player_src[player] = clampi(kind, 0, 2);
+#if defined(__ANDROID__)
+    if (kind == 1) kind = player == 0 ? 3 : 0;      // no keyboard on a phone
+#endif
+    m->s.player_src[player] = clampi(kind, 0, 3);   // 3: touch (Android)
     if (kind == 2) {
         m->player_pad_id[player] = pad_id;
         safe_copy(m->player_pad_name[player], sizeof(m->player_pad_name[player]),
@@ -2797,7 +2811,7 @@ const char* launcher_model_freq_label(const LauncherModel* m) {
 
 const char* launcher_model_player_src_label(const LauncherModel* m, int player) {
     player = clampi(player, 0, LNG_MAX_PLAYERS - 1);
-    int src = clampi(m->s.player_src[player], 0, 2);
+    int src = clampi(m->s.player_src[player], 0, 3);
     if (src == 2) {
         // Never show the generic "Gamepad" placeholder when we have a concrete
         // pad name (or at least a GUID-backed label filled by sync/hydrate).

@@ -8,6 +8,11 @@
 /dist/
 /toolchain/
 /.setup/
+# APK signing keys and their passwords (build_apk.py --keystore), wherever they are
+*.keystore
+*.jks
+*.p12
+release.password
 /.runtime/
 /Play Tekken 3.exe
 /Tekken 3 Expanded.exe
@@ -18,7 +23,7 @@
 /psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated/
 /psxrecomp/bios/SCPH*.BIN
 /psxrecomp/bios/SCPH*.bin
-/Tekken_3_Recompiled.exe
+/Tekken_3_Expanded.exe
 /assets/
 /bios/
 **/__pycache__/
@@ -60,6 +65,7 @@ state.toml
 .DS_Store
 packaging/macos/icon.png
 packaging/macos/icon.icns
+*.apk
 toolchain.broken
 
 # Savoir technique partage entre sessions, jamais commite

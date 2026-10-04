@@ -1,0 +1,12 @@
+/* libmain.so exports only what Android and SDLActivity look up by name: the
+ * JNI entry points (JNI_OnLoad, Java_*) and SDL_main (SDLActivity.nativeRunMain
+ * finds it with dlsym). Everything else stays local, so the linker drops the
+ * code nothing calls (the desktop debug server and network helpers among it). */
+{
+  global:
+    JNI_OnLoad;
+    Java_*;
+    SDL_main;
+  local:
+    *;
+};

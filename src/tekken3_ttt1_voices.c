@@ -27,7 +27,12 @@ typedef struct { unsigned id, group, slot; uint32_t pos, calls; } GuestVoice;
  * without a gap; Kazuya has ten, non-contiguous, one of them used by two
  * categories. Routing therefore goes through the category/rank word the pack
  * carries for each entry instead of arithmetic on the sample ID. */
-enum { MAX_SAMPLES=32, GROUP_MIN=2, GROUP_MAX=5 };
+enum { MAX_SAMPLES=32, GROUP_MIN=2, GROUP_MAX=5, GROUP_KO=4 };
+/* T3's KO echo is not in the sample: 80040C90 starts a type-0x11 task
+ * (8006F208 -> 800744E0) that plays the same cry again 16 frames later at
+ * half volume, then 32 frames later at a quarter. Guests skip 80040C90, so
+ * the mixer replays their KO cry the same way. */
+enum { ECHO_DELAY=44100*16/60 };
 /* Each player's guest has its own bank, following that guest's identity. */
 typedef struct {
     unsigned generation;
@@ -41,7 +46,9 @@ typedef struct {
 } GuestBank;
 static GuestBank banks[2];
 static GuestVoice voices[2];
-static int sfx_gain = 100;
+static int sfx_gain = 100, music_gain = 100, music_muted;
+/* The Embu's music of our own (tekken3_embu_scenes.c) mutes the game's. */
+extern int tekken3_embu_music_mix(int16_t *out,int frames,int audible,int gain);
 static uint32_t telemetry;
 
 static uint32_t rd32(const unsigned char *p) {
@@ -207,30 +214,42 @@ void __wrap_spu_render(int16_t *out,int frames) {
     int audible=(g.ctrl&0xc000)==0xc000;
     int16_t main_volume[2]={(int16_t)spu_read(0x1f801db8),(int16_t)spu_read(0x1f801dba)};
     tekken3_ttt1_sfx_mix(out,frames,audible,main_volume,sfx_gain);
+    int embu_music=tekken3_embu_music_mix(out,frames,audible,music_gain);
+    if(embu_music!=music_muted) {
+        music_muted=embu_music;
+        __real_spu_set_host_mix_volume(sfx_gain,embu_music?0:music_gain);
+    }
     if(!banks[0].loaded && !banks[1].loaded)return;
     for(unsigned p=0;p<2;p++) {
         GuestVoice *v=&voices[p];
         if(!v->group || !banks[p].loaded)continue;
         if(!guest_active(p) || psx_mod_read_half(0x800ae204)!=8){v->group=0;continue;}
         const GuestSample *sample=&banks[p].samples[v->slot];
-        for(int f=0;f<frames && v->pos<sample->frames;f++,v->pos++) {
-            int32_t value=rd16(sample->pcm+v->pos*2);
+        uint32_t echoes=v->group==GROUP_KO?2:0, end=sample->frames+echoes*ECHO_DELAY;
+        for(int f=0;f<frames && v->pos<end;f++,v->pos++) {
+            int32_t value=0;
             /* Match the PS1 voice mix level, with a short attack ramp. PCM
              * stays uncompressed; SFX and host master controls both apply. */
-            int ramp=v->pos<220?(int)v->pos:220;
-            value=value*sfx_gain/100*ramp/220/4;
+            for(uint32_t e=0;e<=echoes && v->pos>=e*ECHO_DELAY;e++) {
+                uint32_t at=v->pos-e*ECHO_DELAY;
+                if(at>=sample->frames)continue;
+                int ramp=at<220?(int)at:220;
+                value+=(rd16(sample->pcm+at*2)*ramp/220)>>e;
+            }
+            value=value*sfx_gain/100/4;
             if(!audible)value=0;
             for(unsigned ch=0;ch<2;ch++) {
                 int32_t mixed=(int32_t)out[f*2+ch]+value*main_volume[ch]/32768;
                 out[f*2+ch]=(int16_t)(mixed>32767?32767:mixed< -32768?-32768:mixed);
             }
         }
-        if(v->pos==sample->frames)v->group=0;
+        if(v->pos==end)v->group=0;
     }
 }
 void __wrap_spu_set_host_mix_volume(int sfx,int music) {
     sfx_gain=sfx<0?0:sfx>100?100:sfx;
-    __real_spu_set_host_mix_volume(sfx,music);
+    music_gain=music<0?0:music>100?100:music;
+    __real_spu_set_host_mix_volume(sfx,music_muted?0:music);
 }
 void __wrap_spu_init(void) { stop_voices();__real_spu_init(); }
 int __wrap_spu_snapshot_read(const uint8_t *p,uint32_t len) {

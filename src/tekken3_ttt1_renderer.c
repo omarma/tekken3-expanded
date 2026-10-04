@@ -83,7 +83,7 @@ static void native_probe_record(CPUState *cpu, const uint32_t in[4],
  * tete, projete avec l'etat GTE de la tete (meme camera que le modele), puis
  * emis en paquet GPU : mode additif, halo large puis coeur fin, en degrade,
  * chaine au premier plan de la table d'ordre (double tampon comme le jeu). */
-extern int tekken3_laser_beam(unsigned p,int32_t v[6]);
+extern int tekken3_laser_beam(unsigned p,int32_t v[6],int *fade);
 static void project_beam(const uint32_t *ctrl,uint32_t actor,const int32_t w[3],double out[3]) {
     uint32_t bone=actor+0x8f4+2*68;
     double m[9],d[3],l[3],c[3];
@@ -96,9 +96,76 @@ static void project_beam(const uint32_t *ctrl,uint32_t actor,const int32_t w[3],
     double h=(double)(ctrl[26]&0xffff),z=c[2]<1?1:c[2];
     out[0]=(int32_t)ctrl[24]/65536.0+h*c[0]/z; out[1]=(int32_t)ctrl[25]/65536.0+h*c[1]/z; out[2]=c[2];
 }
+/* Etincelles au sol. L'arcade (801171B8) en lance une toutes les 8 images
+ * ou la pointe du rayon touche le sol (80118128, un peu sous la pointe) ;
+ * ici, un eclat additif de six trainees qui s'ecartent et s'eteignent en
+ * 8 images, avance a chaque image du jeu (compteur d'images de l'acteur). */
+#define SPARKS 4
+#define SPARK_LIFE 8
+static struct { int32_t x,y,z; int age; unsigned turn; } sparks[2][SPARKS];
+static void tick_sparks(unsigned p,const int32_t *tip) {
+    static int last[2]={-1,-1}; static unsigned floor_frames[2];
+    uint32_t actor=0x800a9228+p*0x188c;
+    int frame=(int)psx_mod_read_half(actor+0x58);
+    if(frame==last[p]) return;
+    last[p]=frame;
+    for(unsigned i=0;i<SPARKS;i++) if(sparks[p][i].age<SPARK_LIFE) sparks[p][i].age++;
+    if(!tip) { floor_frames[p]=0; return; }
+    if(floor_frames[p]++&7) return;
+    for(unsigned i=0;i<SPARKS;i++) if(sparks[p][i].age>=SPARK_LIFE) {
+        sparks[p][i].x=tip[0]; sparks[p][i].y=tip[1]; sparks[p][i].z=tip[2];
+        sparks[p][i].age=0; sparks[p][i].turn=(unsigned)frame*0x2f1u;
+        break;
+    }
+}
+static void draw_sparks(const uint32_t *ctrl,uint32_t ot,unsigned p) {
+    static uint32_t bufs[2][2];
+    uint32_t *buf=bufs[p];
+    enum { BYTES=4+4+SPARKS*6*32 };
+    if(!buf[0]) { buf[0]=psx_mod_alloc_gpu_dma_memory(BYTES,16); buf[1]=psx_mod_alloc_gpu_dma_memory(BYTES,16); }
+    if(!buf[0] || !buf[1]) return;
+    uint32_t actor=0x800a9228+p*0x188c;
+    uint32_t pkt=buf[(ot>>12)&1],o=pkt+4;
+    psx_mod_write_word(o,0xE1000000u|(1u<<5)|(1u<<9)|(1u<<10)); o+=4;     /* additif */
+    int any=0;
+    #define XY(x,y) ((((uint32_t)(int32_t)(y))&0xffff)<<16|(((uint32_t)(int32_t)(x))&0xffff))
+    for(unsigned i=0;i<SPARKS;i++) {
+        int t=sparks[p][i].age;
+        if(t>=SPARK_LIFE) continue;
+        double fade=(SPARK_LIFE-t)/(double)SPARK_LIFE;
+        uint32_t hot=(uint32_t)(0x50*fade)<<16|(uint32_t)(0xE0*fade)<<8|(uint32_t)(0xFF*fade);   /* BGR */
+        uint32_t cold=(uint32_t)(0x08*fade)<<16|(uint32_t)(0x30*fade)<<8|(uint32_t)(0x70*fade);
+        for(unsigned k=0;k<6;k++) {
+            double a=(sparks[p][i].turn%360+k*60)*(3.141592653589793/180);
+            double r0=20+25.0*t,r1=90+55.0*t,rise=0.6+0.15*(k&1);
+            double dx=cos(a),dz=sin(a);
+            int32_t w0[3]={(int32_t)(sparks[p][i].x+dx*r0),(int32_t)(sparks[p][i].y-rise*r0),(int32_t)(sparks[p][i].z+dz*r0)};
+            int32_t w1[3]={(int32_t)(sparks[p][i].x+dx*r1),(int32_t)(sparks[p][i].y-rise*r1),(int32_t)(sparks[p][i].z+dz*r1)};
+            double a2[3],b2[3];
+            project_beam(ctrl,actor,w0,a2); project_beam(ctrl,actor,w1,b2);
+            if(a2[2]<=0 || b2[2]<=0) continue;
+            double ex=b2[0]-a2[0],ey=b2[1]-a2[1],len=sqrt(ex*ex+ey*ey);
+            if(len<1) continue;
+            double px=-ey/len*2.5,py=ex/len*2.5;
+            psx_mod_write_word(o,0x3A000000u|hot);  psx_mod_write_word(o+4,XY(a2[0]+px,a2[1]+py));
+            psx_mod_write_word(o+8,hot);            psx_mod_write_word(o+12,XY(a2[0]-px,a2[1]-py));
+            psx_mod_write_word(o+16,cold);          psx_mod_write_word(o+20,XY(b2[0]+px*0.3,b2[1]+py*0.3));
+            psx_mod_write_word(o+24,cold);          psx_mod_write_word(o+28,XY(b2[0]-px*0.3,b2[1]-py*0.3));
+            o+=32; any=1;
+        }
+    }
+    #undef XY
+    if(!any) return;
+    uint32_t words=(o-pkt-4)/4, slot=ot+4;
+    psx_mod_write_word(pkt,(psx_mod_read_word(slot)&0xffffffu)|(words<<24));
+    psx_mod_write_word(slot,pkt&0xffffffu);
+}
 static void draw_laser_beam(const uint32_t *ctrl,uint32_t ot,unsigned p) {
     int32_t v[6];
-    if(!tekken3_laser_beam(p,v)) return;
+    int fade=0,beam=tekken3_laser_beam(p,v,&fade);
+    tick_sparks(p,beam && v[4]==0?v+3:NULL);
+    draw_sparks(ctrl,ot,p);
+    if(!beam) return;
     /* Un paquet par joueur et par tampon : les deux rayons peuvent partir
      * dans la meme image. */
     static uint32_t bufs[2][2];
@@ -115,16 +182,22 @@ static void draw_laser_beam(const uint32_t *ctrl,uint32_t ot,unsigned p) {
     uint32_t pkt=buf[(ot>>12)&1],o=pkt+4;
     #define XY(x,y) ((((uint32_t)(int32_t)(y))&0xffff)<<16|(((uint32_t)(int32_t)(x))&0xffff))
     psx_mod_write_word(o,0xE1000000u|(1u<<5)|(1u<<9)|(1u<<10)); o+=4;     /* additif */
-    static const struct { double w0,w1; uint32_t c0,c1; } layer[2]={
-        {9,14,0x103070u,0x081840u},     /* halo : orange sombre (BGR) */
-        {2.5,4,0x50E0FFu,0x2090C0u},    /* coeur : jaune vif vers orange */
-    };
-    for(unsigned k=0;k<2;k++) {
-        double w0=layer[k].w0,w1=layer[k].w1;
-        psx_mod_write_word(o,0x3A000000u|layer[k].c0); psx_mod_write_word(o+4,XY(a[0]+px*w0,a[1]+py*w0));
-        psx_mod_write_word(o+8,layer[k].c0);           psx_mod_write_word(o+12,XY(a[0]-px*w0,a[1]-py*w0));
-        psx_mod_write_word(o+16,layer[k].c1);          psx_mod_write_word(o+20,XY(b[0]+px*w1,b[1]+py*w1));
-        psx_mod_write_word(o+24,layer[k].c1);          psx_mod_write_word(o+28,XY(b[0]-px*w1,b[1]-py*w1));
+    /* Le sprite de l'arcade (80124A8C / 80124BDC) : un quad texture additif, bande de
+     * 16 texels (1 3 5 ... 15 15 ... 3 1) dont la palette est un gris lineaire (8 a 131 ;
+     * modulation /128), teinte par la couleur du polygone (255, 255, 0) x fondu / 4096.
+     * Largeur : 50 + 100 f unites du monde, divisee par la profondeur. Deux quads
+     * degrades (bord -> centre -> bord) tiennent lieu de la bande. */
+    double f=fade/4096.0,world=50+100*f,h=(double)(ctrl[26]&0xffff);
+    double wa=0.5*world*h/a[2],wb=0.5*world*h/b[2];
+    unsigned edge=(unsigned)(255*f*16/128),mid=(unsigned)(255*f*131/128);
+    if(edge>255)edge=255;
+    if(mid>255)mid=255;
+    uint32_t ce=edge<<8|edge,cm=mid<<8|mid;                                /* BGR : bleu 0 */
+    for(int side=-1;side<=1;side+=2) {
+        psx_mod_write_word(o,0x3A000000u|ce);  psx_mod_write_word(o+4,XY(a[0]+side*px*wa,a[1]+side*py*wa));
+        psx_mod_write_word(o+8,ce);            psx_mod_write_word(o+12,XY(b[0]+side*px*wb,b[1]+side*py*wb));
+        psx_mod_write_word(o+16,cm);           psx_mod_write_word(o+20,XY(a[0],a[1]));
+        psx_mod_write_word(o+24,cm);           psx_mod_write_word(o+28,XY(b[0],b[1]));
         o+=32;
     }
     #undef XY

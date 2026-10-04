@@ -425,7 +425,7 @@ struct RecompLauncherCSettings {
     int  enable_audio;      // bool
     int  audio_freq;        // Hz
     int  volume;            // 0..100
-    int  player_src[RECOMP_LAUNCHER_MAX_PLAYERS];  // 0 none, 1 keyboard, 2 gamepad
+    int  player_src[RECOMP_LAUNCHER_MAX_PLAYERS];  // 0 none, 1 keyboard, 2 gamepad, 3 touch (Android)
     int  deadzone[RECOMP_LAUNCHER_MAX_PLAYERS];    // 0..100
     int  skip_launcher;     // bool: boot straight to the game next time
     int  msu1_enabled;      // bool

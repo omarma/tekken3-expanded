@@ -1,0 +1,183 @@
+{
+ "key": "trueogre",
+ "combos": [
+  {
+   "name": "Demon Variations Flash Punch Combo",
+   "command": "1, 1, 2",
+   "ten": false,
+   "gaps": [
+    1,
+    6,
+    12
+   ],
+   "moves": [
+    175,
+    228,
+    233
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     6
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Demon Slayer Variations",
+   "command": "1, 2, 2",
+   "ten": false,
+   "gaps": [
+    1,
+    6,
+    12
+   ],
+   "moves": [
+    175,
+    176,
+    231
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     8,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     6
+    ],
+    [
+     1,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  },
+  {
+   "name": "Hunting Hawk",
+   "command": "u/f+3, 4, 3",
+   "ten": false,
+   "gaps": null,
+   "moves": null,
+   "how": null,
+   "inputs": null
+  },
+  {
+   "name": "Snake Kick",
+   "command": "FC+3, 3, d+3",
+   "ten": false,
+   "gaps": [
+    1,
+    12,
+    12
+   ],
+   "moves": [
+    192,
+    292,
+    294
+   ],
+   "how": "graphe",
+   "inputs": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     4,
+     12
+    ],
+    [
+     4,
+     4,
+     4
+    ],
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     4,
+     0,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ],
+    [
+     0,
+     4,
+     1
+    ],
+    [
+     4,
+     4,
+     4
+    ],
+    [
+     0,
+     0,
+     12
+    ]
+   ]
+  }
+ ]
+}

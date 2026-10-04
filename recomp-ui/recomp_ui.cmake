@@ -146,6 +146,7 @@ function(recomp_target_launcher_ui TGT)
         ${RUI_SRC}/common/recomp_runtime_settings.c # shared cross-ecosystem setting catalog
         ${RUI_SRC}/common/launcher_boot_timing.c  # PSX_LAUNCHER_BOOT_TIMING / LNG_BOOT_TIMING
         ${RUI_SRC}/common/launcher_ng_capi.c   # implements recomp_launcher_run_window()
+        ${RUI_SRC}/common/launcher_settings.c  # Display/Audio settings as data (non-ImGui front ends)
         ${RUI_SRC}/third_party/tinyfiledialogs.c
         # console-specific helpers (src/consoles/<id>/) — always compiled, only
         # reached when the active SystemProfile opts into the capability
@@ -169,6 +170,12 @@ function(recomp_target_launcher_ui TGT)
         ${RUI_SRC}/common/backends/imgui/runtime_ui_imgui.cpp
         ${_rui_imgui_sources}
     )
+
+    if(ANDROID)
+        # Native Android launcher screens (recomp-ui/android/java) + their JNI side.
+        target_sources(${TGT} PRIVATE ${RUI_SRC}/common/backends/android/launcher_android.c)
+        target_include_directories(${TGT} PRIVATE ${RUI_SRC}/common/backends/android)
+    endif()
 
     target_include_directories(${TGT} PRIVATE
         ${RUI_SRC}                   # recomp_launcher.h / launcher_profile.h / launcher_system.h
@@ -226,9 +233,7 @@ function(recomp_target_launcher_ui TGT)
     # cartridges or NES/SNES controller art. The RUNTIME layout
     # next to the exe stays flat (assets/fonts + assets/img) — the launcher's
     # load paths are unchanged. The standalone preview opts into all explicitly.
-    if(NOT ANDROID)
-        _recomp_ui_stage_assets(${TGT} "${RUI_CONSOLE}")
-    endif()
+    _recomp_ui_stage_assets(${TGT} "${RUI_CONSOLE}")
     # Per-console controller image: overrides the default pad.tga (e.g. a
     # PlayStation DualShock for PSX). 24-bit TGA, top-left pixel = colorkey.
     if(RUI_PAD AND EXISTS ${RUI_PAD})

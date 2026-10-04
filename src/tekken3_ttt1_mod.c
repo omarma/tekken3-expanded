@@ -15,12 +15,18 @@
  * offsets: first block (word 0 of row 0), to recognise a replaced header, and
  * data start (+16). `generation` and `costume` are the identity and the
  * costume it was read for. */
+enum { FACE_MAX=5 };      /* expressions 1..5: bytes 3..7 of TTT1's 0x801945D8 */
 typedef struct {
     unsigned generation,costume;
     unsigned char file[65536];unsigned size;
     uint32_t relocation[512];unsigned reloc_count;
     unsigned char textures[65536];unsigned textures_size;
     uint32_t memory,first_block,payload;
+    /* Face expressions of the costume (.face, tools/ttt1_import.py faces()): the
+     * image the model shows, (face_x, face_y) in the .tim, and the offsets in
+     * `textures` of the pixels of expression 0 (that image) to face_count. */
+    unsigned face_x,face_y,face_w,face_h,face_blink,face_count,face_flag[2];
+    unsigned face_image[FACE_MAX+1];
 } GuestModel;
 static GuestModel models[2];
 static uint32_t control;
@@ -29,7 +35,8 @@ static unsigned arena_half[2];
 static int attempted;
 static uint32_t original_header[2][384], original_base[2];
 static int initializing;
-static int face_variant[2]={-1,-1};
+static int face_variant[2]={-1,-1};     /* expression whose image is in VRAM, -1 unknown */
+static struct { unsigned expression,timer; } face_state[2];
 uint32_t tekken3_ttt1_guest_skeleton(unsigned player);
 /* Easter egg: Jin confirmed with both punch buttons fights with his native
  * moves but is drawn with the converted TTT1 arcade Jin, whose Devil face and
@@ -142,6 +149,42 @@ void tekken3_ttt1_before_init(uint32_t model) {
 }
 void tekken3_ttt1_after_init(void) { if(initializing>0) initializing--; }
 
+/* A cutscene of ours (src/tekken3_embu_scenes.c) may draw a player with
+ * other model files than its guest's own, changing from one of its frames
+ * on (TEKKEN3_EMBU_MODEL_P1 / _P2: "Prefix@frame,..."): Jin, then Devil Jin,
+ * in Kazuya's TTT ending. */
+typedef struct { int frame; char prefix[40]; } ModelStep;
+static ModelStep model_steps[2][8];
+static int model_step_count[2]={-1,-1};
+extern int tekken3_cine_frame(void);
+extern int tekken3_cine_pending(void);
+static const char *embu_model(unsigned player) {
+    if(model_step_count[player]<0) {
+        model_step_count[player]=0;
+        const char *e=getenv(player?"TEKKEN3_EMBU_MODEL_P2":"TEKKEN3_EMBU_MODEL_P1");
+        char list[512];
+        if(e && snprintf(list,sizeof list,"%s",e)<(int)sizeof list)
+            for(char *s=strtok(list,",");s && model_step_count[player]<8;s=strtok(NULL,",")) {
+                char *at=strchr(s,'@');if(!at)continue;*at=0;
+                ModelStep *m=&model_steps[player][model_step_count[player]++];
+                snprintf(m->prefix,sizeof m->prefix,"%s",s);m->frame=atoi(at+1);
+                fprintf(stderr,"TTT1 Embu: P%u drawn with %s from frame %d\n",player+1,m->prefix,m->frame);
+            }
+    }
+    int frame=tekken3_cine_frame();
+    /* The fight an ending cutscene of ours plays in loads its guests with
+     * the first model files already: the cutscene then changes only
+     * textures. */
+    if(frame<0 && psx_mod_read_word(0x800ae204)!=6 && tekken3_cine_pending())frame=0;
+    if(!model_step_count[player] || frame<0)return NULL;
+    const char *out=NULL;
+    for(int i=0;i<model_step_count[player];i++)if(frame>=model_steps[player][i].frame)out=model_steps[player][i].prefix;
+    return out;
+}
+static const char *model_prefix(unsigned player) {
+    const char *m=player<2?embu_model(player):NULL;
+    return m?m:data_prefix(player);
+}
 static uint32_t word(const unsigned char *p) {
     return (uint32_t)p[0] | (uint32_t)p[1]<<8 | (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
 }
@@ -149,7 +192,7 @@ static uint32_t word(const unsigned char *p) {
  * returns the byte count. The old form demanded one character's exact size. */
 static size_t read_asset(unsigned player, const char *root, const char *suffix, void *data, size_t max) {
     char path[4096];
-    if (snprintf(path,sizeof(path),"%s/%s-%s",root,data_prefix(player),suffix)
+    if (snprintf(path,sizeof(path),"%s/%s-%s",root,model_prefix(player),suffix)
         >=(int)sizeof(path)) return 0;
     FILE *f=fopen(path,"rb");
     if (!f) { fprintf(stderr,"%s model: missing %s\n",name_for(player),path); return 0; }
@@ -158,6 +201,45 @@ static size_t read_asset(unsigned player, const char *root, const char *suffix, 
     fclose(f);
     if (!complete) fprintf(stderr,"%s model: %s exceeds %zu bytes\n",name_for(player),path,max);
     return complete ? n : 0;
+}
+static uint16_t half(const unsigned char *p);
+/* Offset in the .tim of the pixels of the w x h image at (x, y), 0 if none. */
+static unsigned tim_image(const GuestModel *m,unsigned x,unsigned y,unsigned w,unsigned h) {
+    for(unsigned o=0;o+8<m->textures_size;) {
+        if(word(m->textures+o)!=16)return 0;
+        unsigned flags=word(m->textures+o+4);o+=8;
+        if(flags&8)o+=word(m->textures+o);
+        unsigned n=word(m->textures+o);
+        if(half(m->textures+o+4)==x && half(m->textures+o+6)==y && half(m->textures+o+8)==w &&
+           half(m->textures+o+10)==h && o+12+w*h*2<=m->textures_size)return o+12;
+        o+=n;
+    }
+    return 0;
+}
+/* The costume's face expressions, if it has any (no file: Kunimitsu, the Jacks...). */
+static void read_face(unsigned player,const char *root,unsigned costume) {
+    GuestModel *m=&models[player];
+    unsigned char b[4+2*(6+2*FACE_MAX+2)];
+    char path[4096];
+    m->face_count=0;m->face_image[0]=0;
+    if(snprintf(path,sizeof path,"%s/%s-arcade-P%u.face",root,data_prefix(player),costume)>=(int)sizeof path)return;
+    FILE *f=fopen(path,"rb");
+    if(!f)return;
+    size_t n=fread(b,1,sizeof b,f);fclose(f);
+    if(n<16 || memcmp(b,"FACE",4))return;
+    unsigned count=half(b+14);
+    if(count>FACE_MAX || n<16+4*count)return;
+    m->face_x=half(b+4);m->face_y=half(b+6);m->face_w=half(b+8);m->face_h=half(b+10);m->face_blink=half(b+12);
+    /* Then the flags' expressions; a file from before them has none (FACE_MAX+1: nothing). */
+    for(unsigned k=0;k<2;k++)m->face_flag[k]=n>=16+4*count+2*k+2?half(b+16+4*count+2*k):FACE_MAX+1;
+    for(unsigned e=0;e<=count;e++) {
+        unsigned x=e?half(b+16+4*(e-1)):m->face_x,y=e?half(b+18+4*(e-1)):m->face_y;
+        if(!(m->face_image[e]=tim_image(m,x,y,m->face_w,m->face_h))) {
+            fprintf(stderr,"%s model: face expression %u image (%u,%u) not in the textures\n",name_for(player),e,x,y);
+            m->face_image[0]=0;return;
+        }
+    }
+    m->face_count=count;
 }
 /* Reads and checks a player's guest model, relocations and textures into
  * the host buffers. Returns 0 and leaves the buffers unusable on failure. */
@@ -172,7 +254,7 @@ static int read_model(unsigned player) {
     unsigned costume=m->costume+1;
     snprintf(model,sizeof model,"arcade-P%u.3dm",costume);
     FILE *probe=NULL;char path[4096];
-    if(costume>1 && (snprintf(path,sizeof path,"%s/%s-%s",root,data_prefix(player),model)>=(int)sizeof path ||
+    if(costume>1 && (snprintf(path,sizeof path,"%s/%s-%s",root,model_prefix(player),model)>=(int)sizeof path ||
                      !(probe=fopen(path,"rb")))) {
         fprintf(stderr,"%s model: no costume %u, costume 1 instead\n",name_for(player),costume);
         costume=1;snprintf(model,sizeof model,"arcade-P1.3dm");
@@ -185,6 +267,7 @@ static int read_model(unsigned player) {
         !(m->textures_size=read_asset(player,root,textures,m->textures,sizeof(m->textures)))) return 0;
     if (m->size%4 || reloc_bytes%4) return 0;
     m->reloc_count=(unsigned)(reloc_bytes/4);
+    read_face(player,root,costume);
     /* PS1 model converted by tools/ttt1_import.py: 27 rows. */
     if (word(m->file)!=27 || word(m->file+8)!=0x4b4d4433 || word(m->file+16)!=0x5f8) return 0;
     m->first_block=word(m->file+24); m->payload=word(m->file+16);
@@ -248,7 +331,7 @@ static void follow_models(void) {
         /* original_base / original_header stay: they are Jin's stock header,
          * whatever the guest, and before_init needs them to put it back when
          * the game keeps the envelope loaded between two guests. */
-        face_variant[p]=-1;
+        face_variant[p]=-1;face_state[p].expression=face_state[p].timer=0;
         if(read_model(p))install_model(p);
         else {models[p].first_block=0;fprintf(stderr,"%s model: rejected\n",name_for(p));}
     }
@@ -258,6 +341,11 @@ static void follow_models(void) {
  * own model and skeleton: tekken3_native_moves.c). */
 static int native_moves_player(unsigned player) {
     unsigned id=tekken3_native_moves_id(player);
+    /* Ogre's cutscene (state 8, phases 16 and 17) plays his T3 move
+     * numbers: on his TTT1 alias table they fell to his stance, and he
+     * stood in guard while Heihachi was lifted. */
+    unsigned phase=psx_mod_read_half(0x800ae224);
+    if(psx_mod_read_word(0x800ae204)==8 && (phase==16 || phase==17))return 0;
     return id<23 && psx_mod_read_half(0x800a9240+player*0x188c)==id;
 }
 unsigned tekken3_ttt1_player_motion_mode(unsigned player) {
@@ -396,8 +484,25 @@ static void icon_after_upload(unsigned player) {
     gr_vram_transfer_out(ICON_X,ICON_Y,ICON_W,ICON_H,icon_costume);
     icon_saved=memcmp(icon_sheet,icon_costume,sizeof icon_sheet)!=0;
 }
+/* Start + Select from the COMMAND LIST changes the state at once, but the list
+ * is still drawn for a few frames: letting the alias go then shows the costume
+ * under the icons (B02). The alias is kept for this many frames out of the
+ * fight (TEKKEN3_ICON_HOLD overrides it); the reset takes ~70 frames to reach
+ * the title, long before the selector needs the spot back. */
+static unsigned icon_hold(void) {
+    static unsigned v=~0u;
+    if(v==~0u) {
+        const char *e=getenv("TEKKEN3_ICON_HOLD");
+        v=e?(unsigned)strtoul(e,NULL,10):8u;
+    }
+    return v;
+}
 static void icon_tick(void) {
-    int on=icon_saved && psx_mod_read_word(0x800ae204)==8 && guest_player(0) && original_base[0];
+    static unsigned away;
+    unsigned state=psx_mod_read_word(0x800ae204);
+    int on=icon_saved && state==8 && guest_player(0) && original_base[0];
+    if(on || state==8)away=0;
+    if(icon_moved && !on && state!=8 && guest_player(0) && ++away<=icon_hold())return;
     if(on && !icon_moved) {
         /* Rewritten at each fight: loading screens may use the spot. */
         gr_vram_transfer_out(ICON_NX,ICON_NY,ICON_W,ICON_H,icon_under);
@@ -643,6 +748,48 @@ static void combo_tick(void) {
         shown=player;shown_generation=generation;
     }
 }
+/* ATTACK DATA (Practice): the label over a hit is drawn from the attacker's
+ * hit code (actor +0x64, record +0x08), looked up among eight exact values
+ * at 0x800B6598 (0x412 HIGH; 0x217, 0x31F, 0x51F MID; 0x10F LOW; 0x607,
+ * 0x706 "!"; 0x800 none); any other code falls on HIGH. Guarding reads the
+ * code's bits instead (0x80044AEC: victim +0x66, 0x10 standing guard, 0x08
+ * crouching guard, against the code): TTT1's Air Inferno, 0x907, has
+ * neither and cannot be guarded, yet showed HIGH. The lookup is replaced by
+ * the same bits, which give the stock label for the eight codes: no posture
+ * hit (bits 0..2) none, no guard bit "!", 0x08 alone LOW, both MID, 0x10
+ * alone MID when it hits crouching (bit 0), else HIGH. Same registers out:
+ * a0 x, v1 y, a3 code, a2 label (4: none), then back to 0x800B6648. */
+enum { LABEL_SITE=0x800b6598u, LABEL_WORDS=19 };
+static const uint32_t label_stock[LABEL_WORDS]={
+    0x94640004,0x84670000,0x94630006,0x10e20028,0x00003021,0x28e20413,0x1040000e,0x24020217,0x10e2001e,
+    0x28e20218,0x10400005,0x2402010f,0x10e20018,0x24020004,0x0802d993,0x00000000,0x2402031f,0x10e20015,
+    0x24020004};
+static const uint32_t label_bits[LABEL_WORDS]={
+    0x94640004,   /* lhu  a0, 4(v1)          x */
+    0x84670000,   /* lh   a3, 0(v1)          code */
+    0x94630006,   /* lhu  v1, 6(v1)          y */
+    0x30e20007,   /* andi v0, a3, 7          postures hit */
+    0x1040000b,   /* beqz v0, none */
+    0x30e20018,   /*  andi v0, a3, 0x18      guards that block it */
+    0x1040000a,   /* beqz v0, done */
+    0x24060003,   /*  li  a2, 3              "!" */
+    0x24060008,   /* li   a2, 8 */
+    0x10460007,   /* beq  v0, a2, done */
+    0x24060002,   /*  li  a2, 2              LOW */
+    0x24060018,   /* li   a2, 0x18 */
+    0x10460004,   /* beq  v0, a2, done */
+    0x24060001,   /*  li  a2, 1              MID */
+    0x0802d977,   /* j    done */
+    0x30e60001,   /*  andi a2, a3, 1         MID if it hits crouching, else HIGH */
+    0x24060004,   /* none: li a2, 4 */
+    0x0802d992,   /* done: j 0x800B6648 */
+    0x00000000};
+static void attack_label_tick(void) {
+    if(psx_mod_read_word(0x800ae204)!=8 || psx_mod_read_byte(0x800afa88)!=5)return;
+    for(unsigned i=0;i<LABEL_WORDS;i++)
+        if(psx_mod_read_word(LABEL_SITE+i*4)!=label_stock[i])return;   /* patched, or not this overlay */
+    for(unsigned i=0;i<LABEL_WORDS;i++)psx_mod_write_code_word(LABEL_SITE+i*4,label_bits[i]);
+}
 static void upload_textures_now(unsigned player);
 static void upload_textures(unsigned player) {
     face_variant[player]=-1;
@@ -669,10 +816,15 @@ static void moved_show(void) {
     }
     moved_note_written();
 }
+/* The Embu (state 6) draws player 2's guest from the moved tiles too; no
+ * Embu texture reads that page otherwise (only the stage, 512..703, and the
+ * costume bands). Hidden there, Kunimitsu, Lee or Kazuya on player 2 lost
+ * those tiles (B23). */
+static int embu_guest_on(unsigned player);
 static void moved_tick(void) {
     unsigned state=psx_mod_read_word(0x800ae204);
     static unsigned away;
-    away=state==8 || state==11?0:away+1;
+    away=state==8 || state==11 || (state==6 && embu_guest_on(1))?0:away+1;
     if(away>=3)tekken3_ttt1_moved_tiles_hide();
     if(!moved_up && moved_count[1] && state==8 && psx_mod_read_half(0x800ae224)>=6 &&
        !initializing && psx_mod_read_byte(control) && guest_player(1) && original_base[1] &&
@@ -728,24 +880,41 @@ static void upload_textures_now(unsigned player) {
         o+=n;
     }
 }
-void tekken3_ttt1_face(unsigned player,unsigned variant) {
-    if(player>1 || variant>1 || !control || face_variant[player]==(int)variant)return;
-    /* Original Jun face table 801945D8[46]: destination (16,64),
-     * size (16,64); expression 1 comes from (0,0). Expression 0 restores
-     * the original destination, which the arcade backed up at (192,64). */
-    /* textures_size, not sizeof: the buffer is sized for the largest
-     * guest, so walking it to the end would parse whatever follows the file. */
-    for(unsigned o=0;o+8<models[player].textures_size;) {
-        if(word(models[player].textures+o)!=16)return;
-        unsigned flags=word(models[player].textures+o+4);o+=8;
-        if(flags&8)o+=word(models[player].textures+o);
-        unsigned n=word(models[player].textures+o),x=half(models[player].textures+o+4),y=half(models[player].textures+o+6);
-        if(x==(variant?0:16) && y==(variant?0:64) && half(models[player].textures+o+8)==16 && half(models[player].textures+o+10)==64) {
-            gr_vram_transfer_in(400,player*256+64,16,64,(const uint16_t*)(models[player].textures+o+12));
-            face_variant[player]=(int)variant;return;
-        }
-        o+=n;
+/* Face expressions, as TTT1's 80104C64: expression e copies its image over the one
+ * the model shows (0 puts that one back) and holds `duration` frames; then
+ * 80105978 goes back to neutral for 1..255 frames at random, and to the costume's
+ * blink expression (0x801949C0) for 3. TTT1's copies its images in VRAM; the
+ * guest's are in the .tim. A move's properties start an expression
+ * (tekken3_ttt1_combat.c); `advanced` is 0 when the game did not (pause).
+ * `flag` 1 or 2: the move's record carries flag A or B (80105904: TTT1 record
+ * +0x24 & 0x800, else +4 & 4 without +0x24 bit 22), which holds the costume's
+ * expression for it (0x80194A40 / 0x80194AC0: eyes shut) 2 frames, every frame. */
+static void face_set(unsigned player,unsigned expression,unsigned duration) {
+    face_state[player].timer=duration;
+    /* An expression the costume lacks changes nothing, as 80104CE0. */
+    if(expression<=models[player].face_count)face_state[player].expression=expression;
+}
+void tekken3_ttt1_face_tick(unsigned player,int advanced,int expression,unsigned duration,unsigned flag) {
+    GuestModel *m=&models[player];
+    if(player>1 || !control || !m->face_image[0])return;
+    if(advanced) {
+        static uint32_t seed=0x3039;
+        if(expression>=0)face_set(player,(unsigned)expression,duration);
+        if((flag==1 || flag==2) && m->face_flag[flag-1]<=FACE_MAX)face_set(player,m->face_flag[flag-1],2);
+        if(face_state[player].timer)face_state[player].timer--;
+        else if(face_state[player].expression) {
+            seed=seed*0x41c64e6d+0x3039;
+            face_set(player,0,((seed>>16)&0xfe)|1);
+        } else face_set(player,m->face_blink,3);
     }
+    unsigned e=face_state[player].expression;
+    if(face_variant[player]==(int)e)return;
+    unsigned x=m->face_x,y=m->face_y,w=m->face_w,h=m->face_h;
+    if(x+w>128 || y+h>128 || x/64!=(x+w-1)/64)return;
+    unsigned by=y+(x>=64?128:0);
+    const MovedTile *t=moved_tile(player,x%64,by,x%64+w-1,by+h-1);
+    gr_vram_transfer_in(t?t->nx:384+x%64,t?t->ny:player*256+by,w,h,(const uint16_t*)(m->textures+m->face_image[e]));
+    face_variant[player]=(int)e;
 }
 /* Paquets modeles pour le renderer NATIF, depuis le bloc de textures PS1 (mot 2) :
  * u16 decalage de la table d'UV, materiaux u16 (palette | 0x8000 si 8 bits),
@@ -817,12 +986,104 @@ static void accessory_rotation(uint32_t destination,uint32_t row) {
  * expression. The stock table stops at model 51, so a guest's model 52 reads
  * the next table and queues a VRAM copy from nonsense - 36 x 4 pixels of
  * player 1's band landed at (44, 1), in the border above the fight. Guests
- * change expression through tekken3_ttt1_face(), so drop the engine's queued
+ * change expression through tekken3_ttt1_face_tick(), so drop the engine's queued
  * copy (0x800293BC) when it comes from that routine for a model past the
  * table: from both its paths, 0x80034478 and 0x800342DC (the latter queued
  * its copy at x 1068, y -32767: the strip at (44, 1) above the fight, the
  * rankings and SURVIVAL RESULTS). */
 enum { FACE_TABLE_MODELS=52 };
+/* Wings. Row 1 of a model (torso) may carry a table of poses (row word 13) that the engine
+ * plays as wings: True Ogre's flap, a state machine in the per-fighter part update
+ * (0x80034970) that runs only when the fighter's character is 20. The state lives in the
+ * actor: +0x128A the trigger (set from the airborne flag, 0x80040784), +0x128B the position,
+ * +0x128C the table (0: 0x80095888, poses 0..16 two steps a frame while airborne, falling a step
+ * a frame otherwise; 1: 0x8009589C, 16..39), +0x128D the first-step flag. TTT1's Devil and Angel
+ * flap the same way (one flap a jump, pose 1 to 36 in about 45 frames, back from 16 in 17,
+ * measured on the arcade by tools/ttt1_hands.lua), and their model has the 37 poses, but a
+ * guest's character is 23 and over, so the machine never ran. Run it after the engine's own
+ * update for a guest whose row 1 has the table; the last pose repeats where the tables go past it. */
+enum { WING_TABLE_A=0x80095888, WING_TABLE_B=0x8009589c, WING_LAST=0xff };
+static void wings_step(uint32_t actor,unsigned player);
+static void wings_step(uint32_t actor,unsigned player) {
+    uint32_t model=psx_mod_read_word(0x8009bd28+player*4);
+    if(model<0x80000000u || model>=0x80200000u)return;
+    /* The wings are the row whose table has the most poses (Angel's and Devil's: row 1; Devil
+     * Jin's grafted ones: row 21): the hands' tables have 4 (17 before the remap). */
+    uint32_t slot=0,table=0;
+    unsigned poses=0;
+    for(unsigned r=0;r<27;r++) {
+        if(r==13 || r==17)continue;
+        uint32_t row=model+24+56*r,tab=psx_mod_read_word(row+52);
+        /* a guest's model data lives in the mods' memory (0x9F000000...), not in the game's RAM */
+        if(!(tab>=0x80000000u && tab<0x80200000u) && !(tab>=0x9f000000u && tab<0x9f400000u))continue;
+        unsigned n=1;                       /* leading distinct entries: the table then repeats pose 0 */
+        uint32_t first=psx_mod_read_word(tab);
+        while(n<47 && psx_mod_read_word(tab+n*4)!=first)n++;
+        if(n>=24 && n>poses){poses=n;slot=row+48;table=tab;}
+    }
+    if(!poses)return;
+    uint8_t flag=psx_mod_read_byte(actor+0x128a),pos=psx_mod_read_byte(actor+0x128b),
+            state=psx_mod_read_byte(actor+0x128c),first_step=psx_mod_read_byte(actor+0x128d);
+    if(state==0) {
+        if(flag) {
+            pos+=2;
+            if(psx_mod_read_byte(WING_TABLE_A+pos)==WING_LAST){state=1;pos=0;first_step=1;}
+        } else if(pos)pos--;
+    } else if(state==1) {
+        unsigned step=first_step?2:1;
+        first_step=0;
+        pos+=step;
+        if(psx_mod_read_byte(WING_TABLE_B+pos)==WING_LAST) {
+            if(flag)pos=0;
+            else{pos=16;state=0;}
+        }
+    }
+    psx_mod_write_byte(actor+0x128b,pos);psx_mod_write_byte(actor+0x128c,state);
+    psx_mod_write_byte(actor+0x128d,first_step);
+    unsigned index=psx_mod_read_byte((state?WING_TABLE_B:WING_TABLE_A)+pos);
+    if(index>=poses)index=poses-1;
+    uint32_t pose=psx_mod_read_word(table+index*4);
+    if(pose)psx_mod_write_word(slot,pose);
+}
+/* Hand poses. Each frame the engine picks a pose index for each hand and calls
+ * 0x80034844(slot, index, actor), which stores table[index] in the hand row's
+ * position pointer (row word 12; word 13 is the table). Indices 0..3 run from open
+ * hand to fist (tools/ttt1/model/convert.py hand_steps) and come from a gauge per
+ * hand (actor +0x127C, +0x127E) that the move scripts and the stance rules drive; a
+ * guest's model (52) gets one fixed stance from them, but each TTT1 character has
+ * its own: a fist or an open hand kept, or a hand that closes on the attacks (the
+ * guests.txt hands column, measured on the arcade by tools/ttt1_hands.lua). */
+extern char tekken3_guest_hand(unsigned id,unsigned hand);
+static void wings_step(uint32_t actor,unsigned player);
+extern void __real_func_80034844(CPUState *cpu);
+static unsigned hand_index(int16_t gauge) {
+    if(gauge>=513)return (unsigned)(gauge-509);
+    unsigned i=(unsigned)(gauge>>7);
+    return i?i-1:0;
+}
+void __wrap_func_80034844(CPUState *cpu) {
+    uint32_t actor=cpu->gpr[6],slot=cpu->gpr[4];
+    int wings=0;
+    if(actor==0x800a9228 || actor==0x800a9228+0x188c) {
+        unsigned player=actor!=0x800a9228;
+        uint32_t model=psx_mod_read_word(0x8009bd28+player*4);
+        int hand=slot==model+24+56*13+48?0:slot==model+24+56*17+48?1:-1;
+        int guest=psx_mod_read_half(actor+0x1c)>=FACE_TABLE_MODELS;
+        if(hand>=0 && guest) {
+            char grip=tekken3_guest_hand(psx_mod_read_half(actor+0x18),(unsigned)hand);
+            if(grip=='F')cpu->gpr[5]=3;
+            else if(grip=='O')cpu->gpr[5]=0;
+            else if(grip=='D' && hand==0)   /* the other hand's gauge: this one follows the attacks too */
+                cpu->gpr[5]=hand_index((int16_t)psx_mod_read_half(actor+0x127e));
+        }
+        /* once a frame for each guest and for Devil Jin: the engine updates the hands every frame,
+         * and this leaf is not resumed from a continuation as the part update (0x80034970) is */
+        wings=hand==1 && (guest || tekken3_devil_jin_player(player)) &&
+              !psx_mod_read_word(0x80095494) && !psx_mod_read_word(0x80095468);
+    }
+    __real_func_80034844(cpu);
+    if(wings)wings_step(actor,actor!=0x800a9228);
+}
 extern void __real_func_800293BC(CPUState *cpu);
 void __wrap_func_800293BC(CPUState *cpu) {
     if((cpu->pc==0 || cpu->pc==0x800293bc) &&
@@ -1166,7 +1427,14 @@ static void activate_embu(void) {
     }
     embu_parsed=0;
 }
-static uint32_t embu_base[2],embu_header[2][384],embu_seen[2];
+/* embu_activated: the Embu itself activated a model on that side since state
+ * 6 began. On entering state 6 after a fight (the attract demo fight, Eddy
+ * against Lei), the actors still carry the fight's IDs and 0x800ADEC8 still
+ * points at the fight's models, in memory the Embu is loading over: a graft
+ * there, and the header put back later, wrote over the freshly loaded Embu
+ * data (stage textures garbled, sometimes a crash). */
+static uint32_t embu_base[2],embu_header[2][384],embu_seen[2],embu_activated[2];
+static int embu_native[2];
 static void embu_parse(void) {
     if(embu_parsed)return;
     embu_parsed=1;
@@ -1192,13 +1460,23 @@ static void embu_restore(unsigned player) {
     fprintf(stderr,"TTT1 Embu: P%u stock header back at %08X\n",player+1,embu_base[player]);
     embu_base[player]=0;
 }
+static int embu_guest_on(unsigned player){return player<2 && embu_base[player];}
+/* The native whose part the guest on that side plays, -1 without one. Not
+ * the actor's ID: a new part sets it a frame before its model goes active,
+ * while the previous guest is still grafted. */
+int tekken3_ttt1_embu_native(unsigned player) {
+    return player<2 && psx_mod_read_word(0x800ae204)==6 && embu_base[player] &&
+           embu_base[player]==psx_mod_read_word(0x800adec8+player*4)?embu_native[player]:-1;
+}
 extern void __real_func_80035B28(CPUState *cpu);
 void __wrap_func_80035B28(CPUState *cpu) {
+    unsigned side=2;
     if((cpu->pc==0 || cpu->pc==0x80035b28) && psx_mod_read_word(0x800ae204)==6) {
-        unsigned side=psx_mod_read_byte(cpu->gpr[4]+0x1e);
+        side=psx_mod_read_byte(cpu->gpr[4]+0x1e);
         if(side<2)embu_restore(side);
     }
     __real_func_80035B28(cpu);
+    if(side<2)embu_activated[side]=1;
 }
 /* The model whose rows carry a player's guest skeleton, the fight's Jin
  * envelope or the Embu's active model; 0 for a native actor. Native poses
@@ -1221,13 +1499,39 @@ void __wrap_func_8003172C(CPUState *cpu) {
         }
     __real_func_8003172C(cpu);
 }
+extern void tekken3_embu_scenes_tick(void);
+extern void tekken3_ttt1_embu_effects(void);
+extern void tekken3_ttt1_embu_light(int embu);
 static void embu_tick(void) {
+    tekken3_embu_scenes_tick();
+    /* The lightning pack and light of a cinematic: the Embu's or a fight's
+     * cutscene of ours. */
+    int cine=tekken3_cine_frame()>=0;
+    if(cine)tekken3_ttt1_embu_effects();
+    tekken3_ttt1_embu_light(cine);
     embu_parse();
+    /* A fight's cutscene of ours (tekken3_embu_scenes.c) draws the fight's
+     * guests themselves: only their textures change. */
+    if(psx_mod_read_word(0x800ae204)==8)
+        for(unsigned p=0;p<2;p++) {
+            static const char *shown[2];
+            const char *model=embu_model(p);
+            if(model==shown[p] || !models[p].first_block) continue;
+            shown[p]=model;
+            char tim[32];size_t n;
+            snprintf(tim,sizeof tim,"arcade-P%u.tim",models[p].costume+1);
+            if((n=read_asset(p,tekken3_ttt1_asset_root(),tim,models[p].textures,sizeof models[p].textures))) {
+                models[p].textures_size=n;upload_textures(p);
+                fprintf(stderr,"TTT1 cinematic: P%u textures of %s\n",p+1,model?model:"its guest");
+            }
+        }
     if(psx_mod_read_word(0x800ae204)!=6) {
         embu_base[0]=embu_base[1]=embu_seen[0]=embu_seen[1]=0;   /* the Embu's models are gone */
+        embu_activated[0]=embu_activated[1]=0;
         return;
     }
     for(unsigned p=0;p<2;p++) {
+        if(!embu_activated[p])continue;
         const uint32_t actor=0x800a9228+p*0x188c;
         unsigned native=psx_mod_read_half(actor+0x14)>>2;
         int id=native<20?embu_cast[native]:-1;
@@ -1249,7 +1553,7 @@ static void embu_tick(void) {
         for(unsigned i=0;i<27;i++)
             for(unsigned j=0;j<56;j+=4)
                 psx_mod_write_word(base+24+i*56+j,psx_mod_read_word(models[p].memory+24+i*56+j));
-        embu_base[p]=base;
+        embu_base[p]=base;embu_native[p]=(int)native;
         rebuild_packets(base,p);
         fprintf(stderr,"TTT1 Embu: P%u %s on %s's model at %08X\n",p+1,tekken3_guest_name_for(p),t3_keys[native],base);
     }
@@ -1273,6 +1577,7 @@ static void guest_tick(void) {
      * and the selector's icons must come back all the same. */
     icon_tick();
     moved_tick();
+    attack_label_tick();      /* natives' fights too */
     if (initializing || !psx_mod_read_byte(control)) return;
     for(unsigned player=0;player<2;player++)player_tick(player);
     for(unsigned player=0;player<2;player++)movelist_tick(player);

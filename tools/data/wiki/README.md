@@ -1,7 +1,8 @@
 # Tekken wiki move lists
 
 Wikitext of the *Tekken Tag Tournament Movelist* pages of the Tekken wiki
-(https://tekken.fandom.com), as fetched on 2026-09-28. `tools/ttt1/movelist.py`
+(https://tekken.fandom.com), as fetched on 2026-09-28 (Gun Jack, Kuma II, Ogre and True Ogre
+on 2026-10-01). `tools/ttt1/movelist.py`
 turns them into the in-game COMMAND LIST, and `tools/ttt1/combos.py` reads them
 for COMBO TRAINING. They are kept here so that the setup needs no network and
 every install gets the same lists; `python3 tools/ttt1/movelist.py --fetch`
@@ -23,6 +24,7 @@ unmodified; the history and authors of each page are on the wiki.
 | `devil.wiki` | [Devil Kazuya/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Devil_Kazuya/Tekken_Tag_Tournament_Movelist) |
 | `eddy.wiki` | [Eddy Gordo/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Eddy_Gordo/Tekken_Tag_Tournament_Movelist) |
 | `ganryu.wiki` | [Ganryu/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Ganryu/Tekken_Tag_Tournament_Movelist) |
+| `gunjack.wiki` | [Gun Jack/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Gun_Jack/Tekken_Tag_Tournament_Movelist) |
 | `heihachi.wiki` | [Heihachi Mishima/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Heihachi_Mishima/Tekken_Tag_Tournament_Movelist) |
 | `hwoarang.wiki` | [Hwoarang/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Hwoarang/Tekken_Tag_Tournament_Movelist) |
 | `jack2.wiki` | [Jack-2/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Jack-2/Tekken_Tag_Tournament_Movelist) |
@@ -31,15 +33,18 @@ unmodified; the history and authors of each page are on the wiki.
 | `jun.wiki` | [Jun Kazama/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Jun_Kazama/Tekken_Tag_Tournament_Movelist) |
 | `kazuya.wiki` | [Kazuya Mishima/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Kazuya_Mishima/Tekken_Tag_Tournament_Movelist) |
 | `king.wiki` | [King II/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/King_II/Tekken_Tag_Tournament_Movelist) |
+| `kuma.wiki` | [Kuma II/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Kuma_II/Tekken_Tag_Tournament_Movelist) |
 | `kunimitsu.wiki` | [Kunimitsu/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Kunimitsu/Tekken_Tag_Tournament_Movelist) |
 | `law.wiki` | [Forest Law/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Forest_Law/Tekken_Tag_Tournament_Movelist) |
 | `lee.wiki` | [Lee Chaolan/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Lee_Chaolan/Tekken_Tag_Tournament_Movelist) |
 | `lei.wiki` | [Lei Wulong/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Lei_Wulong/Tekken_Tag_Tournament_Movelist) |
 | `michelle.wiki` | [Michelle Chang/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Michelle_Chang/Tekken_Tag_Tournament_Movelist) |
 | `nina.wiki` | [Nina Williams/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Nina_Williams/Tekken_Tag_Tournament_Movelist) |
+| `ogre.wiki` | [Ogre/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Ogre/Tekken_Tag_Tournament_Movelist) |
 | `paul.wiki` | [Paul Phoenix/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Paul_Phoenix/Tekken_Tag_Tournament_Movelist) |
 | `pjack.wiki` | [Prototype Jack/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Prototype_Jack/Tekken_Tag_Tournament_Movelist) |
 | `roger.wiki` | [Roger/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Roger/Tekken_Tag_Tournament_Movelist) |
+| `trueogre.wiki` | [True Ogre/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/True_Ogre/Tekken_Tag_Tournament_Movelist) |
 | `unknown.wiki` | [Jun Kazama/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Jun_Kazama/Tekken_Tag_Tournament_Movelist) |
 | `wang.wiki` | [Wang Jinrei/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Wang_Jinrei/Tekken_Tag_Tournament_Movelist) |
 | `xiaoyu.wiki` | [Ling Xiaoyu/Tekken Tag Tournament Movelist](https://tekken.fandom.com/wiki/Ling_Xiaoyu/Tekken_Tag_Tournament_Movelist) |

@@ -4,6 +4,7 @@
 #include "mod_plugins.h"
 #include "psx_sha256.h"
 #include "toml.hpp"
+#include "toml_depth_guard.h"
 
 #include <algorithm>
 #include <array>
@@ -197,6 +198,13 @@ SemVer parse_semver(const std::string& text) {
     if (dash != std::string::npos) {
         out.suffix = core.substr(dash + 1);
         core.resize(dash);
+        // Semver's pre-release characters only: the version names the
+        // package's install folder, so a '/' or '\\' would leave it.
+        if (out.suffix.empty() ||
+            !std::all_of(out.suffix.begin(), out.suffix.end(), [](unsigned char c) {
+                return std::isalnum(c) || c == '.' || c == '-';
+            }))
+            return out;
     }
     std::array<int64_t*, 3> parts = {&out.major, &out.minor, &out.patch};
     size_t at = 0;
@@ -1525,7 +1533,7 @@ void ModPackageManager::set_root(fs::path mods_root) {
 bool ModPackageManager::read_manifest(const fs::path& path, ModPackage& out,
                                       std::string* error) {
     try {
-        const toml::value cfg = toml::parse(path.string());
+        const toml::value cfg = toml_depth_guard::parse(path);
         out = {};
         out.format_version = (uint32_t)toml::find<int64_t>(cfg, "format_version");
         out.id = toml::find<std::string>(cfg, "id");
@@ -2420,7 +2428,7 @@ bool ModPackageManager::load_state(std::string* error) {
     const fs::path path = root_ / "state.toml";
     if (!fs::exists(path)) return true;
     try {
-        const toml::value cfg = toml::parse(path.string());
+        const toml::value cfg = toml_depth_guard::parse(path);
         const int64_t version = toml::find<int64_t>(cfg, "format_version");
         if (version != 1 && version != 2)
             throw std::runtime_error("unsupported state format_version");

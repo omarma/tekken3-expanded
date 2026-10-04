@@ -18,7 +18,7 @@ with socket.socket() as s:
     s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
 env = {k: v for k, v in os.environ.items() if not k.startswith(('TEKKEN3_JUN', 'TEKKEN3_GUEST'))}
 env['TEKKEN3_JUN_ASSETS'] = str(ROOT/'workspace/native/empty-jun')
-args = [str(ROOT/BUILD/'Tekken_3_Recompiled'), '--game', str(ROOT/'game.toml'),
+args = [str(ROOT/BUILD/'Tekken_3_Expanded'), '--game', str(ROOT/'game.toml'),
         '--disc', str(ROOT/'disc/Tekken 3 (USA).cue'), '--debug-port', str(port)]
 p = subprocess.Popen(args, cwd=ROOT, stdout=(OUT/'game.log').open('w'), stderr=subprocess.STDOUT, env=env)
 print('jeu lance, port', port, flush=True)

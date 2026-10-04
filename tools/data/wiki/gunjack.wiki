@@ -1,0 +1,478 @@
+'''Gun Jack/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Jack|Gun Jack]] can perform in [[Tekken Tag Tournament|''Tekken Tag Tournament''.]]
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Body Slam]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Lift Up|Lift Up Slam]]
+!2+4
+!Front
+!30
+!2
+|-
+![[Side Left Bomb]]
+!1+3 (or 2+4)
+!Left
+!40
+!1
+|-
+![[Hanging Neck Throw]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Spinal Crush]]
+!1+3
+!Back
+!70
+!
+|-
+![[Death Shoot|Throw Away]]
+!2+4
+!Back
+!70
+!
+|-
+![[Body Press]]
+!d/f+1+3
+!Front
+!25
+!
+|-
+![[Body Press to Hammer]]
+!d/f+1+3, 1+2
+!Front
+!25,10
+!
+|-
+![[Volcano]]
+!d/f+2+4
+!Front
+!30
+!2
+|-
+![[Volcano Blaster]]
+!d/f, d/f+2+4
+!Front
+!30
+!2
+|-
+![[Body Smash]]
+!d/b+2+3
+!Front
+!32
+!2
+|-
+![[Ground Zero]]
+!u/f+1+2
+!Front
+!30
+!1+2
+|-
+![[Megaton Punishment|Lift Up Megaton Hit]]
+!u/f+1+2, d, d/f+2
+!Front
+!33
+!1+2
+|-
+![[Choke Slam (Ganryu)|Face Slam]]
+!f, f+2+3
+!Front
+!35
+!2
+|-
+![[Pile Driver (Jack)|Pile Driver]]
+!d/b, f+1+2
+!Front
+!58
+!1+2
+|-
+![[Pyramid Driver]]
+!qcf+1
+!Front
+!40
+!1+2
+|-
+![[Back Breaker (Jack)|Back Breaker]]
+!qcb+2
+!Front
+!45
+!2
+|-
+![[Gun Bomb]]
+!Crouching opponent d+1+3 (or d+2+4)
+!Front
+!40
+!1+2
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Jack Hammer]]
+!1, 1, 1
+!18, 15, 18
+!High, high, mid
+!
+|-
+![[Jab Elbow Smash]]
+!2, 1, 2
+!12, 15, 20
+!High, mid, mid
+!
+|-
+![[Double Hammer]]
+!1+2, 1+2
+!21, 22
+!Mid, mid
+!KND
+|-
+![[Giant Foot Stomp]]
+!3+4(, 3+4, 3+4) 
+!60, 70 or 80
+!!
+!
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Dark Greeting]]
+!f+[4~1]
+!101
+!!
+!JG
+|-
+![[Cross Cut Saw (Jack)|Cut Saw]]
+!f+1+2
+!21
+!Mid
+!
+|-
+![[Cut Saw Blast]]
+!f+1+2, d/f+2
+!17, 25
+!Mid, mid
+!
+|-
+![[High and Low Cross Cut]]
+!f+1+2, 1+2
+!17, 15
+!Mid, low
+!
+|-
+![[Sliding Attack]]
+!f+3+4
+!25
+!Mid (close)
+
+Low (far)
+
+Low (running)
+!
+|-
+![[Rushing Uppercut|Rushing Uppercut Left]]
+!D/F+1, 2, 1, 2
+!10, 15, 10, 15
+!Mid, mid, mid, mid
+!
+|-
+![[Rushing Uppercut|Rushing Uppercut Right]]
+!D/F+2, 1, 2, 1
+!10, 15, 12, 12
+!Mid, mid, mid, mid
+!
+|-
+![[Thunder Palm (Ganryu)|Thunder Slap]]
+!d/f+2+3
+!12
+!Low
+!RC
+|-
+![[Stomp|Sumo Stomp]]
+!d+4
+!50
+!Mid
+!KND
+|-
+![[Double Axe]]
+!d+1+2
+!45
+!Mid
+!
+|-
+![[Sit]]
+!d (or d/f or d/b)+3+4
+!-
+!-
+!
+|-
+![[Sit Pancake Press]]
+!d+3+4, 3+4
+!35
+!Mid
+!
+|-
+![[Sit Punches 1|Sit Punches Left]]
+!During Sit 1, 2, 1, 2
+!10, 15, 10, 15
+!Low, low, low, low
+!
+|-
+![[Sit Punches 2|Sit Punches Right]]
+!During Sit 2, 1, 2, 1
+!10, 15, 12, 12
+!Low, low, low, low
+!
+|-
+![[Machinegun Blast|Machine Gun Blast]]
+!d/b+1, 1, 1, 1, 1, 2
+!15, 15, 15, (15, 15), 40
+!Low, low, low, low, mid
+!
+|-
+![[Cossack Dance]]
+!D/B+3, 4, 3, 4, 3, 4
+!18, 12, 10, 12, 12, 12
+!Low, low, low, low, low, low
+!
+|-
+![[Piston Gun Assault]]
+!b+2
+!27
+!Mid
+!GB
+|-
+![[Piston Gun]]
+!b+1+2
+!7, 5, 5, 5, 21
+!High. high, high, high, high
+!
+|-
+![[Pancake Press]]
+!u/f+3+4
+!26
+!Mid
+!
+|-
+![[Debugger]]
+!b, d/b, d, d/f+1
+!25
+!Low
+!
+|-
+![[Megaton Blast]]
+!b, d/b, d, d/f+2
+!33
+!Mid
+!
+|-
+![[Gigaton Punch]]
+!b, d/b, d, d/f, f+1
+!20
+!Mid
+!
+|-
+![[Gigaton Punch|Windup Punch]]
+!b, d/b, d, d/f, f (followed by continuous rotation) 1
+!199
+!!
+!
+|-
+![[Windup Uppercut]]
+!b, d/b, d, d/f, f, d/f+1
+!22
+!Mid
+!
+|-
+![[Killing Uppercut]]
+!WS+1
+!20
+!Mid
+!JG
+|-
+![[Double Hammer Alternate]]
+!WS+1+2, 1+2
+!21, 17
+!Mid, mid
+!KND
+|-
+![[Hammer Rush|Hammer Rush 1 High]]
+!FC+1, 1, 1, 2, f+1
+!10, 8, 12, 12, 12
+!Low, low, mid, mid, high
+!
+|-
+![[Hammer Rush|Hammer Rush 1 Mid]]
+!FC+1, 1, 1, 2, d/f+1
+!10, 8, 12, 12, 15
+!Low, low, mid, mid, mid
+!
+|-
+![[Hammer Rush|Hammer Rush 1 Low]]
+!FC+1, 1, 1, 2, d+1 
+!10, 8, 12, 12, 8
+!Low, low, mid, mid, low
+!
+|-
+![[One Two Blast]]
+!FC+1, 2
+!10, 25 
+!Low, mid
+!
+|-
+![[Rising Double Palm|Take Down]]
+!FC+1+2
+!21
+!Low
+!GB RC
+|-
+![[Windmill Punch (Jack)|Windmill Punch]]
+!FC+d/f+1, 2, 1, 1
+!27
+!Mid, high, mid, high
+!
+|-
+![[Hammer Rush|Hammer Rush 2 High]]
+!FC+1, 1, 1, 2, f+1
+!10, 8, 12, 12, 12
+!Low, low, mid, mid, high
+!
+|-
+![[Hammer Rush|Hammer Rush 2 Mid]]
+!FC+1, 1, 1, 2, d/f+1
+!10, 8, 12, 12, 15
+!Low, low, mid, mid, mid
+!
+|-
+![[Hammer Rush|Hammer Rush 2 Low]]
+!FC+1, 1, 1, 2, d+1 
+!10, 8, 12, 12, 8
+!Low, low, mid, mid, low
+!
+|-
+![[Hammer Rush|Hammer Rush 3 High]]
+!FC+1, 1, 1, 2, f+1
+!10, 8, 12, 12, 12
+!Low, low, mid, mid, high
+!
+|-
+![[Hammer Rush|Hammer Rush 3 Mid]]
+!FC+1, 1, 1, 2, d/f+1
+!10, 8, 12, 12, 15
+!Low, low, mid, mid, mid
+!
+|-
+![[Hammer Rush|Hammer Rush 3 Low]]
+!FC+1, 1, 1, 2, d+1 
+!10, 8, 12, 12, 8
+!Low, low, mid, mid, low
+!
+|-
+![[Triple Uppercut]]
+!FC, D/F+1, 2, f+1 (High)
+
+FC, D/F+1, 2, 1 (Middle)
+
+FC, D/F+1, 2, d+1 (Low)
+
+FC, D/F+2, f+1 (High)
+
+FC, D/F+2, 1, 2 (Middle)
+
+FC, D/F+2, d+1 (Low)
+!12, 12, 12 (High)
+
+12, 12, 15 (Middle)
+
+12, 12, 8 (Low)
+
+10, 12 (High)
+
+15, 10, 15 (Middle)
+
+10, 8 (Low)
+!Mid, mid, high (High)
+
+Mid, mid, mid (Middle)
+
+Mid, mid, low (Low)
+
+Mid, high (High)
+
+Mid, mid, mid (Middle)
+
+Mid, low (Low)
+!
+|-
+![[Low Cross Cut Saw]]
+!FC, d/f+1+2
+!21
+!Low
+!
+|-
+![[Machinegun Blast|Machinegun Knuckle]]
+!FC+d/b+1, 1, 1, 2
+!18,25,25,40
+!Low, low, low, mid
+!
+|-
+![[Piston Gun Snipe]]
+!SS+2
+!22
+!High
+!
+|-
+![[Get Up Punch]]
+!d+1+2
+!12
+!Mid
+!
+|}
+
+==10 hit combo==
+{| class="wikitable sortable" id="10 hit combo" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo 1 (Jack)|d+2, 1, 1, 1, 2, 1, 2, 1, 1+2, 1+2]]
+!101
+!sLLmmmmmmm
+|-
+![[10 Hit Combo 2 (Jack)|d+2, 1, 1, 1, 2, 1, 2, 1, d+1+2, 1+2]]
+!102
+!sLLmmmmmlm
+|-
+![[10 Hit Combo 3 (Jack)|u/f+1, 1, 4, 3, 4, 1, 2, 1, 1+2, 1+2]]
+!106
+!hmLLLmmmmm
+|-
+![[10 Hit Combo 4 (Jack)|u/f+1, 1, 4, 3, 4, 1, 2, 1, d+1+2, 1+2]]
+!107
+!hmLLLmmmlm
+|}
+[[Category:Moves Lists]]
+[[Category:Gun Jack Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]
+[[es:Gun Jack/Lista de movimientos de Tekken Tag Tournament]]

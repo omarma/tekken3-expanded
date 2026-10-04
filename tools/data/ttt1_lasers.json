@@ -1,15 +1,17 @@
 {
-  "_comment": "Lasers TTT1 (Devil / Angel) : animation TTT1 -> type de rayon du runtime (src/tekken3_jun_combat.c, laser_beams). Mesures MAME du 2026-09-23 (capsule actor+364..384, versus contre un joueur immobile) : le rayon part de la tete + un decalage et s'allonge chaque image depuis la 3e trame de la fenetre active. Air Inferno n'a pas pu etre mesure : type Inferno par defaut.",
+  "_comment": "Lasers TTT1 (Devil / Angel) : animation TTT1 -> type de rayon du runtime (src/tekken3_ttt1_combat.c, laser_beams). Mesures MAME du 2026-09-23 (capsule actor+364..384, versus contre un joueur immobile) : le rayon part de la tete + un decalage et s'allonge chaque image depuis la 3e trame de la fenetre active. Le 2026-10-01, les routines de l'arcade (80116C1C choisit la routine par ID de coup ; 80117544, 801177F8, 80117AC0, 80117DD0) ont confirme ces valeurs et donne les types 4 et 5 : tout se fait dans le lacet du combattant, sans matrice d'os.",
   "types": {
-    "1": {"name": "Inferno (1+2)", "offset_forward": -49, "offset_up": 170, "step_forward": 199, "step_down": 0},
-    "2": {"name": "Devil Blaster (3+4)", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110},
-    "3": {"name": "Reverse Devil Blaster (3+4, 3+4)", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110, "_note": "Mesure MAME : -99 / -101 dans le repere du combattant, dont l orientation reste celle d avant le vol au-dessus de l adversaire. Le runtime vise l adversaire a l apparition du rayon, apres le passage : ce sont donc les valeurs du Blaster (verifie en jeu contre Jin le 2026-09-24)."}
+    "1": {"name": "Inferno (1+2)", "ttt1_move": "0x1448", "offset_forward": -49, "offset_up": 170, "step_forward": 199, "step_down": 0},
+    "2": {"name": "Devil Blaster (3+4)", "ttt1_move": "0x1449", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110},
+    "3": {"name": "Reverse Devil Blaster (3+4, 3+4)", "ttt1_move": "0x144B", "offset_forward": 99, "offset_up": 160, "step_forward": 101, "step_down": 110, "_note": "Routine du Blaster ; le lacet de l'arcade reste celui d'avant le vol au-dessus de l'adversaire (mesure MAME : -99 / -101 dans le repere du modele retourne). Le runtime garde l'orientation du debut du coup."},
+    "4": {"name": "Air Inferno (u+1+2)", "ttt1_move": "0x1252-0x1254, 0x144C", "offset_forward": 40, "offset_up": 170, "step_forward": 290, "step_down": -78, "_note": "80117DD0 : 300 par image, 15 degres vers le haut (sin -0xAAA), decalage de la table 0x80016870. Ne touche pas un adversaire debout."},
+    "5": {"name": "Balayage du ciel (clip 0xAE0088)", "ttt1_move": "0x1292, 0x1294", "offset_forward": -140, "offset_up": 160, "step_forward": 0, "step_down": -200, "_note": "80117AC0 : monte de 200 par image pendant 8 images, puis la pointe balaie +-0x3000 autour du lacet par pas de 0x200, longueur au hasard (0..1023) sur chaque axe horizontal."}
   },
   "clips": {
     "0x5f6f68": 1,
     "0x5f7a70": 2,
     "0x30c608c": 3,
-    "0x30c7308": 1,
-    "0xae0088": 1
+    "0x30c7308": 4,
+    "0xae0088": 5
   }
 }

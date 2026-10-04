@@ -1,4 +1,5 @@
 #include "mod_packages.h"
+#include "crc32.h"
 #include "psx_sha256.h"
 
 #include <algorithm>
@@ -79,6 +80,35 @@ static void write_deflated_package(const fs::path& path) {
     fs::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
     out.write((const char*)zip.data(), (std::streamsize)zip.size());
+}
+
+// A .psxmod holding only `manifest_text`, stored (not deflated).
+static void write_stored_package(const fs::path& path, const std::string& manifest_text) {
+    std::vector<uint8_t> zip;
+    auto le16 = [&](uint16_t v) {
+        zip.push_back((uint8_t)v); zip.push_back((uint8_t)(v >> 8));
+    };
+    auto le32 = [&](uint32_t v) {
+        le16((uint16_t)v); le16((uint16_t)(v >> 16));
+    };
+    const std::string name = "manifest.toml";
+    const uint32_t size = (uint32_t)manifest_text.size();
+    const uint32_t crc = crc32_compute((const uint8_t*)manifest_text.data(), manifest_text.size());
+    le32(0x04034b50); le16(20); le16(0); le16(0); le16(0); le16(0);
+    le32(crc); le32(size); le32(size);
+    le16((uint16_t)name.size()); le16(0);
+    zip.insert(zip.end(), name.begin(), name.end());
+    zip.insert(zip.end(), manifest_text.begin(), manifest_text.end());
+    const uint32_t central_offset = (uint32_t)zip.size();
+    le32(0x02014b50); le16(20); le16(20); le16(0); le16(0); le16(0); le16(0);
+    le32(crc); le32(size); le32(size);
+    le16((uint16_t)name.size()); le16(0); le16(0); le16(0); le16(0);
+    le32(0); le32(0);
+    zip.insert(zip.end(), name.begin(), name.end());
+    const uint32_t central_size = (uint32_t)zip.size() - central_offset;
+    le32(0x06054b50); le16(0); le16(0); le16(1); le16(1);
+    le32(central_size); le32(central_offset); le16(0);
+    write_bytes(path, zip);
 }
 
 static std::string manifest(const std::string& id, const std::string& version,
@@ -162,6 +192,17 @@ int main() {
           error.c_str());
     check(manager.packages().count("zip.mod") == 1,
           "deflated .psxmod must install");
+    // The version names the install folder: a pre-release suffix with a path
+    // in it must not install the package outside packages/.
+    write_stored_package(root / "escape.psxmod",
+                         manifest("escape.mod", "1.0.0-x/../../../escaped"));
+    check(!manager.install_archive(root / "escape.psxmod", nullptr, nullptr, &error),
+          "a version with a path in it must be refused");
+    check(!fs::exists(root / "escaped") && !fs::exists(root.parent_path() / "escaped"),
+          "a version must not install a package outside packages/");
+    write_stored_package(root / "beta.psxmod", manifest("beta.mod", "1.0.0-beta.2"));
+    check(manager.install_archive(root / "beta.psxmod", nullptr, nullptr, &error),
+          error.c_str());
     if (const char* external = std::getenv("PSXMOD_TEST_ARCHIVE");
         external && external[0]) {
         std::string installed_id, installed_version;

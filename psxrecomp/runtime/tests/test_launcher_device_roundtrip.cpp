@@ -10,10 +10,12 @@ int main() {
     assert(launcher_source_from_device(" none ") == 0);
     assert(launcher_source_from_device("Keyboard") == 1);
     assert(launcher_source_from_device("gamepad") == 2);
+    assert(launcher_source_from_device(" Touch ") == 3);
     assert(launcher_source_from_device("030000005e0400008e02000000000000") == 2);
 
     assert(launcher_device_from_source(0, "keyboard") == "none");
     assert(launcher_device_from_source(1, "none") == "keyboard");
+    assert(launcher_device_from_source(3, "keyboard") == "touch");
     assert(launcher_device_from_source(2, "keyboard") == "gamepad");
     assert(launcher_device_from_source(2, "none") == "gamepad");
     assert(launcher_device_from_source(2, " auto ") == "auto");

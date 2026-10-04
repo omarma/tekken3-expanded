@@ -44,9 +44,12 @@ PAGES = {'kazuya': 'Kazuya Mishima', 'kunimitsu': 'Kunimitsu', 'michelle': 'Mich
          'paul': 'Paul Phoenix', 'law': 'Forest Law', 'lei': 'Lei Wulong', 'king': 'King II',
          'yoshimitsu': 'Yoshimitsu', 'nina': 'Nina Williams', 'hwoarang': 'Hwoarang',
          'xiaoyu': 'Ling Xiaoyu', 'eddy': 'Eddy Gordo', 'jin': 'Jin Kazama', 'julia': 'Julia Chang',
-         'bryan': 'Bryan Fury', 'heihachi': 'Heihachi Mishima', 'anna': 'Anna Williams'}
+         'bryan': 'Bryan Fury', 'heihachi': 'Heihachi Mishima', 'anna': 'Anna Williams',
+         # Natives that Unknown never takes: their own import (natives/<key>).
+         'kuma': 'Kuma II', 'ogre': 'Ogre', 'gunjack': 'Gun Jack', 'trueogre': 'True Ogre'}
 DONOR_ONLY = {'paul', 'law', 'lei', 'king', 'yoshimitsu', 'nina', 'hwoarang', 'xiaoyu', 'eddy',
               'jin', 'julia', 'bryan', 'heihachi', 'anna'}
+NATIVES = {'kuma', 'ogre', 'gunjack', 'trueogre'}
 
 DIRS = {'d/b': 0, 'd': 1, 'd/f': 2, 'b': 3, 'f': 4, 'u/b': 5, 'u': 6, 'u/f': 7}
 MOTIONS = {'qcf': 'd, d/f, f', 'qcb': 'd, d/b, b', 'hcf': 'b, d/b, d, d/f, f', 'hcb': 'f, d/f, d, d/b, b'}
@@ -163,7 +166,7 @@ def main():
         if key not in PAGES: continue
         if '--fetch' in sys.argv: fetch(key)
         data, total, skipped = build(key)
-        guest = WORK / key / 'guest'
+        guest = WORK / 'natives' / key if key in NATIVES else WORK / key / 'guest'
         if not guest.is_dir(): print(f'{key} : pas importe, ignore'); continue
         (guest / f'{key.capitalize()}-TTT1-movelist.bin').write_bytes(data)
         print(f'{key:10s} {data[0]:2d} entrees sur {total} lisibles, {len(data)} octets,'

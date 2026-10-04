@@ -2925,6 +2925,18 @@ static int sio_w_mcslot(PstW *w, const McSlotState *s) {
            pst_w_i32(w, (int32_t)s->data_idx) && pst_w_u8(w, s->checksum) &&
            pst_w_u8(w, s->flag);
 }
+/* Restored card index must fit the FSM that will consume it: data_idx runs
+ * 0..128 and reaches 128 only as the data phase ends (READ_DATA/WRITE_DATA
+ * move on to *_CHK there; WRITE_LSB_ECHO always starts at 0). A crafted
+ * snapshot could otherwise index past mc_data[]. Checked before the value is
+ * stored so a rejected section never leaves it live. */
+static int sio_mc_data_idx_ok(uint32_t st, int32_t di) {
+    if (di < 0 || di > 128) return 0;
+    if ((st == MC_READ_DATA || st == MC_WRITE_LSB_ECHO || st == MC_WRITE_DATA) &&
+        di >= 128)
+        return 0;
+    return 1;
+}
 static int sio_r_mcslot(PstR *r, McSlotState *s) {
     uint32_t st = 0;
     int32_t di = 0;
@@ -2932,6 +2944,8 @@ static int sio_r_mcslot(PstR *r, McSlotState *s) {
         !pst_r_u8(r, &s->sector_msb) || !pst_r_u8(r, &s->sector_lsb) ||
         !pst_r_bytes(r, s->data, 128) || !pst_r_i32(r, &di) ||
         !pst_r_u8(r, &s->checksum) || !pst_r_u8(r, &s->flag))
+        return 0;
+    if (!sio_mc_data_idx_ok(st, di))
         return 0;
     s->state = (McState)st;
     s->data_idx = (int)di;
@@ -3054,6 +3068,9 @@ static int sio_snap_parse(PstR *r) {
         !pst_r_u8(r, &pad_response_idx) || !pst_r_u8(r, &pad_current_cmd) ||
         !pst_r_bytes(r, pad_in_config, PSX_MAX_PLAYERS))
         return 0;
+    /* Physical slot (CTRL bit13): indexes mtap_*[2] / mc_slots[2]. */
+    if (i < 0 || i > 1)
+        return 0;
     pad_state = (PadState)u;
     selected_slot = (int)i;
     pad_active_logical = pad_logical_for_port(selected_slot);
@@ -3074,10 +3091,14 @@ static int sio_snap_parse(PstR *r) {
         !pst_r_u16(r, &mc_sector) || !pst_r_u8(r, &mc_sector_msb) ||
         !pst_r_u8(r, &mc_sector_lsb) || !pst_r_bytes(r, mc_data, 128))
         return 0;
-    mc_state = (McState)u;
+    if (i < 0 || i > 1)
+        return 0;
     mc_slot = (int)i;
     if (!pst_r_i32(r, &i) || !pst_r_u8(r, &mc_checksum) || !pst_r_u8(r, &mc_flag))
         return 0;
+    if (!sio_mc_data_idx_ok(u, i))
+        return 0;
+    mc_state = (McState)u;
     mc_data_idx = (int)i;
     if (!sio_r_mcslot(r, &mc_slots[0]) || !sio_r_mcslot(r, &mc_slots[1]))
         return 0;

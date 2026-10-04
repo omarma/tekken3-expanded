@@ -6,6 +6,7 @@
 
 #include "iso_reader.h"
 #include "mod_runtime.h"
+#include "disc_sector_log.h"
 #include <cstdio>
 
 extern "C" {
@@ -24,6 +25,7 @@ int iso_read_sector(void* handle, uint32_t lba, uint8_t* buffer, int size) {
     auto* reader = static_cast<PS1::ISOReader*>(handle);
     (void)size; /* ReadSector always reads 2048 bytes */
     if (!reader->ReadSector(lba, buffer)) return 0;
+    disc_sector_log_read(lba);
     mod_runtime_patch_disc_sector(lba, 0, buffer, 2048);
     return 1;
 }
@@ -32,6 +34,7 @@ int iso_read_raw_sector(void* handle, uint32_t lba, uint8_t* buffer, int size) {
     if (!handle || size < 2352) return 0;
     auto* reader = static_cast<PS1::ISOReader*>(handle);
     if (!reader->ReadRawSector(lba, buffer)) return 0;
+    disc_sector_log_read(lba);
     mod_runtime_patch_disc_sector(lba, 1, buffer, 2352);
     return 1;
 }
@@ -66,6 +69,7 @@ int iso_track_is_audio(void* handle, int track) {
 void iso_close(void* handle) {
     if (!handle) return;
     auto* reader = static_cast<PS1::ISOReader*>(handle);
+    disc_sector_log_flush();
     reader->Close();
     delete reader;
 }

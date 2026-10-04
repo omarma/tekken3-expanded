@@ -75,6 +75,11 @@ void gl_renderer_sync_cpu(void);
  * Safe before 24-bit (FMV) CPU scanout of the mirror. */
 void gl_renderer_flush_cpu_uploads(void);
 
+/* On the first 24-bit present, sync the CPU mirror from the FBO once (the
+ * rows a movie never uploads must show what the GPU put there, not a stale
+ * mirror). No-op while already in 24-bit, or outside it. */
+void gl_renderer_depth24_enter(void);
+
 /* Mark the whole display dirty, drop present-path latches, reset frame-
  * interpolation history, and force the next several SwapWindow calls even if
  * VRAM tiles match the last present. Call after savestate restore so a

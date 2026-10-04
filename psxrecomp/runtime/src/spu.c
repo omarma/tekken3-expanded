@@ -1743,6 +1743,10 @@ static int spu_r_voice(PstR *r, int idx) {
         !pst_r_u8(r, &v->flags) || !pst_r_u16(r, &v->env_level) ||
         !pst_r_u32(r, &v->adsr_divider) || !pst_r_u8(r, &v->adsr_phase))
         return 0;
+    /* Indexes samples[] (Gaussian taps / shadow tap): live 0..BLOCK_SAMPLES,
+     * where BLOCK_SAMPLES means "decode the next block first". */
+    if (sample_idx < 0 || sample_idx > SPU_BLOCK_SAMPLES)
+        return 0;
     v->sample_idx = (int)sample_idx;
     for (int ch = 0; ch < 2; ch++)
         if (!pst_r_i16(r, &sweep_voice_env[idx][ch].level) ||
@@ -1793,6 +1797,7 @@ void spu_snapshot_write(uint8_t *p) {
 
 int spu_snapshot_read(const uint8_t *p, uint32_t len) {
     PstR r;
+    uint32_t cap_pos;
     if (len != spu_snapshot_bytes()) return 0;
     pst_r_init(&r, p, len);
     for (uint32_t i = 0; i < SPU_REG_COUNT; i++)
@@ -1808,8 +1813,12 @@ int spu_snapshot_read(const uint8_t *p, uint32_t len) {
         !pst_r_u8(&r, &rev_phase) ||
         !pst_r_i32(&r, &rev_in_hold_l) || !pst_r_i32(&r, &rev_in_hold_r) ||
         !pst_r_i32(&r, &rev_out_l) || !pst_r_i32(&r, &rev_out_r) ||
-        !pst_r_u32(&r, &capture_pos))
+        !pst_r_u32(&r, &cap_pos))
         return 0;
+    /* capture_write() stores spu_ram[a + 1]: live capture_pos wraps at 0x3FF. */
+    if (cap_pos > 0x3FFu)
+        return 0;
+    capture_pos = cap_pos;
     for (int ch = 0; ch < 2; ch++) {
         if (!pst_r_i16(&r, &sweep_main_env[ch].level) ||
             !pst_r_u32(&r, &sweep_main_env[ch].divider))

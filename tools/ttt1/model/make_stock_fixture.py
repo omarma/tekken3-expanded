@@ -27,7 +27,7 @@ work = ROOT / 'workspace/kazuya-import/fixture'; work.mkdir(parents=True, exist_
 log_path = work / 'stock.log'
 with socket.socket() as s:
     s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
-args = [str(ROOT / 'build-debug-server-lite/Tekken_3_Recompiled'),
+args = [str(ROOT / 'build-debug-server-lite/Tekken_3_Expanded'),
         '--game', str(ROOT / 'game.toml'),
         '--disc', str(ROOT / 'disc/Tekken 3 (USA).cue'),
         '--no-launcher', '--renderer', 'software', '--headless',

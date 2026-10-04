@@ -15,6 +15,9 @@
 #include "launcher_model.h"
 #include "launcher_platform.h"
 #include "launcher_theme.h"
+#if defined(__ANDROID__)
+#include "launcher_android.h"   // native Android screens instead of the ImGui window
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -43,6 +46,13 @@ int recomp_launcher_run_window(const char* window_title,
 
     launcher_boot_timing_mark("rui:run_window:enter");
 
+#if defined(__ANDROID__)
+    LauncherModel model;
+    launcher_model_init(&model, io, game, initial_rom);
+    launcher_binds_load(&model, game ? game->config_path : NULL,
+                                game ? game->keybinds_path : NULL);
+    const LngAction act = launcher_android_run(&model);
+#else
     LauncherPlatform plat;
     if (!launcher_platform_open(&plat, window_title ? window_title : "Launcher",
                                 1100, 880)) {
@@ -62,6 +72,7 @@ int recomp_launcher_run_window(const char* window_title,
     LngAction act = launcher_backend_run(&plat, &model, &theme);
 
     launcher_platform_close(&plat);
+#endif
 
     if (act == LNG_ACTION_LAUNCH || act == LNG_ACTION_RELAUNCH) {
         launcher_model_commit(&model, io);   // edited settings back to the caller

@@ -183,10 +183,14 @@ static const char* kHotkeyKey[LNG_HK_COUNT] = {
 };
 // Built-in defaults (shown when config.ini has no line; "" = unbound).
 static const char* kHotkeyDef[LNG_HK_COUNT] = {
-    "Alt+Return", "Ctrl+R", "Shift+P", "P", "Tab",
+#ifdef __APPLE__
+    "Cmd+F", "", "Shift+P", "P", "Tab",   /* Command is the Mac modifier */
+#else
+    "Alt+Return", "", "Shift+P", "P", "Tab",
+#endif
     /* WindowBigger/Smaller unbound; VolumeUp/Down default keypad +/-
      * (psxrecomp host_keymap reads these from [KeyMap]). */
-    "", "", "Keypad +", "Keypad -", "F", "R",
+    "", "", "Keypad +", "Keypad -", "", "",
     "", "", ""
 };
 
@@ -464,6 +468,12 @@ static void format_hotkey(int keycode, int kmod, char* out, size_t cap) {
     char buf[96]; buf[0] = 0;
     if (kmod & SDL_KMOD_CTRL)  strncat(buf, "Ctrl+",  sizeof(buf)-strlen(buf)-1);
     if (kmod & SDL_KMOD_ALT)   strncat(buf, "Alt+",   sizeof(buf)-strlen(buf)-1);
+    if (kmod & SDL_KMOD_GUI)
+#ifdef __APPLE__
+        strncat(buf, "Cmd+", sizeof(buf)-strlen(buf)-1);
+#else
+        strncat(buf, "Win+", sizeof(buf)-strlen(buf)-1);
+#endif
     if (kmod & SDL_KMOD_SHIFT) strncat(buf, "Shift+", sizeof(buf)-strlen(buf)-1);
     const char* kn = SDL_GetKeyName((SDL_Keycode)keycode);
     if (!kn || !kn[0]) return;

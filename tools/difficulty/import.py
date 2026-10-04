@@ -10,22 +10,27 @@ keep the same blocks in RAM, from the user's own ROMs:
   Tekken Tag (tektagt, TEG2/VER.C1) 0x8019602C: 2 modes x 9 levels x 8 stages x 128 bytes
 
 Their first 57 halfwords are the PS1 block with its first four fields widened
-to halfwords (the rest is a pointer and, for TTT1, fields of its own). This
-tool reads both tables under MAME during the attract mode, checks them against
+to halfwords (the rest is a pointer and, for TTT1, fields of its own). Both
+tables are static in the game programs, which the boards unpack from their
+program ROM at boot (Tekken 3: LZ entry at ROM+0x20238, the TTT LZ of
+tools/ttt1/extract.py; TTT: extract.unpack_game). This tool reads them there,
+without MAME, checks them against
 the PS1 table (PS1 MEDIUM must equal arcade MEDIUM and PS1 HARD arcade ULTRA
 HARD, block for block) and writes workspace/difficulty/levels.bin, which the
 runtime plugin src/tekken3_difficulty_mod.c copies over the PS1 table.
 
-  python3 tools/difficulty/import.py [--tekken3 tekken3.zip] [--tektagt tektagt.zip] [--mame mame]
+  python3 tools/difficulty/import.py [--tekken3 tekken3.zip] [--tektagt tektagt.zip]
 
 Nothing from either game is written outside workspace/.
 """
-import argparse, hashlib, json, os, shutil, struct, subprocess, sys, tempfile
+import argparse, hashlib, json, struct, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / 'workspace/difficulty'
 SOURCE = WORK / 'source.json'
+sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1')]
+import arcade_model_probe as probe, extract as E  # noqa: E402
 NATIVE_EXE_SHA = 'fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c'
 
 PS1_TABLE, PS1_BLOCK, STAGES = 0x800231AC, 110, 10
@@ -77,30 +82,24 @@ def choose(prompt, pattern):
     return Path(p)
 
 
-def mame_dump(mame, game, roms, addr, length):
-    with tempfile.TemporaryDirectory(dir=WORK) as tmp:
-        tmp = Path(tmp)
-        for d in ('nvram', 'cfg', 'snap'): (tmp / d).mkdir()
-        env = dict(os.environ, DUMP_ADDR=f'{addr:x}', DUMP_LEN=str(length), DUMP_OUT='dump.bin')
-        if sys.platform == 'darwin':
-            # Sans fenetre ni vol du focus (MAME sous SDL3 en ouvre une malgre -video none).
-            env.update(SDL_MAC_BACKGROUND_APP='1', SDL_VIDEO_DRIVER='dummy')
-        subprocess.run([str(mame), game, '-rompath', str(roms), '-video', 'none', '-sound', 'none',
-                        '-nothrottle', '-skip_gameinfo', '-autoboot_script', str(ROOT / 'tools/difficulty/dump_ram.lua'),
-                        '-autoboot_delay', '0', '-nvram_directory', 'nvram', '-cfg_directory', 'cfg',
-                        '-snapshot_directory', 'snap', '-seconds_to_run', '120'],
-                       cwd=tmp, env=env, check=True, timeout=600,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        data = (tmp / 'dump.bin').read_bytes()
-    if len(data) != length: raise SystemExit(f'{game} : releve incomplet ({len(data)} octets)')
-    return data
+def program(game, zip_path):
+    """The game program as the board unpacks it to 80010000 at boot."""
+    regions = [r for r in json.loads(probe.MANIFEST.read_text())['sets'][game]['regions']
+               if r['name'] == 'maincpu:rom']
+    try: main = probe.reconstruct(zip_path, dict(regions=regions))[0]['maincpu:rom']
+    except probe.ProbeError as e: raise SystemExit(f'{zip_path.name} : {e}')
+    if game == 'tektagt': return E.unpack_game(main)
+    # Boot stub at ROM+0x20270: zero fills at 0x20210, copies at 0x20220,
+    # then LZ unpacks at 0x20238 (source, destination), one entry.
+    src, dst = struct.unpack_from('<2I', main, 0x20238)
+    if dst != 0x80010000: raise SystemExit(f'{zip_path.name} : chargeur inattendu')
+    return E.lz(main, src - 0x1FC00000)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--tekken3', type=Path, help='tekken3.zip (Tekken 3 arcade, non fusionne)')
     ap.add_argument('--tektagt', type=Path, help='tektagt.zip (Tekken Tag Tournament arcade)')
-    ap.add_argument('--mame', type=Path, help='executable MAME 0.289')
     args = ap.parse_args()
     WORK.mkdir(parents=True, exist_ok=True)
     exe = (ROOT / 'disc/SLUS_004.02').read_bytes()
@@ -116,27 +115,15 @@ def main():
         if game == 'tektagt' and not z and ttt1.get('ttt1'): z = Path(ttt1['ttt1'])
         if not z or not z.is_file(): z = choose(label, '*.zip')
         zips[game] = z.resolve()
-    mame = args.mame or (Path(known['mame']) if known.get('mame') else None) or \
-        (Path(ttt1['mame']) if ttt1.get('mame') else None) or shutil.which('mame')
-    if not mame: mame = choose('Executable MAME 0.289', '*')
-    SOURCE.write_text(json.dumps(dict(tekken3=str(zips['tekken3']), tektagt=str(zips['tektagt']), mame=str(mame)), indent=2) + '\n')
-    roms = WORK / 'roms'; roms.mkdir(exist_ok=True)
-    for game, z in zips.items():
-        link = roms / f'{game}.zip'
-        if link.is_symlink() or link.exists(): link.unlink()
-        # Windows refuse les liens symboliques sans admin ni mode developpeur.
-        try: link.symlink_to(z)
-        except OSError:
-            try: os.link(z, link)
-            except OSError: shutil.copy2(z, link)
+    SOURCE.write_text(json.dumps(dict(tekken3=str(zips['tekken3']), tektagt=str(zips['tektagt'])), indent=2) + '\n')
 
     ps1 = {(d, s): exe[0x800 + PS1_TABLE - 0x80010000 + d * STAGES * PS1_BLOCK + s * PS1_BLOCK:][:PS1_BLOCK]
            for d in range(3) for s in range(STAGES)}
     arcade = {}
     for game, t in ARCADE.items():
         size = t['modes'] * t['levels'] * t['stages'] * t['block']
-        print(f'{game} : releve de la table IA sous MAME...', flush=True)
-        raw = mame_dump(mame, game, roms, t['addr'], size)
+        print(f'{game} : table IA lue dans la ROM...', flush=True)
+        raw = program(game, zips[game])[t['addr'] - 0x80010000:][:size]
         for m in range(t['modes']):
             for d in range(t['levels']):
                 for s in range(t['stages']):

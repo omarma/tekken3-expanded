@@ -2,7 +2,8 @@
  * builds it (CMake target tekken3-play) and copies it beside Setup Tekken 3.cmd.
  * It does what the .cmd does once setup is done, without a console window:
  * start launcher/easy_launcher.py with the setup's Python, which opens the game,
- * or the setup window when an update needs it. --settings is passed on. */
+ * or the setup window when an update needs it (Setup Tekken 3.cmd passes
+ * --setup: the setup window always). --settings is passed on. */
 #ifndef UNICODE
 #define UNICODE
 #endif

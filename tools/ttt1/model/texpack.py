@@ -5,8 +5,10 @@ replies en 64 x 256 (x 0..63 -> y, x 64..127 -> y + 128). Une image ne peut donc
 pas chevaucher x = 64. Les atlas TTT1 debordent souvent (jusqu'a x = 160) et
 certains depassent le budget de 16 384 demi-mots. plan() range les images :
 
-1. les deux images d'expressions du visage, (0, 0) et (16, 64) en 16 x 64, restent
-   en place : tekken3_jun_face() les recherche a ces coordonnees ;
+1. les images d'expressions du visage du costume (table TTT1 0x801945D8, voir
+   faces() de tools/ttt1_import.py : l'image affichee et ses remplacantes) ne sont
+   ni transposees ni reduites, et restent en place si le reste tient autour : le
+   runtime recopie l'une sur l'autre (tekken3_ttt1_face_tick(), fichier .face) ;
 2. les autres restent en place quand elles tiennent, sinon elles sont rangees dans
    les zones libres (au besoin transposees : UV echanges, sans perte) ;
 3. si le budget ne suffit pas, des images 256 couleurs passent en 16 couleurs
@@ -16,13 +18,16 @@ certains depassent le budget de 16 384 demi-mots. plan() range les images :
 4. les palettes restent dans les lignes 0..3 du joueur : une palette de l'atlas
    au-dela (ligne 4 d'Unknown, qui tombait sur les palettes du joueur 2) est
    relogee dans une case libre.
+5. dernier recours, si rien de cela ne tient (Unknown costume 2 : 18 112 demi-mots
+   tout reduit) : les images qu'aucun polygone ne lit sont retirees (expressions du
+   visage comprises : le costume garde son visage de base, sans .face) et les autres
+   rognees aux UV lus, puis on reprend en 3. Les atlas qui tenaient ne changent pas.
 
 Les images qu'un meme polygone chevauche forment un groupe, deplace d'un bloc.
 """
 import struct
 from PIL import Image
 
-PINNED = ((0, 0, 16, 64), (16, 64, 16, 64))       # (x, y, l, h) : expressions du visage
 W, H, FOLD = 128, 128, 64
 LAYOUT = None                                      # rempli par plan()
 REPORT = {}
@@ -137,6 +142,7 @@ class Grid:
 def _dims(g):
     """(largeur, hauteur) en demi-mots, droite puis transposee si possible."""
     ppw = ppw_of(g['bpp']); out = [(g['w'], g['h'], False)]
+    if g.get('face'): return out                    # recopiee pixel a pixel sur une autre
     wpx = g['w'] * ppw
     if g['h'] % ppw == 0 and (g['h'] // ppw, wpx) != (g['w'], g['h']): out.append((g['h'] // ppw, wpx, True))
     return out
@@ -298,15 +304,113 @@ def _pal_at(pal):
     x, y = LAYOUT['pal_moved'].get(tuple(pal[:3]), pal[:2])
     return (x, y) + tuple(pal[2:])
 
-def plan(tex, T):
-    """Calcule le rangement ; remap_uv() et repack() l'appliquent."""
-    global LAYOUT
+def _used(tiles, gs, T):
+    """Rectangle (x0, y0, x1, y1) en demi-mots que les polygones lisent dans
+    chaque groupe, None s'il n'est jamais lu ; meme recherche que _group_at."""
+    box = [None] * len(gs)
+    for k, mat, uv in _prims(T):
+        page, clut = mat >> 16, mat & 0xffff
+        for u, v in uv:
+            mode, X = _corner(page, u); i = None
+            for any_clut in (False, True):
+                for strict in (True, False):
+                    i = next((i for i, g in enumerate(gs) if g['bpp'] == mode and _hit(g, X, v, strict)
+                              and (any_clut or clut_of(tiles[g['members'][0]]) == clut)), None)
+                    if i is not None: break
+                if i is not None: break
+            if i is None: continue
+            g = gs[i]; X, v = min(X, g['x'] + g['w'] - 1), min(v, g['y'] + g['h'] - 1)  # bord droit / bas exclu
+            b = box[i] or (X, v, X + 1, v + 1)
+            box[i] = (min(b[0], X), min(b[1], v), max(b[2], X + 1), max(b[3], v + 1))
+    return box
+
+def _trim(tiles, gs, T):
+    """Etape 5 : retire les groupes jamais lus, rogne les autres (une image seule,
+    non epinglee) a ce qu'ils lisent. Rend (images, groupes, retires, rognes)."""
+    box = _used(tiles, gs, T)
+    tiles = list(tiles); out = []; dropped = []; cropped = []
+    for g, b in zip(gs, box):
+        if b is None:
+            dropped.append((g['x'], g['y'], g['w'], g['h'])); continue
+        if g.get('pinned') or len(g['members']) > 1 or b == (g['x'], g['y'], g['x'] + g['w'], g['y'] + g['h']):
+            out.append(g); continue
+        k = g['members'][0]; t = tiles[k]
+        x0, y0, x1, y1 = b
+        pix = [hw for r in range(y0 - t['y'], y1 - t['y'])
+               for hw in t['pix'][r * t['w'] + x0 - t['x']:r * t['w'] + x1 - t['x']]]
+        tiles[k] = dict(t, x=x0, y=y0, w=x1 - x0, h=y1 - y0, pix=pix)
+        cropped.append(dict(at=(g['x'], g['y']), size=(g['w'], g['h']), kept=(x0, y0, x1 - x0, y1 - y0)))
+        out.append(dict(g, x=x0, y=y0, w=x1 - x0, h=y1 - y0))
+    return tiles, out, dropped, cropped
+
+def plan(tex, T, faces=()):
+    """Calcule le rangement ; remap_uv() et repack() l'appliquent. faces :
+    rectangles (x, y, l, h) des images d'expressions du visage, chacun une image
+    entiere de l'atlas ; face_at() donne ensuite leur place."""
     tiles = read_tims(tex); gs = groups(tiles, T)
-    for g in gs:
-        if any((g['x'], g['y'], g['w'], g['h']) == p for p in PINNED): g['pinned'] = True
+    for p in faces:
+        if not any((g['x'], g['y'], g['w'], g['h']) == tuple(p) for g in gs):
+            raise ValueError(f'visage : pas d image {tuple(p)} dans l atlas')
+    for keep in (True, False):
+        for g in gs:
+            g['face'] = (g['x'], g['y'], g['w'], g['h']) in map(tuple, faces)
+            # En place si le reste tient autour et sans chevaucher le repli (Alex,
+            # 32 x 32 en (40, 96)), sinon rangee comme les autres.
+            g['pinned'] = keep and g['face'] and g['x'] + g['w'] <= W and g['y'] + g['h'] <= H \
+                and not g['x'] < FOLD < g['x'] + g['w']
+        try:
+            return _plan(tiles, gs)
+        except ValueError as e:
+            if 'ne tiennent pas' not in str(e): raise
+        if not faces: break
+    for g in gs: g['face'] = g['pinned'] = False    # etape 5 : sans expressions
+    tiles, gs, dropped, cropped = _trim(tiles, gs, T)
+    report = _plan(tiles, gs, halve=True)
+    report.update(dropped=dropped, cropped=cropped)
+    LAYOUT['dropped'] = dropped
+    return report
+
+def _halve(g, tiles, axis):
+    """Image 16 couleurs (seule dans son groupe) a moitie de resolution sur un
+    axe ('h' : lignes, 'w' : colonnes) : moyenne des paires de pixels, ramenee a
+    la couleur la plus proche de sa propre palette. Rend (lignes, erreur), erreur
+    comme _quantize (ecart quadratique par pixel d'origine)."""
+    t = tiles[g['members'][0]]; pal = t['pal'][4]; px = pixels(t)
+    if axis == 'w': px = [list(c) for c in zip(*px)]
+    rgb = lambda c: ((c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3)
+    opaque = [k for k in range(len(pal)) if pal[k] != 0]
+    out = []; err = 0
+    for r in range(0, len(px), 2):
+        pair = px[r:r + 2]; line = []
+        for cs in zip(*pair):
+            solid = [c for c in cs if pal[c] != 0]
+            if not solid: line.append(cs[0]); continue
+            m = [sum(rgb(pal[c])[j] for c in solid) / len(solid) for j in range(3)]
+            k = min(opaque, key=lambda k: sum((a - b) ** 2 for a, b in zip(rgb(pal[k]), m)))
+            err += sum(sum((a - b) ** 2 for a, b in zip(rgb(pal[c]), rgb(pal[k]))) for c in solid)
+            line.append(k)
+        out.append(line)
+    if axis == 'w': out = [list(c) for c in zip(*out)]
+    return out, err / max(1, sum(len(r) for r in px))
+
+def _plan(tiles, gs, halve=False):
+    """Etapes 1 a 4 ; avec halve (etape 5), une image 16 couleurs peut aussi
+    passer a moitie de resolution sur un axe : reductions et moities dans un
+    seul ordre, celles qui perdent le moins d'abord (un visage 256 couleurs
+    perd plus en 16 couleurs qu'une meche de cheveux a moitie de hauteur). Tant
+    que les palettes ne tiennent pas, seule une reduction aide."""
+    global LAYOUT
     quant = {}                                       # indice de groupe -> (lignes 4 bits, palette, erreur)
-    cands = [i for i, g in enumerate(gs) if g['bpp'] == 1 and not g.get('pinned')]
-    scored = sorted(cands, key=lambda i: _quantize(gs[i], tiles)[2])
+    half = {}                                        # indice de groupe -> (axe, lignes 4 bits, erreur)
+    cands = [i for i, g in enumerate(gs) if g['bpp'] == 1 and not g.get('face')]
+    errs = {i: _quantize(gs[i], tiles)[2] for i in cands}
+    scored = sorted(cands, key=errs.get)
+    halves = []
+    if halve:
+        for i, g in enumerate(gs):
+            if g['bpp'] != 0 or g.get('face') or len(g['members']) > 1: continue
+            halves.append(min(((a,) + _halve(g, tiles, a) for a in 'hw'), key=lambda h: h[2]) + (i,))
+        halves.sort(key=lambda h: h[2])
     while True:
         # Les palettes aussi doivent tenir : Unknown remplit les lignes 0..3 de
         # quatre palettes 256 couleurs et en a quatre de plus en ligne 4. Reduire
@@ -315,16 +419,21 @@ def plan(tex, T):
         view = []
         for i, g in enumerate(gs):
             if i in quant: view.append(dict(g, bpp=0, w=g['w'] // 2 + g['w'] % 2))
+            elif i in half:
+                rows = half[i][1]
+                view.append(dict(g, w=(len(rows[0]) + 3) // 4, h=len(rows)))
             else: view.append(g)
         where = pals and len(pals[0]) >= len(quant) and (_place(view, True) or _place(view, False))
         if where: break
-        if not scored:
-            raise ValueError('textures : ne tiennent pas, meme reduites en 16 couleurs' if pals and len(pals[0]) >= len(quant)
-                             else 'textures : plus de palette libre dans les lignes du joueur')
-        i = scored.pop(0); quant[i] = _quantize(gs[i], tiles)
+        pal_ok = pals and len(pals[0]) >= len(quant)
+        if halves and pal_ok and (not scored or halves[0][2] < errs[scored[0]]):
+            a, rows, err, i = halves.pop(0); half[i] = (a, rows, err); continue
+        if scored: i = scored.pop(0); quant[i] = _quantize(gs[i], tiles); continue
+        raise ValueError('textures : ne tiennent pas, meme reduites en 16 couleurs' if pal_ok
+                         else 'textures : plus de palette libre dans les lignes du joueur')
     free, pal_moved = pals
     for i, (r, k) in zip(list(quant), free): quant[i] = quant[i][:3] + ((r << 6) | k,)
-    LAYOUT = dict(tiles=tiles, groups=view, src=gs, where=where, quant=quant, pal_moved=pal_moved)
+    LAYOUT = dict(tiles=tiles, groups=view, src=gs, where=where, quant=quant, half=half, pal_moved=pal_moved)
     moved = [(g['x'], g['y']) for i, g in enumerate(gs) if where[i][:2] != (g['x'], g['y']) or where[i][2]]
     REPORT.clear(); REPORT.update(
         total=sum(t['w'] * t['h'] for t in tiles), moved=moved,
@@ -332,7 +441,20 @@ def plan(tex, T):
         palettes_moved={f'{k[0]},{k[1]}': v for k, v in pal_moved.items()},
         reduced=[dict(at=(gs[i]['x'], gs[i]['y']), size=(gs[i]['w'], gs[i]['h']), rms=round(q[2] ** 0.5, 1))
                  for i, q in quant.items()])
+    if half:
+        REPORT['halved'] = [dict(at=(gs[i]['x'], gs[i]['y']), size=(gs[i]['w'], gs[i]['h']), axis=a, rms=round(e ** 0.5, 1))
+                            for i, (a, _, e) in half.items()]
     return REPORT
+
+def face_at(x, y, w, h):
+    """Place finale (x, y) de l'image de visage (x, y, l, h) (plan() doit avoir tourne),
+    None si l'etape 5 a retire les expressions."""
+    if 'dropped' in LAYOUT: return None
+    i = next(i for i, g in enumerate(LAYOUT['src']) if (g['x'], g['y'], g['w'], g['h']) == (x, y, w, h))
+    dx, dy, tr = LAYOUT['where'][i]
+    # Une seule image, telle quelle : le runtime la cherche entiere dans le .tim.
+    assert LAYOUT['src'][i]['face'] and not tr and len(LAYOUT['src'][i]['members']) == 1
+    return dx, dy
 
 def _group_at(page, clut, u, v):
     mode, X = _corner(page, u)
@@ -354,27 +476,44 @@ def remap_uv(page, clut, u, v):
     px, py = (X - g['x']) * ppw + u % ppw, v - g['y']            # pixel dans le groupe
     dx, dy, tr = LAYOUT['where'][i]
     if i in LAYOUT['quant']: mode, ppw, clut = 0, 4, LAYOUT['quant'][i][3]
+    if i in LAYOUT.get('half', {}):
+        if LAYOUT['half'][i][0] == 'h': py //= 2
+        else: px //= 2
     if tr: px, py = py, px
     return mode, clut, dx + px // ppw, px % ppw, dy + py
+
+def _tim(bpp, x, y, w, h, pix, pal):
+    """write_tim, sauf une image 16 x 64 en (0, 0) apres l'etape 5 : l'ancienne
+    tekken3_ttt1_face() y prenait l'expression du visage de Jun et la recopiait
+    en (16, 64). Ecrite en deux moities, elle n'est pas reconnue par un runtime
+    d'avant les fichiers .face (le runtime actuel ne lit que ceux-ci)."""
+    if LAYOUT.get('dropped') and (x, y, w, h) == (0, 0, 16, 64):
+        return write_tim(bpp, x, y, w, 32, pix[:w * 32], pal) + write_tim(bpp, x, y + 32, w, 32, pix[w * 32:], pal)
+    return write_tim(bpp, x, y, w, h, pix, pal)
 
 def repack(tex):
     """Ecrit les images a leur nouvelle place (plan() doit avoir tourne)."""
     L = LAYOUT; out = b''
     for i, g in enumerate(L['src']):
         dx, dy, tr = L['where'][i]
+        if i in L.get('half', {}):
+            rows = L['half'][i][1]; t = L['tiles'][g['members'][0]]
+            if tr: rows = [list(c) for c in zip(*rows)]
+            out += _tim(0, dx, dy, (len(rows[0]) + 3) // 4, len(rows), pack_px(rows, 0), _pal_at(t['pal']))
+            continue
         if i in L['quant']:
             rows, pal, _, clut = L['quant'][i]
             if tr: rows = [list(c) for c in zip(*rows)]
             wpx = len(rows[0]); w = (wpx + 3) // 4
-            out += write_tim(0, dx, dy, w, len(rows), pack_px(rows, 0), ((clut & 63) * 16, clut >> 6, 16, 1, pal))
+            out += _tim(0, dx, dy, w, len(rows), pack_px(rows, 0), ((clut & 63) * 16, clut >> 6, 16, 1, pal))
             continue
         for k in g['members']:
             t = L['tiles'][k]
             if not tr:
-                out += write_tim(t['bpp'], dx + t['x'] - g['x'], dy + t['y'] - g['y'], t['w'], t['h'], t['pix'], _pal_at(t['pal']))
+                out += _tim(t['bpp'], dx + t['x'] - g['x'], dy + t['y'] - g['y'], t['w'], t['h'], t['pix'], _pal_at(t['pal']))
                 continue
             ppw = ppw_of(t['bpp']); rows = pixels(t)
             trows = [list(c) for c in zip(*rows)]                  # (x, y) -> (y, x)
             ox, oy = (t['y'] - g['y']), (t['x'] - g['x']) * ppw    # pixel d'origine dans le groupe transpose
-            out += write_tim(t['bpp'], dx + ox // ppw, dy + oy, t['h'] // ppw, len(trows), pack_px(trows, t['bpp']), _pal_at(t['pal']))
+            out += _tim(t['bpp'], dx + ox // ppw, dy + oy, t['h'] // ppw, len(trows), pack_px(trows, t['bpp']), _pal_at(t['pal']))
     return out

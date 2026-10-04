@@ -82,6 +82,10 @@ extern "C" void psx_event_step_conservative_env_init(void);
 #include "disc_path.h"
 #include "iso_reader.h"      /* text-image guard: extract the boot EXE from the disc */
 #include "psx_keybinds.h"    /* configurable keyboard->DualShock keybinds (keybinds.ini) */
+#include "touch_controls.h"  /* on-screen pad for the "touch" input source (Android) */
+#if defined(__ANDROID__)
+extern "C" void psx_android_pause_gate(void);   /* android_main.c: in-game menu */
+#endif
 
 #if defined(RECOMP_LAUNCHER)
 #include "recomp_launcher.h"   /* shared recomp-ui Dear ImGui launcher */
@@ -134,7 +138,11 @@ extern "C" void psx_game_codegen_forward_if_built(int argc, char** argv);
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <spawn.h>
+#include <cerrno>
 #include <unistd.h>
+extern char** environ;
 #endif
 
 #ifndef PSX_DEFAULT_BIOS_PATH
@@ -331,7 +339,7 @@ static int           sdl_texture_h;
  * [controller] settings the launcher writes; the runtime opens the matching
  * SDL controller (or uses the keyboard) and feeds each PSX pad slot. */
 struct PlayerInput {
-    int   kind = 0;            /* 0=none, 1=keyboard, 2=controller */
+    int   kind = 0;            /* 0=none, 1=keyboard, 2=controller, 3=touch */
     char  guid[40] = {0};      /* SDL joystick GUID string when kind==controller */
     /* Pad input mode (PSXRecompV4::PadMode): 1=analog (default), 0=hybrid
      * (MOD-ONLY, requested via psx_mod_set_controller_mode_override),
@@ -477,6 +485,9 @@ static Uint64   s_fps_last_time = 0;
 static uint64_t s_fps_last_frame = 0;
 static std::string s_fps_base_title;
 static FramePacer s_frame_pacer = { 0 };
+/* Host hotkeys (config.ini [KeyMap] Pause / DisplayPerf). */
+static bool g_host_pause_request = false;
+static bool g_host_show_fps = false;
 static int      s_turbo_present_skip = 0;
 static int      s_fmv_skip_present_skip = 0;
 /* Netplay + depth24: present every other vblank (admit still every tick). */
@@ -1066,6 +1077,9 @@ static int           g_video_texfilter = 0; /* 0=nearest, 1=bilinear */
 static int           g_video_geometry_correction   = 0;
 static int           g_video_perspective_texturing = 0;
 static int           g_video_renderer = PSXRecompV4::DEFAULT_VIDEO_RENDERER;
+static int           g_hide_cursor    = 0;  /* [video] hide_mouse_cursor: 0 off, 1 fullscreen, 2 always, 3 idle */
+static Uint32        g_cursor_last_move_ms = 0;
+static int           g_cursor_visible = 1;
 static int           g_fullscreen     = 0;  /* tri-state: 0 windowed, 1 borderless (desktop)
                                               * fullscreen, 2 exclusive fullscreen */
 static int           g_video_screen   = 0;  /* 0=raw,1=crt,2=composite,3=trinitron */
@@ -1098,6 +1112,7 @@ static int           g_fmv_skip_no_xa_hold  = 4;
  * it trims the display-side scanout latency the CPU-side ring can't see. */
 static int           g_low_latency_input = 1;
 static int           g_video_vsync        = 1;
+static int           g_vsync_explicit     = 0;  /* settings.toml chose vsync */
 static int           g_frame_interpolation = 0;
 static int           g_frame_interpolation_fps = 0;
 static int           g_frame_interpolation_blend =
@@ -1121,6 +1136,30 @@ static int           g_mod_load_wall_multiplier = -1;
 static int           g_mod_load_release_frames = -1;
 static int           g_mod_disc_speed_divisor = -1;
 static int           g_mod_disc_instant_rate = -1;
+
+/* Show/hide the host mouse cursor over the game window per [video]
+ * hide_mouse_cursor. Called every frame from the event pump; `moved` is true
+ * when a mouse-motion event arrived since the last call. */
+static void psx_update_mouse_cursor(SDL_Window* win, bool moved)
+{
+    const Uint32 now = SDL_GetTicks();
+    if (moved) g_cursor_last_move_ms = now;
+    bool hide = false;
+    switch (g_hide_cursor) {
+    case 1: hide = win && (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN) != 0; break;
+    case 2: hide = true; break;
+    case 3: hide = (now - g_cursor_last_move_ms) > 3000u; break;
+    default: break;
+    }
+    if (g_hide_cursor == 0 && g_cursor_visible) return;
+    if (hide == !g_cursor_visible) return;
+    g_cursor_visible = hide ? 0 : 1;
+#if defined(PSX_SDL3)
+    if (hide) SDL_HideCursor(); else SDL_ShowCursor();
+#else
+    SDL_ShowCursor(hide ? SDL_DISABLE : SDL_ENABLE);
+#endif
+}
 
 /* Map the configured tri-state fullscreen mode (g_fullscreen) to the SDL
  * window-fullscreen flag: used both to open the window in that mode and to
@@ -1448,9 +1487,26 @@ static void update_adaptive_widescreen() {
  * runtime requirements immediately before every GL window, because launcher
  * teardown resets them and macOS otherwise supplies a legacy 2.1 context. */
 static void configure_core_gl_context_attributes() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    /* OpenGL ES 3.0 on Android (phones have no desktop GL); the renderer runs
+     * on either. PSX_GLES=1 asks desktops for ES too, to test that path. */
+#if defined(__ANDROID__)
+    const bool gles = true;
+#else
+    const char* gles_env = std::getenv("PSX_GLES");
+    const bool gles = gles_env && gles_env[0] == '1';
+#endif
+    if (gles) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+        SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+        SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+    } else {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    }
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 }
@@ -3668,7 +3724,9 @@ static int device_claimed_by_other(int self_slot, SDL_JoystickID inst) {
  * pad at an unpredictable slot), fall back to the first controller not already
  * claimed by another player. */
 static void open_player(PlayerInput& p, int self_slot) {
-    if (p.kind != 2 || p.handle) return;
+    /* Touch opens the first free controller too: picking up a pad just works
+     * (the on-screen buttons hide while it is used). */
+    if ((p.kind != 2 && p.kind != 3) || p.handle) return;
 
     int chosen = -1, fallback = -1;
     const int joysticks = SDL_NumJoysticks();
@@ -3774,7 +3832,7 @@ static int pad_mode_boot_analog(int mode) {
  * P2–P5 show as connected while games that expect digital multitap pads never
  * saw usable button input. */
 static int effective_player_mode(const PlayerInput& p) {
-    if (p.kind == 1) return (int)PSXRecompV4::PAD_MODE_DIGITAL;
+    if (p.kind == 1 || p.kind == 3) return (int)PSXRecompV4::PAD_MODE_DIGITAL;
     return p.mode;
 }
 
@@ -3792,10 +3850,17 @@ static int effective_player_mode_for_sio(const PlayerInput& p, int sio_slot) {
  * psx_netplay (session slots stay plugged); only refresh host SDL handles. */
 static void refresh_player_devices(void) {
     const int netplay = psx_netplay_active();
+    int touch = 0;
     for (int s = 0; s < PSX_MAX_PLAYERS; s++) {
         PlayerInput& p = g_players[s];
-        if (p.kind != 2) close_player(p);           /* keyboard/none: no handle */
+        touch |= p.kind == 3;
+        if (p.kind != 2 && p.kind != 3) close_player(p);   /* keyboard/none: no handle */
         else open_player(p, s);
+#if defined(__ANDROID__)
+        /* Player 1's controller is not connected: the on-screen pad stands
+         * in until it is (pad_buttons_for reads it for player 1). */
+        touch |= s == 0 && p.kind == 2 && !p.handle;
+#endif
         if (netplay) continue;
         const int mode = effective_player_mode_for_sio(p, s);
         sio_set_pad_connected(s, p.kind != 0 ? 1 : 0);
@@ -3807,6 +3872,41 @@ static void refresh_player_devices(void) {
          * Multitap taps are always digital (see sio_pad_on_multitap). */
         sio_set_pad_config_capable(s, mode != PSXRecompV4::PAD_MODE_DIGITAL);
     }
+    touch_controls_set_enabled(touch);
+}
+
+/* The in-game menu's status (Android): what drives player 1, which
+ * controllers SDL sees, the renderer, the touch controls' state. */
+extern "C" void psx_input_status(char* out, int cap) {
+    const PlayerInput& p = g_players[0];
+    static const char* kinds[] = { "none", "keyboard", "controller", "touch" };
+    static const char* renderers[] = { "software", "OpenGL", "Vulkan" };
+    std::string s = "Player 1: ";
+    s += (p.kind >= 0 && p.kind <= 3) ? kinds[p.kind] : "?";
+    if (p.guid[0]) { s += " "; s += p.guid; }
+    const char* opened = p.handle ? SDL_GameControllerName(p.handle) : nullptr;
+    s += p.handle ? std::string(", using ") + (opened ? opened : "(unnamed)") : std::string(", no controller open");
+    s += "\nRenderer: ";
+    s += (g_video_renderer >= 0 && g_video_renderer <= 2) ? renderers[g_video_renderer] : "?";
+    s += "\nControllers:";
+    const int n = SDL_NumJoysticks();
+    int pads = 0;
+    for (int i = 0; i < n; i++) {
+        if (!SDL_IsGameController(i)) continue;
+#if defined(PSX_SDL3)
+        const char* name = SDL_GetGamepadNameForID(SDL_JoystickGetDeviceInstanceID(i));
+#else
+        const char* name = SDL_GameControllerNameForIndex(i);
+#endif
+        s += pads++ ? ", " : " ";
+        s += name ? name : "(unnamed)";
+    }
+    if (!pads) s += " none";
+    char touch[200];
+    touch_controls_describe(touch, sizeof touch);
+    s += "\n";
+    s += touch;
+    std::snprintf(out, (size_t)cap, "%s", s.c_str());
 }
 
 /* Parse a [controller] device string into a player slot:
@@ -3820,6 +3920,7 @@ static void set_player_device(PlayerInput& p, const std::string& dev, int mode) 
     std::string d = lower_copy(trim_copy(dev));
     if (d.empty() || d == "none") { p.kind = 0; }
     else if (d == "keyboard")     { p.kind = 1; }
+    else if (d == "touch")        { p.kind = 3; }
     else if (d == "auto" || d == "gamepad" || d == "controller") {
         /* First available SDL game controller (guid empty -> open_player falls
          * back to the first connected pad). Lets a user default to "my
@@ -3934,7 +4035,17 @@ static void axes_to_pad_pair(int16_t vx, int16_t vy, uint8_t* obx, uint8_t* oby,
 /* Buttons for a player's selected device (0xFFFF = none pressed). `player` is
  * 1..5 — selects which keybinds.ini section drives a keyboard port. */
 static uint16_t pad_buttons_for(const PlayerInput& p, int player, bool suppress_stick_axes) {
+#if defined(__ANDROID__)
+    /* A missing player 1 controller: the on-screen pad (all released while
+     * the touch controls are off). */
+    if (p.kind == 2 && player == 1 && !p.handle) return touch_controls_pad_word();
+#endif
     if (p.kind == 1) return pad_from_keyboard(player);
+    if (p.kind == 3)
+        return touch_controls_pad_word() &
+               (p.handle ? controller_pad_buttons(controller_map_for(p), p.handle,
+                                                  suppress_stick_axes, p.deadzone)
+                         : (uint16_t)0xFFFF);
     if (p.kind == 2)
         return controller_pad_buttons(controller_map_for(p), p.handle,
                                       suppress_stick_axes, p.deadzone);
@@ -3964,7 +4075,7 @@ static void pad_sticks_for(const PlayerInput& p, int player, uint8_t out[4], boo
         psx_keybinds_sticks(keys, player, out);
         return;
     }
-    if (p.kind == 2 && p.handle) {
+    if ((p.kind == 2 || p.kind == 3) && p.handle) {
         const ControllerMap& map = controller_map_for(p);
         auto find_entry = [&](const char* name) -> const PsxButtonMap* {
             for (const auto& e : map)
@@ -5266,6 +5377,10 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
         }
     } probe_scope{&probe_turbo, &probe_reached};
 
+#if defined(__ANDROID__)
+    psx_android_pause_gate();   /* the in-game menu holds the game here */
+#endif
+    touch_controls_frame();     /* the next queued on-screen pad state */
 #ifndef PSX_NO_DEBUG_TOOLS
     debug_server_set_fmv_quiet(mdec_recently_active(2));
     /* Debug server: pause gate, poll commands, record frame, check watchpoints. */
@@ -5354,6 +5469,11 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
                              fps, speed, (unsigned long long)s_frame_count);
             }
             std::fflush(stderr);
+            if (g_host_show_fps) {
+                char fps_msg[32];
+                std::snprintf(fps_msg, sizeof(fps_msg), "%.0f FPS", fps);
+                host_osd_push(fps_msg, 1100);
+            }
             s_fps_last_time = now;
             s_fps_last_frame = s_frame_count;
         }
@@ -5385,8 +5505,11 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
     if (!g_headless) {
         /* Pump SDL events to prevent window freeze. */
         SDL_Event ev;
+        bool mouse_moved = false;
         while (SDL_PollEvent(&ev)) {
-            if (ev.type == SDL_QUIT) {
+            if (ev.type == SDL_MOUSEMOTION) {
+                mouse_moved = true;
+            } else if (ev.type == SDL_QUIT) {
                 if (psx_netplay_active()) {
                     netplay_soft_exit("sdl_window_close");
                     return ep;
@@ -5471,8 +5594,8 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
                  * set in both SDL_WINDOW_FULLSCREEN and
                  * SDL_WINDOW_FULLSCREEN_DESKTOP, so testing just that bit
                  * detects "currently fullscreen, either mode". */
-                else if ((key == SDLK_RETURN && (mod & KMOD_ALT)) ||
-                         (key == SDLK_f && (mod & (KMOD_GUI | KMOD_CTRL)))) {
+                else if (host_keymap_match(HOST_KEYMAP_FULLSCREEN, (int)key,
+                                           (int)mod)) {
                     Uint32 is_fs = SDL_GetWindowFlags(sdl_window) &
                                    SDL_WINDOW_FULLSCREEN;
                     if (is_fs) {
@@ -5488,7 +5611,62 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
                         host_osd_push("Fullscreen", 1500);
                     }
                 }
+                /* Host pause (config.ini [KeyMap] Pause; offline only): the
+                 * wait loop below the event pump holds the game here. */
+                else if (!ev.key.repeat && !psx_netplay_active() &&
+                         host_keymap_match(HOST_KEYMAP_PAUSE, (int)key,
+                                           (int)mod)) {
+                    g_host_pause_request = true;
+                }
+                /* FPS readout on the OSD (config.ini [KeyMap] DisplayPerf). */
+                else if (!ev.key.repeat &&
+                         host_keymap_match(HOST_KEYMAP_DISPLAY_PERF, (int)key,
+                                           (int)mod)) {
+                    g_host_show_fps = !g_host_show_fps;
+                    host_osd_push(g_host_show_fps ? "FPS readout on"
+                                                  : "FPS readout off", 1200);
+                }
             }
+        }
+        psx_update_mouse_cursor(sdl_window, mouse_moved);
+    }
+
+    /* Host pause: hold the game here, pumping only quit and the pause key,
+     * until the hotkey is pressed again. The guest does not advance. */
+    if (g_host_pause_request) {
+        g_host_pause_request = false;
+        if (!g_headless && !psx_netplay_active()) {
+            char saved_title[256];
+            std::snprintf(saved_title, sizeof(saved_title), "%s",
+                          SDL_GetWindowTitle(sdl_window));
+            char paused_title[300];
+            std::snprintf(paused_title, sizeof(paused_title), "%s [Paused]",
+                          saved_title);
+            SDL_SetWindowTitle(sdl_window, paused_title);
+            std::fprintf(stderr, "[HOST] paused\n");
+            bool paused = true;
+            while (paused) {
+                SDL_Event pev;
+                if (!SDL_WaitEventTimeout(&pev, 50)) continue;
+                if (pev.type == SDL_QUIT) {
+                    psx_crash_trace_set_exit_origin("sdl_window_close");
+                    shutdown_runtime();
+                    std::exit(0);
+                } else if (pev.type == SDL_KEYDOWN && !pev.key.repeat) {
+#if defined(PSX_SDL3)
+                    const SDL_Keycode pkey = pev.key.key;
+                    const int pmod = (int)pev.key.mod;
+#else
+                    const SDL_Keycode pkey = pev.key.keysym.sym;
+                    const int pmod = (int)pev.key.keysym.mod;
+#endif
+                    if (host_keymap_match(HOST_KEYMAP_PAUSE, (int)pkey, pmod))
+                        paused = false;
+                }
+            }
+            SDL_SetWindowTitle(sdl_window, saved_title);
+            s_frame_pacer = FramePacer{ 0 }; /* no catch-up burst after the wait */
+            std::fprintf(stderr, "[HOST] resumed\n");
         }
     }
 
@@ -5681,7 +5859,7 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
         const Uint8* keys = SDL_GetKeyboardState(NULL);
         static int turbo_skip = 0;
         const int TURBO_PRESENT_EVERY = 30;
-        if (keys[SDL_SCANCODE_TAB]) {
+        if (host_keymap_is_down(HOST_KEYMAP_TURBO)) {
             turbo_skip = (turbo_skip + 1) % TURBO_PRESENT_EVERY;
             if (turbo_skip != 0) {
                 ep.skip_pace = 1;
@@ -6035,6 +6213,7 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
             }
         }
         if (g_gl_active && !di.depth24) gl_renderer_sync_cpu();
+        if (g_gl_active && di.depth24) gl_renderer_depth24_enter();
         /* Vulkan owns every frame: 15-bit frames present straight from the GPU
          * VRAM image (deterministic blit, no readback), mirroring the GL path;
          * 24-bit (FMV) frames go through the CPU present (Phase 3). The Vulkan
@@ -6535,23 +6714,37 @@ namespace {
         const fs::path script = root / "tools" / "prepare_disc.py";
         const fs::path out_dir = root / "motk";
         fs::create_directories(out_dir, ec);
-        /* Prefer python3; fall back to python (Windows). */
-        const char* py = "python3";
-#if defined(_WIN32)
-        /* On Windows `python` is the usual launcher; python3 may be absent. */
-        py = "python";
-#endif
-        std::string cmd = std::string(py) + " \"" + script.string() + "\" \"" +
-                          source_path + "\" --out-dir \"" + out_dir.string() + "\"";
-#if !defined(_WIN32)
-        /* If python3 missing, retry with python. */
-        int rc = std::system(cmd.c_str());
-        if (rc != 0) {
-            cmd = std::string("python \"") + script.string() + "\" \"" + source_path +
-                  "\" --out-dir \"" + out_dir.string() + "\"";
-            rc = std::system(cmd.c_str());
-        }
+#if defined(__ANDROID__)
+        int rc = -1;   /* no Python on a phone */
+#elif !defined(_WIN32)
+        /* Run without a shell: the dump's path is the player's choice, and
+         * a shell would read $(...) or ` in it even inside quotes. Prefer
+         * python3; retry with python when it is missing. */
+        auto run_python = [&](const char* py) {
+            std::string a1 = script.string(), a3 = out_dir.string();
+            char* argv_py[] = {const_cast<char*>(py), a1.data(),
+                               const_cast<char*>(source_path), const_cast<char*>("--out-dir"),
+                               a3.data(), nullptr};
+            pid_t pid;
+            if (posix_spawnp(&pid, py, nullptr, nullptr, argv_py, environ) != 0) return -1;
+            int status = 0;
+            while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+            return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        };
+        int rc = run_python("python3");
+        if (rc != 0) rc = run_python("python");
 #else
+        /* cmd.exe expands %VAR% even inside the quotes; " cannot be quoted. */
+        if (std::strpbrk(source_path, "%\"") ||
+            std::strpbrk(script.string().c_str(), "%\"") ||
+            std::strpbrk(out_dir.string().c_str(), "%\"")) {
+            if (err_msg && err_cap)
+                std::snprintf(err_msg, err_cap, "Rename the folders without %% or \" in them.");
+            return 0;
+        }
+        /* On Windows `python` is the usual launcher; python3 may be absent. */
+        std::string cmd = std::string("python \"") + script.string() + "\" \"" +
+                          source_path + "\" --out-dir \"" + out_dir.string() + "\"";
         int rc = std::system(cmd.c_str());
 #endif
         if (rc != 0) {
@@ -9881,6 +10074,11 @@ int main(int argc, char** argv) {
     for (int i = 0; i < PSX_MAX_PLAYERS; ++i) {
 #if defined(PSX_DEBUG_TOOLS)
         player_device[i] = (i == 0) ? "auto" : "none";
+#elif defined(__ANDROID__)
+        /* A phone has no keyboard: the on-screen pad, which a connected
+         * controller also drives (see launcher_android.c for the launcher's
+         * pick when one is connected). */
+        player_device[i] = (i == 0) ? "touch" : "none";
 #else
         player_device[i] = (i == 0) ? "keyboard" : "none";
 #endif
@@ -10422,11 +10620,13 @@ int main(int argc, char** argv) {
         if (us.has_fast_boot)      fast_boot = us.fast_boot;
         if (us.has_bios_hle)       bios_hle  = us.bios_hle;
         if (us.has_fullscreen)     g_fullscreen      = us.fullscreen;
+        if (us.has_hide_mouse_cursor) g_hide_cursor  = us.hide_mouse_cursor;
         if (us.has_aspect_ratio) {
             g_video_aspect_num = us.aspect_num;
             g_video_aspect_den = us.aspect_den;
         }
         if (us.has_spu_hq)         g_audio_spu_hq    = us.spu_hq;
+        if (us.has_master_volume)  host_volume_set(us.master_volume);
         if (us.has_bios_path && !bios_from_cli && !us.bios_path.empty()) {
             settings_bios_storage = us.bios_path.string();
             bios_path = settings_bios_storage.c_str();
@@ -10458,9 +10658,21 @@ int main(int argc, char** argv) {
             }
             if (us.has_deadzone) resolved_deadzone = us.deadzone;
         }
+#if defined(__ANDROID__)
+        /* A phone has no keyboard (the launcher offers None, Touch and the
+         * controllers): a "keyboard" player in the settings (a build before
+         * the touch controls, or the PC game's file) becomes the on-screen
+         * pad for player 1 and None for the others, as launcher_model.c
+         * does for the launcher. */
+        for (int i = 0; i < PSX_MAX_PLAYERS; ++i) {
+            if (PSXRecompV4::normalize_launcher_device(player_device[i]) != "keyboard") continue;
+            player_device[i] = i == 0 ? "touch" : "none";
+            player_mode[i] = PSXRecompV4::PAD_MODE_DIGITAL;
+        }
+#endif
         apply_offline_pad_count(game_players, multitap_enabled);
         if (us.has_low_latency_input) g_low_latency_input = us.low_latency_input ? 1 : 0;
-        if (us.has_vsync)             g_video_vsync       = us.vsync;
+        if (us.has_vsync)           { g_video_vsync       = us.vsync; g_vsync_explicit = 1; }
         if (us.has_frame_interpolation)
             g_frame_interpolation = us.frame_interpolation ? 1 : 0;
         if (us.has_frame_interpolation_fps)
@@ -10550,6 +10762,15 @@ int main(int argc, char** argv) {
      * PSX_FRAME_INTERPOLATION=0/1; PSX_FRAME_INTERPOLATION_FPS=0|90+. */
     if (const char *e = std::getenv("PSX_LOW_LATENCY_INPUT")) g_low_latency_input = atoi(e) ? 1 : 0;
     if (const char *e = std::getenv("PSX_VSYNC"))             g_video_vsync       = atoi(e);
+#ifdef __APPLE__
+    /* macOS OpenGL: the wall-clock pacer already holds the panel rate, and a
+     * blocking swap on top of it waits for the NEXT vblank whenever a frame
+     * lands just late, halving the rate (measured on an Intel Mac: 27-34 FPS
+     * with vsync, 58 without, same build and scene). Windowed output is
+     * composited by the window server, so immediate swaps do not tear there.
+     * An explicit setting (settings.toml [video] vsync, PSX_VSYNC) still wins. */
+    if (!g_vsync_explicit && !std::getenv("PSX_VSYNC")) g_video_vsync = 0;
+#endif
     if (const char *e = std::getenv("PSX_SMOOTH_60FPS"))
         psx_smooth_60fps_set(atoi(e) ? 1 : 0);
     if (const char *e = std::getenv("PSX_FRAME_INTERPOLATION"))
@@ -10826,6 +11047,7 @@ int main(int argc, char** argv) {
             seed.fast_boot = fast_boot;                   seed.has_fast_boot = true;
             seed.bios_hle  = bios_hle;                    seed.has_bios_hle  = true;
             seed.fullscreen = g_fullscreen;                seed.has_fullscreen = true;
+            seed.hide_mouse_cursor = g_hide_cursor;        seed.has_hide_mouse_cursor = true;
             seed.frame_interpolation = (g_frame_interpolation != 0);
             seed.has_frame_interpolation = true;
             seed.frame_interpolation_fps = g_frame_interpolation_fps;
@@ -10833,6 +11055,7 @@ int main(int argc, char** argv) {
             seed.aspect_num = g_video_aspect_num;
             seed.aspect_den = g_video_aspect_den;         seed.has_aspect_ratio = true;
             seed.spu_hq = g_audio_spu_hq;                 seed.has_spu_hq = true;
+            seed.master_volume = host_volume_get();       seed.has_master_volume = true;
             seed.skip_launcher = skip_launcher_setting;   seed.has_skip_launcher = true;
             if (has_netplay_player_name) {
                 seed.netplay_player_name = netplay_player_name;
@@ -10944,7 +11167,7 @@ int main(int argc, char** argv) {
                      * 5% normalization then silently reduced to 15%. */
                     ls.deadzone[i] =
                         (player_deadzone[i] * 100 + 32767 / 2) / 32767;
-                    ls.pad_mode[i] = (ls.player_src[i] == 1)
+                    ls.pad_mode[i] = (ls.player_src[i] == 1 || ls.player_src[i] == 3)
                                         ? PSXRecompV4::PAD_MODE_DIGITAL
                                         : player_mode[i];
                     ls.player_gamepad_guid[i][0] = '\0';
@@ -11171,6 +11394,9 @@ int main(int argc, char** argv) {
                             player_device[i] = "keyboard";
                             /* Keyboard is always a digital pad at runtime. */
                             player_mode[i] = PSXRecompV4::PAD_MODE_DIGITAL;
+                        } else if (ls.player_src[i] == 3) {
+                            player_device[i] = "touch";
+                            player_mode[i] = PSXRecompV4::PAD_MODE_DIGITAL;
                         } else if (ls.player_src[i] == 0) {
                             player_device[i] = "none";
                             player_mode[i] = ls.pad_mode[i];
@@ -11212,6 +11438,7 @@ int main(int argc, char** argv) {
                 seed.frame_interpolation   = ls.frame_interp != 0;     seed.has_frame_interpolation   = true;
                 seed.frame_interpolation_fps = ls.frame_interp_fps;    seed.has_frame_interpolation_fps = true;
                 seed.spu_hq                = ls.spu_hq != 0;           seed.has_spu_hq                = true;
+                seed.master_volume         = ls.volume;                seed.has_master_volume         = true;
                 seed.auto_skip_fmv = ls.auto_skip_fmv != 0;
                 seed.has_auto_skip_fmv = skip_fmv_offered;
                 seed.turbo_loads = ls.turbo_loads != 0;
@@ -11409,6 +11636,7 @@ int main(int argc, char** argv) {
                 g_video_aspect_num = seed.aspect_num;
                 g_video_aspect_den = seed.aspect_den;
                 g_audio_spu_hq    = seed.spu_hq;
+                if (seed.has_master_volume) host_volume_set(seed.master_volume);
                 skip_launcher_setting = seed.skip_launcher;
                 if (seed.has_bios_path) {
                     settings_bios_storage = seed.bios_path.string();
@@ -11546,6 +11774,11 @@ int main(int argc, char** argv) {
      * including BIOS instances that have no [game]-block config. */
     if (cli_debug_port >= 0) debug_port      = (uint16_t)cli_debug_port;
     if (cli_renderer   >= 0) g_video_renderer = cli_renderer;
+#if defined(__ANDROID__)
+    /* Android draws with the OpenGL renderer on OpenGL ES, like PC. Vulkan
+     * stays reachable with --renderer vulkan. */
+    if (g_video_renderer == 2 && cli_renderer != 2) g_video_renderer = 1;
+#endif
     if (cli_window_title)    window_title     = cli_window_title;
     if (cli_memcard_dir) {
         memcard_dir = std::filesystem::path(cli_memcard_dir);
@@ -11785,9 +12018,16 @@ session_reboot:
      * set the PSX-visible connection + pad type so the BIOS sees the right
      * ports during early boot. */
     for (int s = 0; s < PSX_MAX_PLAYERS; ++s) {
+#if defined(__ANDROID__)
+        /* No keyboard on a phone, whatever asked for one (game.toml, --input). */
+        if (PSXRecompV4::normalize_launcher_device(player_device[s]) == "keyboard")
+            player_device[s] = s == 0 ? "touch" : "none";
+#endif
         set_player_device(g_players[s], player_device[s], player_mode[s]);
         g_players[s].deadzone = player_deadzone[s];
     }
+    std::fprintf(stdout, "psxrecomp: player 1 input: %s\n",
+                 player_device[0].empty() ? "none" : player_device[0].c_str());
     /* Multitap stays OFF through BIOS boot: SCPH-1070 on port 1 breaks shell /
      * LoadExe pad bring-up for titles that expect a lone digital pad. Offline
      * 3+ player builds arm it after game entry (see vblank path); netplay arms
@@ -11972,6 +12212,9 @@ session_reboot:
             g_players[s].deadzone = controller_deadzone;
     }
     controller_deadzone = g_players[0].deadzone;
+    /* The on-screen pad's settings (the Android launcher's Touch page). */
+    touch_controls_init(
+        (exe_dir_from_argv(argv[0]) / "touch_controls.ini").string().c_str());
     refresh_player_devices();  /* open SDL handles to match the player config */
 #ifndef PSX_SDL_NO_AUDIO
     audio_trace_init();
@@ -12787,7 +13030,7 @@ soft_return_lobby:
                     PSXRecompV4::launcher_source_from_device(d);
                 ls.deadzone[i] =
                     (player_deadzone[i] * 100 + 32767 / 2) / 32767;
-                ls.pad_mode[i] = (ls.player_src[i] == 1)
+                ls.pad_mode[i] = (ls.player_src[i] == 1 || ls.player_src[i] == 3)
                                     ? PSXRecompV4::PAD_MODE_DIGITAL
                                     : player_mode[i];
                 ls.player_gamepad_guid[i][0] = '\0';
@@ -12911,6 +13154,9 @@ soft_return_lobby:
                     if (ls.player_src[i] == 1) {
                         player_device[i] = "keyboard";
                         player_mode[i] = PSXRecompV4::PAD_MODE_DIGITAL;
+                    } else if (ls.player_src[i] == 3) {
+                        player_device[i] = "touch";
+                        player_mode[i] = PSXRecompV4::PAD_MODE_DIGITAL;
                     } else if (ls.player_src[i] == 0) {
                         player_device[i] = "none";
                         player_mode[i] = ls.pad_mode[i];
@@ -12983,6 +13229,8 @@ soft_return_lobby:
                 us.has_frame_interpolation_fps = true;
                 us.spu_hq = ls.spu_hq != 0;
                 us.has_spu_hq = true;
+                us.master_volume = ls.volume;
+                us.has_master_volume = true;
                 us.auto_skip_fmv = ls.auto_skip_fmv != 0;
                 us.has_auto_skip_fmv = skip_fmv_offered;
                 us.turbo_loads = ls.turbo_loads != 0;

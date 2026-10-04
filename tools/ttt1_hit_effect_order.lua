@@ -1,6 +1,7 @@
 -- MAME 0.289, tektagt, NVRAM neuf. Aucune donnee de ROM ici.
--- Ordre reel de lecture de la planche d'effet de coup fort du joueur 1 (4 x 4
--- images 64 x 64, 4 bits, page (512, 256), palette (512, 64) ; voir
+-- Ordre reel de lecture de la planche d'effet de coup fort du joueur 1 (deux
+-- pages de 4 x 4 images 64 x 64, 4 bits, (512, 256) puis (576, 256), palette
+-- (512, 64) ; 30 images, 22 pour l'eclair des Mishima ; voir
 -- tools/ttt1/hit_effect.py) : a chaque envoi de la liste de commandes GPU (DMA
 -- canal 2 en liste chainee), on la parcourt et on releve les primitives
 -- texturees qui lisent cette planche, avec leurs UV.
@@ -82,8 +83,8 @@ local function textured(words, c)
 end
 
 local function log(c, clut, tpage, u, v, w, h, rgb)
-    if clut ~= CLUT or (tpage & 15) ~= PAGE_X or ((tpage >> 4) & 1) ~= PAGE_Y then return end
-    local image = (v // 64) * 4 + (u // 64)
+    if clut ~= CLUT or ((tpage & 15) ~= PAGE_X and (tpage & 15) ~= PAGE_X + 1) or ((tpage >> 4) & 1) ~= PAGE_Y then return end
+    local image = ((tpage & 15) - PAGE_X) * 16 + (v // 64) * 4 + (u // 64)   -- page (576, 256) : images 16..31
     out:write(string.format("%d,%d,%02x,%04x,%04x,%d,%d,%d,%d,%06x\n", frame, image, c, clut, tpage, u, v,
         w or 0, h or 0, rgb or 0))
 end

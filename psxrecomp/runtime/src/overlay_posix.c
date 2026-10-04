@@ -119,6 +119,15 @@ int psx_overlay_posix_find_other_cache_tag(const char *base_dir,
 
 void *psx_overlay_posix_library_open(const char *path, char *error,
                                      size_t error_size) {
+#if defined(__ANDROID__)
+    /* Nothing on the phone builds native overlay code: a library in the data
+     * folder could only have been put there by something else, so none is
+     * loaded (the overlays run in the interpreter). */
+    (void)path;
+    if (error && error_size)
+        snprintf(error, error_size, "native overlay code is not loaded on Android");
+    return NULL;
+#else
     dlerror();
     void *handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (!handle && error && error_size) {
@@ -126,6 +135,7 @@ void *psx_overlay_posix_library_open(const char *path, char *error,
         snprintf(error, error_size, "%s", message ? message : "unknown dlopen error");
     }
     return handle;
+#endif
 }
 
 void *psx_overlay_posix_library_symbol(void *handle, const char *name) {

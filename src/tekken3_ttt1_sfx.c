@@ -26,6 +26,8 @@ extern int tekken3_devil_jin_player(unsigned player);
 extern int tekken3_ttt1_laser_record(unsigned p,uint32_t record);
 extern void __real_func_80040DF4(CPUState *cpu);
 extern void __real_func_800757A8(CPUState *cpu);
+extern void __real_func_8008D658(CPUState *cpu);
+extern void __real_func_8003CB84(CPUState *cpu);
 extern int tekken3_guest_character(unsigned id);
 
 /* LASER_SOUND: the lasers' sound, which TTT1 asks for outside its table
@@ -138,6 +140,33 @@ static int guest_move(unsigned p) {
  * live path ends there: a script or a move's hit list (via 80040DA0, which
  * also records the event for replays: 8003352C, replayed by 80040C20) and
  * the engine's own sounds. */
+/* A hit on a metallic fighter: T3's hit handler (80040EA0) answers it with
+ * 80041B70 (events 0x705D / 0x7098 / 0x7099, recorded for replays) in place of
+ * the limb's impact (80041CB4), when the struck fighter's ID is 16, Gun Jack.
+ * TTT1 (801141B0..801141D4, 801148D0) does the same for sound profiles 18,
+ * 30 and 35: Gun Jack, Jack-2, P.Jack. A guest has its own ID, so Jack-2 and
+ * P.Jack answered with the flesh impact. 80041CB4(attacker) is wrapped to
+ * call 80041B70(attacker, victim) when the victim is one of them; the
+ * sound it asks for plays TTT1's sample (the victim's pack carries them). */
+enum { ACTOR_BASE=0x800a9228, ACTOR_SIZE=0x188c, METAL_HIT_RETURN=0x80041c2c };
+extern void __real_func_80041CB4(CPUState *cpu);
+extern void func_80041B70(CPUState *cpu);
+static int metal_guest(unsigned p) {
+    if(p>1 || tekken3_ttt1_player_motion_mode(p)!=2)return 0;
+    const char *prefix=tekken3_guest_data_prefix_for(p);
+    return prefix && (!strcmp(prefix,"Jack2-TTT1") || !strcmp(prefix,"Pjack-TTT1"));
+}
+void __wrap_func_80041CB4(CPUState *cpu) {
+    uint32_t attacker=cpu->gpr[4];
+    unsigned p=(attacker-ACTOR_BASE)/ACTOR_SIZE;
+    if((cpu->pc==0 || cpu->pc==0x80041cb4) && in_fight() && p<2 && attacker==ACTOR_BASE+p*ACTOR_SIZE && metal_guest(p^1)) {
+        cpu->gpr[5]=ACTOR_BASE+(p^1)*ACTOR_SIZE;
+        cpu->pc=0;
+        func_80041B70(cpu);
+        return;
+    }
+    __real_func_80041CB4(cpu);
+}
 extern void tekken3_guest_note_guard(unsigned defender);
 void __wrap_func_80040DF4(CPUState *cpu) {
     unsigned p=cpu->gpr[4]&0xffff,command=cpu->gpr[5]&65535,group=command>>12;
@@ -176,6 +205,14 @@ void __wrap_func_80040DF4(CPUState *cpu) {
          * same number replaces T3's. The guard sound belongs to the
          * attacker's move. */
         uint32_t ra=cpu->gpr[31];
+        /* The metallic answer to a hit on Jack-2 / P.Jack (80041B70 above): the
+         * victim's own pack holds TTT1's clang. */
+        if(ra==METAL_HIT_RETURN && p<2 && metal_guest(p) && find(p,index,&s)) {
+            play(&s,index);
+            static unsigned said;
+            if(said<400){said++;fprintf(stderr,"TTT1 characters: P%u metal hit %04X (TTT1)\n",p+1,command);}
+            cpu->pc=cpu->gpr[31];return;
+        }
         /* Unknown played by the CPU switches under pressure, guarding too. */
         if(ra==0x8004127c || ra==0x8004129c)tekken3_guest_note_guard(p);
         int owner=guest_move(p)?(int)p:
@@ -198,20 +235,120 @@ void __wrap_func_80040DF4(CPUState *cpu) {
  * when it is picked. It returns 0 once the name is playing, 1 when there is
  * none (actor+0x14 == 0x22, Eddy's third costume); a guest without a name
  * (Tetsujin) stays silent too. */
+/* Set by each name call, cleared once "wins" may follow (8008D658 below);
+ * name_guest: the name plays in our mixer, voice 1 keeps what it had. */
+static unsigned name_wait;
+static int name_guest;
 void __wrap_func_800757A8(CPUState *cpu) {
     unsigned p=cpu->gpr[4];
+    if(cpu->pc==0 || cpu->pc==0x800757a8){name_wait=1;name_guest=0;}
     /* A native on its TTT1 moves and Devil Jin keep T3's call of their name. */
     if((cpu->pc==0 || cpu->pc==0x800757a8) && p<2 && tekken3_ttt1_player_motion_mode(p)!=4 &&
        !tekken3_devil_jin_player(p) &&
        tekken3_guest_character(psx_mod_read_half(0x800a9240+p*0x188c))>=0) {
         SfxSample s;
         int found=load_bank_for(p,1) && lookup(p,NAME_SOUND,&s);
-        if(found)play(&s,NAME_SOUND);
+        if(found){play(&s,NAME_SOUND);name_guest=1;}
         fprintf(stderr,"%s: P%u announced name%s\n",tekken3_guest_name_for(p),p+1,found?"":" (none in its pack)");
         cpu->gpr[2]=!found;
         cpu->pc=cpu->gpr[31];return;
     }
     __real_func_800757A8(cpu);
+}
+
+/* A Team Battle winner is announced as "<name> wins": 8003E0E4 calls the
+ * name (800757A8, voice 1), then 8006F1D4 starts a task (80074494) that
+ * waits while SpuGetKeyStatus(voice 1) (8008D658, a0 = 2, returning to
+ * 800744AC) gives 1, keyed on with its envelope up, then says "wins"
+ * (0x86DA) on the same voice. The emulated SPU only moves the envelope
+ * when it renders, between frames: the task's first check still read 0
+ * and got 3, "wins" came at once and cut a native's name. A guest's name
+ * plays in our mixer, not on voice 1: "wins" came over it, or never came
+ * while voice 1 still played the K.O.'s sound. The task now hears voice 1
+ * busy while a guest's name plays and free after it, and reads a native's
+ * 3 as still starting for the few frames before its envelope is up. */
+/* SURVIVAL RESULTS (state 14) announces the player's fighter the same way,
+ * from 80075864 (returning to 800758B4), which says "wins" once voice 1 is
+ * free: a guest's name now plays there too and waits the same. */
+enum { WINS_TASK_RETURN=0x800744ac, RESULTS_WINS_RETURN=0x800758b4, NAME_START_CHECKS=4 };
+/* Frames seen by the round's end (8003CB84 below), the last one on which
+ * the task checked voice 1, and the frames "wins" still plays. */
+static unsigned round_frames,wins_checked,wins_left;
+static int wins_task;
+enum { WINS_FRAMES=45 };
+void __wrap_func_8008D658(CPUState *cpu) {
+    if((cpu->pc==0 || cpu->pc==0x8008d658) && cpu->gpr[31]==RESULTS_WINS_RETURN && cpu->gpr[4]==2 && name_wait && name_guest) {
+        cpu->gpr[2]=0;
+        for(unsigned c=0;c<CHANNELS;c++)
+            if(channels[c].pcm && channels[c].index==NAME_SOUND && channels[c].pos<channels[c].frames)cpu->gpr[2]=1;
+        static unsigned checks;
+        checks++;
+        if(!cpu->gpr[2]){name_wait=0;fprintf(stderr,"SURVIVAL RESULTS: guest's name over after %u checks, \"wins\" may follow\n",checks);checks=0;}
+        cpu->pc=cpu->gpr[31];return;
+    }
+    if((cpu->pc==0 || cpu->pc==0x8008d658) && cpu->gpr[31]==WINS_TASK_RETURN && cpu->gpr[4]==2) {
+        if(name_wait && name_guest) {
+            cpu->gpr[2]=0;
+            for(unsigned c=0;c<CHANNELS;c++)
+                if(channels[c].pcm && channels[c].index==NAME_SOUND && channels[c].pos<channels[c].frames)cpu->gpr[2]=1;
+            if(!cpu->gpr[2])name_wait=0;
+            cpu->pc=cpu->gpr[31];
+        } else {
+            __real_func_8008D658(cpu);
+            if(name_wait) {
+                if(cpu->gpr[2]==3 && name_wait<=NAME_START_CHECKS){name_wait++;cpu->gpr[2]=1;}
+                else name_wait=0;
+            }
+        }
+        wins_task=1;wins_checked=round_frames;
+        if(cpu->gpr[2]!=1)wins_left=WINS_FRAMES;       /* the task says "wins" now */
+        return;
+    }
+    __real_func_8008D658(cpu);
+}
+
+/* 8003CB84 runs the end of a round (sub-state 0x80096F2C, frames in
+ * 0x80096F30). In sub-state 6 the winner holds its pose and is announced,
+ * then the game moves on: to the next round ~190 frames
+ * after the name, but to the next fight's loading ~60 frames after it,
+ * which clears the task list. A name longer than that (Wang, Bruce, Lee,
+ * Baek, Michelle, Jun, some natives) lost its "wins", and a guest's name
+ * was cut where our mixer stops outside the fight. The frame on which the
+ * game would move on (below, as 8003D27C..8003D3A4 decide it) is skipped
+ * while the task waits or "wins" plays: the poses hold, for 150 frames at
+ * most. 8002AE58, its caller, reads its result from memory, not from v0. */
+enum { ROUND_END=0x80096f2c, ROUND_END_FRAMES=0x80096f30, ROUND_END_POSE=6, ROUND_KIND=0x8009546c,
+       POSE_OVER=0x8009e5f8, HOLD_MAX=150 };
+/* A fighter is done when down (actor+72 <= 0) or at the end of its pose
+ * (frame actor+88 at its animation's length - 1), flags 0x8009E5F8 + 4 * p. */
+static int pose_over(unsigned p) {
+    uint32_t actor=0x800a9228+p*0x188c;
+    return psx_mod_read_word(POSE_OVER+p*4) || (int16_t)psx_mod_read_half(actor+72)<=0 ||
+           (int16_t)psx_mod_read_half(actor+88)>=(int)psx_mod_read_byte(psx_mod_read_word(actor+84)+24)-1;
+}
+/* Sub-state 6 ends after 75 frames (kind 2), after 60 (kinds 6 and 7, the
+ * fight's last round; 240 in mode 7), or once both fighters are done (other
+ * kinds but 5). The frame count is raised before the test. */
+static int round_end_moves_on(void) {
+    unsigned kind=psx_mod_read_word(ROUND_KIND),next=psx_mod_read_word(ROUND_END_FRAMES)+1;
+    if(kind==2)return next==75;
+    if(kind==6 || kind==7)return next==(psx_mod_read_word(0x800afa88)==7?240u:60u);
+    return kind!=5 && pose_over(0) && pose_over(1);
+}
+void __wrap_func_8003CB84(CPUState *cpu) {
+    static unsigned held;
+    if(cpu->pc==0 || cpu->pc==0x8003cb84) {
+        round_frames++;
+        int waiting=wins_task && round_frames-wins_checked<=2;
+        if(!waiting)wins_task=0;
+        if(wins_left && !waiting)wins_left--;
+        if(!waiting && !wins_left)held=0;
+        else if(psx_mod_read_word(ROUND_END)==ROUND_END_POSE && round_end_moves_on() && held<HOLD_MAX) {
+            held++;
+            cpu->pc=cpu->gpr[31];return;
+        }
+    }
+    __real_func_8003CB84(cpu);
 }
 
 /* The lasers' own sound: 80116EA4 asks for it when the beam starts
@@ -240,7 +377,8 @@ void tekken3_ttt1_sfx_tick(void) {
 /* Called by the voices' spu_render wrapper: out is the stereo output about
  * to be queued; gain as for the voices (host SFX volume, 0..100). */
 void tekken3_ttt1_sfx_mix(int16_t *out,int frames,int audible,const int16_t main_volume[2],int gain) {
-    if(!in_fight()){tekken3_ttt1_sfx_stop();return;}
+    /* SURVIVAL RESULTS (state 14) announces the fighter: a guest's name. */
+    if(!in_fight() && psx_mod_read_half(0x800ae204)!=14){tekken3_ttt1_sfx_stop();return;}
     static int boost=-1;
     if(boost<0) {
         const char *v=getenv("TEKKEN3_TTT1_SFX_VOLUME");

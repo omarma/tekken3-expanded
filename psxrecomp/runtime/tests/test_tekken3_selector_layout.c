@@ -107,6 +107,32 @@ static void verify_arena(uint32_t base, int source_bias,
     assert(tekken3_selector_place(&frame, &label, 61).sidecar_dx == 0);
     assert(tekken3_selector_place(&frame, &label, 61).unclipped_sidecar == 1);
 
+    /* Locked roster with Kuma: ten faces, then Kuma alone and centred on the
+     * second row, below the guest's draw area. Face, cursor halves and labels
+     * must reach the unclipped wide surface like every other cell. */
+    Tekken3SelectorPacket lone = p(base - 0x960, 0x65, 168, 398, 32, 58);
+    Tekken3SelectorPacket lone_l = p(base - 0x9A0, 0x64, 166, 396, 18, 76);
+    Tekken3SelectorPacket lone_r = p(base - 0x980, 0x64, 184, 396, 18, 76);
+    Tekken3SelectorPacket lone_1p = p(base - 0x9C0, 0x64, 166, 390, 20, 16);
+    Tekken3SelectorPacket lone_2p = p(base - 0x9C0, 0x64, 186, 390, 20, 16);
+    assert(tekken3_selector_place(&frame, &lone, 61).role == TEKKEN3_SELECTOR_ROSTER);
+    assert(tekken3_selector_place(&frame, &lone, 61).unclipped_sidecar == 1);
+    assert(tekken3_selector_place(&frame, &lone, 61).sidecar_dx == 0);
+    assert(tekken3_selector_place(&frame, &lone, 0).unclipped_sidecar == 0);
+    assert(tekken3_selector_place(&frame, &lone_l, 61).unclipped_sidecar == 1);
+    assert(tekken3_selector_place(&frame, &lone_r, 61).group_id == 17);
+    assert(tekken3_selector_place(&frame, &lone_1p, 61).unclipped_sidecar == 1);
+    assert(tekken3_selector_place(&frame, &lone_2p, 61).unclipped_sidecar == 1);
+    /* Nine on the second row (20 fighters): 28, 63 ... 308. */
+    for (int k = -4; k <= 4; k++) {
+        Tekken3SelectorPacket cell = p(base - 0x960, 0x65, 168 + 35 * k, 398, 32, 58);
+        Tekken3SelectorPacket half = p(base - 0x9A0, 0x64, 166 + 35 * k, 396, 18, 62);
+        assert(tekken3_selector_place(&frame, &cell, 61).unclipped_sidecar == 1);
+        assert(tekken3_selector_place(&frame, &half, 61).unclipped_sidecar == 1);
+    }
+    Tekken3SelectorPacket past = p(base - 0x960, 0x65, 168 + 35 * 5, 398, 32, 58);
+    assert(tekken3_selector_place(&frame, &past, 61).role != TEKKEN3_SELECTOR_ROSTER);
+
     Tekken3SelectorPacket backdrop = p(base, 0x60, 0, 0, 368, 340);
     Tekken3SelectorPacket animated = p(base - 0x100, 0x65, 0, 20, 368, 120);
     Tekken3SelectorPacket loop_panel = p(base - 0x88, 0x65, 204, 58, 34, 32);

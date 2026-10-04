@@ -27,6 +27,7 @@ inline int launcher_source_from_device(const std::string& device) {
     const std::string normalized = normalize_launcher_device(device);
     if (normalized.empty() || normalized == "none") return 0;
     if (normalized == "keyboard") return 1;
+    if (normalized == "touch") return 3;
     return 2;
 }
 
@@ -34,6 +35,7 @@ inline std::string launcher_device_from_source(
     int source, const std::string& previous_device) {
     if (source <= 0) return "none";
     if (source == 1) return "keyboard";
+    if (source == 3) return "touch";
 
     // recomp-ui's C ABI currently returns a source category, not the selected
     // controller GUID. Preserve an existing gamepad/GUID assignment; when the

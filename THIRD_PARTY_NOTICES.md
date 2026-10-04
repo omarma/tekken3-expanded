@@ -15,9 +15,20 @@ No Sony retail BIOS is included. Further framework dependencies and notices
 are listed in `psxrecomp/THIRD_PARTY_ATTRIBUTION.md`; license files are retained
 alongside the vendored libraries.
 
-The release also links SDL3 (zlib license), zlib and libchdr and includes
-RmlUi and its dependencies through recomp-ui. Their licenses are retained in
-the source or collected in the setup archive's `licenses/` directory.
+The game (libmain.so on Android) also links:
+
+- SDL3 3.4.10 (zlib license) and zlib 1.3.1 (zlib license; Android uses the
+  system's libz instead);
+- libchdr (BSD-3-Clause) with the libraries it bundles: miniz (MIT), zstd
+  (BSD-3-Clause), the LZMA SDK (public domain) and dr_flac (public domain or
+  MIT-0); see `psxrecomp/runtime/licenses/libchdr-NOTICES.txt`;
+- through recomp-ui: Dear ImGui 1.91.9b (MIT), stb_image 2.30, stb_image_write
+  1.16 and stb_truetype 1.26 (public domain or MIT), tinyfiledialogs 3.21.3
+  (zlib license), and a generated OpenGL loader (`gl_core_3_1`);
+- through psxrecomp: toml11 3.7.1 (MIT) and fmt 9.1.1 (MIT).
+
+Their licenses are retained in the source next to each library, or collected
+in the setup archive's `licenses/` directory.
 
 MAME reference revision: `aab5dcadb6025303ba019d0189344a5df536a623`.
 System 12 ROM load metadata: `src/mame/namco/namcos12.cpp`, copyright smf,
@@ -41,4 +52,7 @@ The easy setup package bundles portable CPython 3.12.13 from the toolchain's
 python-build-standalone distribution. Its notices are retained in
 `.runtime/python/LICENSE.txt`. Pillow 12.0.0 and its dependency notices are in
 `.runtime/python/Lib/site-packages/pillow-12.0.0.dist-info/licenses/`.
-The pinned distribution URLs and hashes are in `launcher/tools.lock.json`.
+The pinned distribution URLs and hashes are in `launcher/tools.lock.json`;
+the Python packages the Android build installs (Pillow, numpy, pip) are pinned
+with their hashes in `tools/requirements-import.txt` and
+`tools/requirements-pip.txt`.

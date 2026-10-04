@@ -14,6 +14,7 @@
  *   - Windows: the Win32 Fiber API (ConvertThreadToFiber / CreateFiber /
  *     SwitchToFiber / DeleteFiber). Behavior is identical to the original.
  *   - POSIX (macOS/Linux): ucontext (makecontext / swapcontext).
+ *   - Android arm64: a small assembly switch (bionic has no ucontext).
  *
  * Cooperative, single-threaded: exactly one fiber runs at a time and all
  * switches are explicit. psx_fiber_current() is the GetCurrentFiber analog.

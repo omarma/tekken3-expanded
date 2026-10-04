@@ -1,8 +1,10 @@
 {
-  "_comment": "Personnages TTT1 absents de Tekken 3. path : trajet depuis Xiaoyu (L3,C1), NVRAM neuf + deblocage 0x2FE4FC. confirm : bouton qui choisit la variante. Cles relevees a 0x29EF00 par tools/ttt1_select_probe.lua le 2026-09-23, nom verifie sur capture. label : nom affiche au selecteur Tekken 3. L'emplacement du modele est lu dans la capture (0x29EF16, costume compris : Angel 67, Alex 69). arena : natif dont l'invite prend l'arene (octet 10 de sa fiche T3), choisi par l'utilisateur le 2026-09-25 selon le lore.",
+  "_comment": "Personnages TTT1 absents de Tekken 3. path : trajet depuis Xiaoyu (L3,C1), NVRAM neuf + deblocage 0x2FE4FC. confirm : bouton qui choisit la variante. Cles relevees a 0x29EF00 par tools/ttt1_select_probe.lua le 2026-09-23, nom verifie sur capture. label : nom affiche au selecteur Tekken 3. L'emplacement du modele est lu dans la capture (0x29EF16, costume compris : Angel 67, Alex 69). arena : natif dont l'invite prend l'arene (octet 10 de sa fiche T3), choisi par l'utilisateur le 2026-09-25 selon le lore. thumbnail : archive et fichier de la vignette de grille TTT1 dans la ROM (tools/ttt1/extract.py), releves le 2026-10-04 sur les vignettes retenues d'apres les captures MAME ; sans elle (Angel, Alex : case partagee ; Tetsujin : case cachee), cadrage tile_box. hit_frames : images de l'effet de coup fort dans TTT1 (30 par defaut, 22 pour l'eclair des Mishima), releve par tools/ttt1_hit_effect_order.lua.",
   "_costumes": "costumes : emplacements du modele au selecteur TTT1 (0x29EF16 apres validation, tools/ttt1_select_probe.lua, 2026-09-24) dans l ordre Poing (boutons 1/2), Pied (4/5), Start quand il donne un troisieme costume, sinon Start = Poing. Devil Pied = 110 (zone des costumes supplementaires). Devil Start = Angel, Roger Pied = Alex : invites a part, sans costume. Tetsujin non releve (boutons 2 / 5 : un autre personnage au hasard).",
   "characters": {
     "kazuya": {
+      "hit_frames": 22,
+      "hands": "FD",
       "arena": "heihachi",
       "costumes": [64, 65],
       "path": "U,R,U,R,R",
@@ -10,9 +12,10 @@
       "moveset": 18,
       "body": 19,
       "sound": 22,
-      "label": "KAZUYA"
+      "label": "KAZUYA", "thumbnail": [34, 178]
     },
     "kunimitsu": {
+      "hands": "-F",
       "arena": "yoshimitsu",
       "costumes": [58, 59, 115],
       "path": "R,R,U,U",
@@ -20,9 +23,10 @@
       "moveset": 26,
       "body": 28,
       "sound": 31,
-      "label": "KUNIMITSU"
+      "label": "KUNIMITSU", "thumbnail": [34, 181]
     },
     "michelle": {
+      "hands": "FF",
       "arena": "julia",
       "costumes": [44, 45, 116],
       "path": "R,U",
@@ -30,9 +34,10 @@
       "moveset": 21,
       "body": 23,
       "sound": 33,
-      "label": "MICHELLE"
+      "label": "MICHELLE", "thumbnail": [34, 186]
     },
     "baek": {
+      "hands": "FF",
       "arena": "hwoarang",
       "costumes": [50, 51],
       "path": "U",
@@ -40,9 +45,10 @@
       "moveset": 30,
       "body": 32,
       "sound": 26,
-      "label": "BAEK"
+      "label": "BAEK", "thumbnail": [34, 165]
     },
     "armorking": {
+      "hands": "FD",
       "arena": "king",
       "costumes": [52, 53],
       "path": "R,R,U",
@@ -50,9 +56,10 @@
       "moveset": 24,
       "body": 26,
       "sound": 25,
-      "label": "ARMOR KING"
+      "label": "ARMOR KING", "thumbnail": [34, 163]
     },
     "bruce": {
+      "hands": "FF",
       "arena": "bryan",
       "costumes": [60, 61],
       "path": "R,R,R,R,U,U",
@@ -60,7 +67,7 @@
       "moveset": 29,
       "body": 31,
       "sound": 27,
-      "label": "BRUCE"
+      "label": "BRUCE", "thumbnail": [34, 166]
     },
     "jack2": {
       "arena": "gunjack",
@@ -70,9 +77,10 @@
       "moveset": 19,
       "body": 21,
       "sound": 30,
-      "label": "JACK-2"
+      "label": "JACK-2", "thumbnail": [34, 173]
     },
     "lee": {
+      "hands": "FF",
       "arena": "law",
       "costumes": [48, 49, 109],
       "path": "R,R,R,R,R,R,R,U,U",
@@ -80,9 +88,10 @@
       "moveset": 23,
       "body": 25,
       "sound": 32,
-      "label": "LEE"
+      "label": "LEE", "thumbnail": [34, 183]
     },
     "ganryu": {
+      "hands": "OO",
       "arena": "julia",
       "costumes": [56, 57, 117],
       "path": "R,R,R,R,R,R,R,U",
@@ -90,7 +99,7 @@
       "moveset": 25,
       "body": 27,
       "sound": 29,
-      "label": "GANRYU"
+      "label": "GANRYU", "thumbnail": [34, 170]
     },
     "pjack": {
       "arena": "gunjack",
@@ -100,9 +109,11 @@
       "moveset": 20,
       "body": 22,
       "sound": 35,
-      "label": "P.JACK"
+      "label": "P.JACK", "thumbnail": [34, 192]
     },
     "devil": {
+      "hit_frames": 22,
+      "hands": "FF",
       "arena": "ogre",
       "costumes": [66, 110],
       "path": "R,R,R,R,D",
@@ -110,9 +121,11 @@
       "moveset": 27,
       "body": 29,
       "sound": 28,
-      "label": "DEVIL"
+      "label": "DEVIL", "thumbnail": [34, 168]
     },
     "angel": {
+      "hit_frames": 22,
+      "hands": "FF",
       "arena": "ogre",
       "path": "R,R,R,R,D",
       "confirm": "Start",
@@ -131,7 +144,7 @@
       "moveset": 31,
       "body": 17,
       "sound": 36,
-      "label": "ROGER"
+      "label": "ROGER", "thumbnail": [34, 194]
     },
     "alex": {
       "arena": "gon",
@@ -148,16 +161,20 @@
     "tetsujin": {
       "arena": "mokujin",
       "path": "R,R,D,L",
+      "costumes": [100, null, 107],
+      "_costumes": "Start = Tetsujin dore : emplacement 107, variante 7 du code 15 dans la table des modeles 0x8001110C (100, 101, 30, 31, -, -, -, 107), enregistrement TETSUJIN comme les variantes 0 et 4. Meme maillage que 100 (6 octets de references de texture differents), palette or. TTT1 ne le donne pas a un bouton (rumeur : 10 victoires en VS). Pied : pas de costume, 101 etant Mokujin (variantes 1, 2, 3, 5, 6 = MOKUJIN). Releve du 2026-10-01",
       "asset": 50,
       "body": 15,
       "sound": 17,
       "label": "TETSUJIN",
+      "force_moveset": 6, "_force_moveset": "moveset des fichiers de base de Tetsujin : celui que la capture MAME du selecteur (NVRAM neuf) tirait toujours au survol, Hwoarang (6) ; la RAM refaite depuis la ROM (tools/ttt1/rom_ram.py) le reprend, sa propre fiche (15) n'ayant pas la pose de garde exportee",
       "tile_box": [8, 30, 148, 215],
       "donors": ["kazuya", "kunimitsu", "michelle", "baek", "armorking", "bruce", "jack2", "lee", "ganryu", "pjack", "roger", "jun"],
       "_donors": "movesets que Tetsujin peut tirer, importes par tools/ttt1_import.py tetsujin --moveset all. TTT1 tire (0x801293F0) parmi les personnages debloques (0x802FE178) et autorises par un octet par code (champ body) a 0x8001EC1C : exclus 14, 15 (Tetsujin), 20, 29 (Devil et Angel), 33. Ici les invites autorises ; Alex partage le moveset de Roger (31). Mesure le 2026-09-24",
       "note": "copie le moveset d'un autre personnage, tire au hasard a la selection, a chaque round et a chaque entree par tag (releve 22, puis 6) : le moveset de sa propre capture n'est pas verifie a l'import"
     },
     "jun": {
+      "hands": "DD",
       "arena": "jin",
       "costumes": [46, 47, 118],
       "path": "U,R,R,R,R,R,R,R,R,R",
@@ -165,10 +182,11 @@
       "moveset": 28,
       "body": 30,
       "sound": 19,
-      "label": "JUN",
+      "label": "JUN", "thumbnail": [34, 177],
       "note": "Jun Kazama : importee comme les autres invites (modele natif) ; l'ancien chemin (workspace/jun-import, renderer arcade) est remplace"
     },
     "wang": {
+      "hands": "FF",
       "arena": "xiaoyu",
       "costumes": [62, 63],
       "path": "R,R,D",
@@ -176,7 +194,7 @@
       "moveset": 22,
       "body": 24,
       "sound": 38,
-      "label": "WANG",
+      "label": "WANG", "thumbnail": [34, 196],
       "note": "Wang Jinrei : premiere case de la rangee du bas, cles verifiees le 2026-09-25 ; index 24 (WAN) de la table 0x801958C4, pas de 3e costume"
     },
     "unknown": {
@@ -188,8 +206,7 @@
       "body": 33,
       "sound": 39,
       "label": "UNKNOWN",
-      "thumbnail_at": [960, 960],
-      "portrait": "final_stage",
+      "thumbnail": [36, 81],
       "donor_switch": "button",
       "donors": ["paul", "law", "lei", "king", "yoshimitsu", "nina", "hwoarang", "xiaoyu", "eddy", "jin", "julia", "bryan", "heihachi", "anna",
                  "kazuya", "michelle", "wang", "lee", "armorking", "kunimitsu", "jun", "bruce", "baek"],
@@ -198,5 +215,13 @@
       "_donors": "movesets qu'Unknown peut prendre, releves le 2026-09-25 : regle d'annulation cmd 0x800B, condition corps 33 (0xA6), bits 7..12 du mot kind = 35 -> 0x80101198 tire un index 0..33 au hasard sauf 11, 14, 15, 16, 17, 20, 21, 22, 27, 29, 33 (Kuma, Ogre, Tetsujin, Gun Jack, Roger, True Ogre, Jack-2, P.Jack, Ganryu, Devil, Unknown) ; moveset = octet 9 de l'enregistrement de l'index (table 0x801958C4)",
       "note": "pas de case au selecteur TTT1 : force_index (33 x 8) impose l'index au selecteur (0x80165C5C, tools/ttt1_select_probe.lua) ; moveset de depart 28 (celui de Jun). Modeles 112 (Poing) et 113 (Pied) ; 114 (variante 7) est le loup, ecarte. Vignette de grille envoyee en VRAM (960,960) avec les autres"
     }
+  },
+  "_natives": "natives : natifs de Tekken 3 que la regle d'annulation d'Unknown ecarte (pas de donneur : Kuma, Ogre, Gun Jack, True Ogre) ; leur moveset TTT1 s'importe a part pour la carte MOVESET (tools/ttt1_import.py <cle>, sortie natives/<cle>). force_index = 8 x index de la table 0x801958C4 (Kuma 11, Ogre 14, Gun Jack 16, releve d'Unknown) ; capture : la capture d'un autre natif, avec les cles donnees ici ; t3 = numero du personnage Tekken 3. Panda est le costume 2 de Kuma : meme moveset.",
+  "natives": {
+    "kuma": {"t3": 11, "force_index": 88, "label": "KUMA"},
+    "ogre": {"t3": 14, "force_index": 112, "label": "OGRE"},
+    "gunjack": {"t3": 16, "force_index": 128, "label": "GUN JACK"},
+    "trueogre": {"t3": 20, "force_index": 112, "capture": "ogre", "moveset": 14, "body": 20, "sound": 37, "label": "TRUE OGRE",
+                 "note": "index 20 (TRUE) de la table 0x801958C4 : octets +7 corps 20, +8 son 37, +9 moveset 14 (celui d'Ogre). Force a l'index 160, le selecteur TTT1 montre un modele eclate et des cles vides (2026-10-01) : on convertit la capture d'Ogre avec le corps 20, qui decide des regles propres a True Ogre (conditions corps 0x85..0xEA)."}
   }
 }

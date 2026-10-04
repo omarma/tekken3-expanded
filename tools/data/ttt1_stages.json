@@ -1,0 +1,5 @@
+{
+  "_comment": "Decors de TTT1 arcade par numero (0x802434E4 ; archive 7 + n, tools/ttt1/extract.py stages.csv). Noms donnes par l'utilisateur le 2026-10-04 d'apres les captures MAME (decor force au point d'arret 80109C1C). 9 exclu du tirage au hasard ; 10 et 13 meme geometrie ; 14 sans geometrie (fond vide).",
+  "stages": ["Paul", "Law", "Yoshimitsu", "Xiaoyu", "Hwoarang", "Lei", "Ogre", "School", "Jin", "Nina",
+             "Eddy-B", "King", "Heihachi", "Eddy-A", "Unknown"]
+}

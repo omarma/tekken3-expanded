@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Build the "Devil Jin" easter-egg model: TTT1 arcade Jin, costume 1, with his Devil face.
 
-    python3 tools/ttt1_devil_jin.py [--face faces.png] [--out DIR]
+    python3 tools/ttt1_devil_jin.py [--face faces.png] [--wings none|black|...] [--plain] [--out DIR]
+
+--plain keeps Jin's own face and forehead, without wings: the same model
+before his transformation (Kazuya's TTT ending, tools/ps2/).
 
 The arcade ROM ships every Jin costume with six face-expression images and a
 tattooed forehead that the model never points at. Expression 5 of costume 1
@@ -11,6 +14,12 @@ copies their pixels over the images the model does display (the neutral face
 at (32, 64) and the plain forehead at (80, 96)), so the model and its UVs stay
 untouched, then converts the model to the PS1 format like any TTT1 guest
 (tools/ttt1/model/convert.py, texpack.py).
+
+By default Angel's wings are grafted on his back, black (lightest feather at
+4/31, 1.15 x Angel's size, pushed 40 units back off his thicker back,
+chosen in game on 2026-10-02;
+tools/ttt1_devil_jin_wings.py).
+--wings none gives the model without wings.
 
 --face replaces the Devil face with a hand-edited 32 x 64 indexed PNG that
 uses the original palette (see workspace/ttt1-import/devil-jin/).
@@ -79,7 +88,16 @@ def main():
     ap.add_argument('--face', type=Path, help='hand-edited Devil face (indexed PNG, 32 x 64)')
     ap.add_argument('--ram', type=Path, default=WORK / 'captures/jun-select-ram.bin',
                     help='any TTT1 select-screen RAM capture (for the bank directory)')
+    ap.add_argument('--plain', action='store_true', help="Jin's own face and forehead, no wings")
     ap.add_argument('--out', type=Path, default=WORK / 'devil-jin/guest')
+    ap.add_argument('--wings', choices=('none', 'white', 'invert', 'black', 'red'), default='black',
+                    help="graft Angel's wings in this colour (tools/ttt1_devil_jin_wings.py)")
+    ap.add_argument('--wing-light', type=float, default=4,
+                    help='black/red wings: lightest feather, out of 31 per channel')
+    ap.add_argument('--wing-scale', type=float, default=1.15, help='size of the wings (1 = Angel\'s)')
+    ap.add_argument('--wing-back', type=int, default=40, help='push the wings back, in model units')
+    ap.add_argument('--wing-pose', type=int, default=0, help='pose of the wings, 0..36 (with --no-flap)')
+    ap.add_argument('--no-flap', action='store_true', help='keep one pose of the wings (they do not flap)')
     a = ap.parse_args()
 
     import convert, texpack, check_texpack
@@ -92,11 +110,25 @@ def main():
     model, tex = bank[mo:mo + mn], bytearray(bank[to:to + tn])
 
     entries = tims(tex)
-    if a.face:
+    if a.plain:
+        a.wings = 'none'
+    elif a.face:
         put_png(tex, entries, SHOWN_FACE, a.face)
     else:
         copy_pixels(tex, entries, DEVIL_FACE, SHOWN_FACE)
-    copy_pixels(tex, entries, TATTOO, SHOWN_FOREHEAD)
+    if not a.plain:
+        copy_pixels(tex, entries, TATTOO, SHOWN_FOREHEAD)
+    if a.wings != 'none':
+        import ttt1_devil_jin_wings as wings
+        ao, an = entry(109 + wings.ANGEL_SLOT)
+        to_, tn_ = entry(wings.ANGEL_SLOT)
+        angel, angel_tex = bank[ao:ao + an], bank[to_:to_ + tn_]
+        model, polys = wings.graft_model(model, angel, a.wing_pose, a.wing_scale, a.wing_back, not a.no_flap)
+        tex = bytearray(wings.graft_textures(tex, angel_tex,
+                                             wings.recolour(wings.wing_palette(angel_tex), a.wings, a.wing_light)))
+        tex, dropped = wings.drop_unused(bytes(tex), model)
+        tex = bytearray(tex)
+        print(f'wings: {polys} polygons, {"one pose " + str(a.wing_pose) if a.no_flap else "37 poses"}, {a.wings}, x{a.wing_scale}, back {a.wing_back}; {dropped} unused images dropped')
 
     a.out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:

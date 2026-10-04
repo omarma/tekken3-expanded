@@ -1,0 +1,4 @@
+# Written by tools/update_requirements.py (exact versions, every wheel's
+# SHA-256 from PyPI): install with --require-hashes --only-binary=:all:
+pip==26.2.1 \
+    --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e

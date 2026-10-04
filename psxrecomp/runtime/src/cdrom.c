@@ -32,6 +32,8 @@
 #  include <time.h>
 #endif
 
+#include "disc_sector_log.h"
+
 /* C wrappers for the C++ ISOReader (defined in iso_reader_c.cpp) */
 extern void* iso_open(const char* path);
 extern int iso_read_sector(void* handle, uint32_t lba, uint8_t* buffer, int size);
@@ -1329,6 +1331,8 @@ static int read_sector_at(int min, int sec, int sect) {
         delivery.data_delivered = 0;
         delivery.skip_reason = CDROM_SKIP_XA_AUDIO_REALTIME;
     }
+    if (delivery.data_delivered || delivery.xa_audio_delivered)
+        disc_sector_log_used((uint32_t)lba);
 
     memset(sector_buffer, 0, sizeof(sector_buffer));
     if (delivery.data_delivered && (mode_reg & 0x20)) {
@@ -1579,6 +1583,7 @@ static void process_cdda_stream(uint32_t cycles) {
         cd_apply_decode_volume(pcm, CDDA_SECTOR_FRAMES);
         spu_cd_audio_push(pcm, CDDA_SECTOR_FRAMES);
         cdda_sectors_played++;
+        disc_sector_log_used(cdda_lba);
         trace_cdrom('a', 0, cdda_lba, (uint32_t)cdda_track);
 
         cdda_lba++;
@@ -2964,13 +2969,20 @@ static int cdrom_snap_parse(PstR *r) {
 #define RU(f)  do { if (!pst_r_u32(r, &u)) return 0; (f) = u; } while (0)
 #define R64(f) do { if (!pst_r_u64(r, &u64)) return 0; (f) = u64; } while (0)
 #define RB(a)  do { if (!pst_r_bytes(r, (a), sizeof(a))) return 0; } while (0)
+/* FIFO/sector cursors and counts index fixed buffers: refuse values outside
+ * what the live controller produces before they land. Each bound alone keeps
+ * every access in range (reads also test read < count / pos < size). */
+#define RIR(f, lo, hi) do { if (!pst_r_i32(r, &i) || i < (lo) || i > (hi)) return 0; \
+                            (f) = (int)i; } while (0)
     R8(index_reg); R8(stat_reg); R8(request_reg); R8(irq_enable); R8(irq_flag);
     RI(cdrom_intc_request_latched); RU(cdrom_irq_generation);
     RU(cdrom_intc_latched_generation); RI(present_rem);
-    RB(param_fifo); RI(param_count);
-    RB(response_fifo); RI(response_read); RI(response_count);
-    RB(sector_buffer); RI(sector_read_pos); RI(sector_available); RI(sector_size);
-    RB(last_sector_buffer); RI(last_sector_lba); RI(last_sector_size);
+    RB(param_fifo); RIR(param_count, 0, PARAM_FIFO_SIZE);
+    RB(response_fifo); RIR(response_read, 0, RESPONSE_FIFO_SIZE);
+    RIR(response_count, 0, RESPONSE_FIFO_SIZE);
+    RB(sector_buffer); RIR(sector_read_pos, 0, SECTOR_BUFFER_SIZE); RI(sector_available);
+    RIR(sector_size, 0, SECTOR_BUFFER_SIZE);
+    RB(last_sector_buffer); RI(last_sector_lba); RIR(last_sector_size, 0, SECTOR_BUFFER_SIZE);
     RU(last_sector_frame); R8(last_sector_mode); R8(last_sector_have_raw);
     R8(last_sector_raw_mode); R8(last_sector_xa_file); R8(last_sector_xa_channel);
     R8(last_sector_xa_submode); R8(last_sector_xa_coding);
@@ -2983,15 +2995,18 @@ static int cdrom_snap_parse(PstR *r) {
         !pst_r_i32(r, &xa_hist_r[0]) || !pst_r_i32(r, &xa_hist_r[1]))
         return 0;
     R8(xa_stream_file); R8(xa_stream_channel); R8(xa_stream_coding); RI(xa_stream_active);
-    RI(g_disc_speed_divisor); RI(g_game_divisor); RI(g_instant_max_per_frame);
+    /* Instant rate is a divisor (instant_period); cdrom_set_instant_rate clamps 1..4096. */
+    RI(g_disc_speed_divisor); RI(g_game_divisor); RIR(g_instant_max_per_frame, 1, 4096);
     R8(pending.cmd); RI(pending.pending); RI(pending_rem); RI(pending.phase);
-    R8(queued_cmd.cmd); RB(queued_cmd.params); RI(queued_cmd.param_count); RI(queued_cmd.pending);
+    R8(queued_cmd.cmd); RB(queued_cmd.params);
+    RIR(queued_cmd.param_count, 0, PARAM_FIFO_SIZE); RI(queued_cmd.pending);
     R8(pending_dataready); R8(pending_dataready_stat);
 #undef R8
 #undef RI
 #undef RU
 #undef R64
 #undef RB
+#undef RIR
     irq_present_set_remaining(present_rem);
     if (pending.pending)
         pending_set_remaining(pending_rem);

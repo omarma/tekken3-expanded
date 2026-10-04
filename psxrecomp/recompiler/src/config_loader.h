@@ -1141,6 +1141,10 @@ struct UserSettings {
     // in-game Alt+Enter / Cmd+Ctrl+F hotkey toggles live between windowed and
     // whichever of these is configured.
     bool has_fullscreen     = false; int  fullscreen     = 0;
+    // [video] hide_mouse_cursor: "off" (default, 0) / "fullscreen" (1: hidden
+    // only while the window is fullscreen) / "always" (2) / "idle" (3: hidden
+    // after ~3 s without mouse movement, back on the next movement).
+    bool has_hide_mouse_cursor = false; int hide_mouse_cursor = 0;
     // Low-latency present knobs. low_latency_input re-samples the pad after the
     // wall-clock pacer (just before present) so the next CPU frame reads fresh
     // input instead of input ~one frame stale (the dominant input->photon cost
@@ -1163,6 +1167,7 @@ struct UserSettings {
     bool has_adaptive_view  = false; bool adaptive_view  = false;
     // [audio]
     bool has_spu_hq         = false; bool spu_hq         = false;
+    bool has_master_volume  = false; int  master_volume  = 100; // host master 0..100
     // [bios] / [disc] / [memcard]
     bool has_bios_path      = false; std::filesystem::path bios_path;
     bool has_disc_path      = false; std::filesystem::path disc_path;

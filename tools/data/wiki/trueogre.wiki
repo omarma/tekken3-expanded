@@ -1,0 +1,401 @@
+'''True Ogre/Tekken Tag Tournament Movelist''' is a list of all the moves that [[True Ogre]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Lift Up|Body Slam]]
+!1+3
+!Front
+!30
+!1
+!
+|-
+![[Bear Hug]]
+!2+4
+!Front
+!35
+!2
+!
+|-
+![[Bear Slam|Ankle Slam]]
+!(1+3_2+4)
+!Left
+!50
+!1
+!
+|-
+![[Hanging Neck Throw]]
+!(1+3_2+4)
+!Right
+!40
+! 2
+!
+|-
+![[Swing Swung]]
+!(1+3_2+4)
+!Back
+!70
+!
+!
+|-
+![[Lift Up|Reverse Throw]]
+! BT+(1+3_2+4)
+!Any
+!Depends on throw
+!
+!
+|-
+![[Waning Moon|Spin Behind Elbow Smash]]
+!d/f, D/F+2+4
+!Front
+!35
+!1+2
+!
+|-
+![[Demon's Feast]]
+!FC+D/F...
+!Front
+!Varies
+!1
+!#1
+|}
+
+#User must be moving forward in a full crouch and be hit by an enemy's punch for this move to execute.
+
+===Moves===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Flash Punch Combo|Demon Variations Flash Punch Combo]]
+!1, 1, 2
+!5, 8, 15 
+!High, high, mid
+!KND
+|-
+![[Left Right Combo]]
+!1, 2
+!5, 15
+!High, high
+!
+|-
+![[Demon Slayer (Mishima)|Demon Slayer Variations]]
+!1, 2, 2
+!5, 15, 18
+!High, high, high
+!
+|-
+![[Demon Backhand Spin|Demon Slayer]]
+!2, 2
+!12, 21
+!High, high 
+!
+|-
+![[Demon Scissors]]
+!4~3
+!25
+!Mid
+!KND
+|-
+![[Hell's Flame]]
+!1+2
+!30
+! !
+!CF
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Power Punch]]
+!f+2
+!28
+!Mid
+!KND
+|-
+![[Right Splits Kick]]
+!f+4
+!27
+!Mid
+!KNDc
+|-
+![[Shoulder Tackle (King)|Shoulder Tackle]]
+!f+1+4
+!30
+!Mid
+!KND,GB
+|-
+![[Double Elbow]]
+!d/f+1, 2
+!16, 10
+!Mid, mid
+!
+|-
+![[Buffalo Horn]]
+!d/f+1+2
+!25
+!Mid
+!JG
+|-
+![[Mid Tail Spinner]]
+!d/f+3+4
+!25
+!Mid
+!KND
+|-
+![[Double Tail Spinner]]
+!d/f+3+4, 3+4
+!25, 25
+!Mid, mid
+!KND
+|-
+![[Shin to Head Kick]]
+!d+4, 4
+!7, 20
+!Low, high
+!
+|-
+![[Blazing Inferno]]
+!d+1+2
+!40
+!!
+!CF
+|-
+![[Low Tail Spinner]]
+!d+3+4 
+!25
+!Low
+!KND
+|-
+![[Bloody Scissors]]
+!d/b+1+2
+!50
+!!
+!KND
+|-
+![[Deadly Stab|Deadly Slice]]
+!b+2
+!22
+!!
+!KND
+|-
+![[Killing Blow]]
+!b+2+3
+!60
+!!
+!KND
+|-
+![[Dragon Wheel Kick|Windmill Kick]]
+!u/b+3
+!20
+!Mid
+!JG
+|-
+![[Windmill Kick Tooth Fairy]]
+!u/b+3, 2
+!20, 20
+!Mid, mid
+!JG,#1 
+|-
+![[Evil Wheel]]
+!u+3+4
+!25
+!Mid
+!GB
+|-
+![[Hunting Hawk]]
+!u/f+3, 4, 3
+!15, 11, 12
+!Mid, mid, high
+!KND,GB,#2
+|-
+![[Capital Punishment|Knuckle Bomb]]
+!u/f+1+2
+!35
+! Mid
+!KND
+|-
+![[Burning Knuckle|Super Knuckle Bomb]]
+!u/f+1+2, D
+!45
+!!
+!KND
+|-
+![[Capital Punishment|Jump to Double Knuckle]]
+!u/f, N, 1+2
+!35
+!Mid
+!KND
+|-
+![[Burning Knuckle|Burning Double Knuckle]]
+!u/f, N, 1+2, D 
+!45
+! !
+!KND
+|-
+![[Advancing Deadly Stab|Deadly Slash]]
+!f, f, N,2
+!25
+!!
+!KND
+|-
+![[Hammer Heel]]
+!f, f, N, 4
+!20
+!Mid
+!KND
+|-
+![[Lee Sliding|Spinning Slide Kick]]
+!f, f, N, 3+4
+!15
+!Low
+!KND
+|-
+![[Serpent's Venom]]
+!f, F+2
+!15, 20
+!Mid, !
+!KND,#3
+|-
+![[Left Splits Kick]]
+!f, f+3
+!23
+!Mid
+!KND
+|-
+![[Leg Bazooka|Foot Bazooka]]
+!f, f+4
+!35
+!High
+!KND,GB
+|-
+![[Medium Power Punch]]
+!f, f+1+2
+!25
+!Mid
+!KND
+|-
+![[Exploder]]
+! f, f+3+4
+!40
+!Mid
+!KND,GB
+|-
+![[Blazing Kick]]
+! d, d/b+4 
+!30
+!Mid
+!KND,JGc
+|-
+![[Dragon Power Punch]]
+!b, b+1+2
+!100
+!!
+!KND
+|-
+![[Demon God Fist|Heavy Body Blow]]
+!WS+2
+!37
+!Mid
+!CF,#4
+|-
+![[Infinite Kick Chain|Infinite Kick Chain 1]]
+! WS+3, 3, D+3, 3...
+!10, 25, 15, 10...
+!Mid, mid, low, mid...
+!
+|-
+![[Infinite Kick Chain|Infinite Kick Chain 2]]
+!WS+3, 3, D+3, 3...
+!10, 25, 10, 10...
+!Mid, mid, mid, mid...
+!
+|-
+![[Low Variation]]
+!D+3...
+!10...
+!Low...
+!
+|-
+![[High Variation]]
+!U+3...
+!15....
+!Mid....
+!
+|-
+![[Tsunami Kick]]
+!WS+4, 4
+!13, 18
+!Mid, mid
+!
+|-
+![[Tornado Kick (All)|Tornado Kick]]
+!WS+3+4
+!28
+!High
+!KND
+|-
+![[Snake Rocket|Demented Snake]]
+!FC+3, 3, 3 [~5]
+! 12, 19, 25
+!Low, low, mid
+!JG
+|-
+![[Snake Kick]]
+!FC+3, 3, d+3
+!12, 19, 7
+!Low, low, low
+!
+|-
+![[Right Hand Stab|Groin Punch]]
+!FC+f+2
+!30
+!Mid
+!
+|-
+![[Cat Thrust|Slap]]
+!FC+f+1
+!30
+!Mid
+!CFc
+|-
+![[Right Handed Sweep|Crouching Jab]]
+!FC+d/f+2
+!25
+!Low
+!KND
+|-
+![[Azteca Shoot]]
+!SS+4
+!22
+!Low
+!KND
+|-
+![[Owl's Hunt]]
+!On the back 3+4
+!40
+!Mid
+!KND,#5
+|} 
+
+#Second hit is very unlikely to connect
+#Third hit cannot be executed without a successful second hit
+#The first hit can be blocked, and the second unblockable hit can be avoided by sidestepping or backdashing
+#Without a clean hit, there is no Crumple Fall property and the move does 25 damage
+# Pressing u or d will cause True Ogre to "sidestep" in the corresponding direction during the move
+
+[[Category:Moves Lists]]
+[[Category:True Ogre Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

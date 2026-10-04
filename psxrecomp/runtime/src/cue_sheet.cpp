@@ -165,6 +165,8 @@ CueSheet parse_cue_sheet(const fs::path& cue_path) {
         int idx = 0, mm = 0, ss = 0, ff = 0;
         if (std::sscanf(upper.c_str(), " INDEX %d %d:%d:%d", &idx, &mm, &ss, &ff) == 4 &&
             cur_track_num >= 1 && !sheet.files.empty()) {
+            // A time no disc has (and whose frame count would overflow).
+            if (mm < 0 || mm > 99 || ss < 0 || ss > 59 || ff < 0 || ff > 74) continue;
             const uint32_t index_lba = (uint32_t)(((mm * 60 + ss) * 75) + ff);
             if (idx == 0) {
                 cur_index00     = index_lba;

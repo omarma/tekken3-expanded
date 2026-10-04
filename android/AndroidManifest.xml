@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tekken 3 Expanded for Android. tools/android/build_apk.py sets the
+     version and the SDK levels when it links the APK, and makes the icon's
+     mipmaps from the icon PNG it is given (without one, it leaves the icon
+     attribute out). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.tekken3expanded"
+    android:installLocation="auto">
+
+    <uses-feature android:glEsVersion="0x00020000" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application android:label="Tekken 3 Expanded"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:hasCode="true"
+        android:extractNativeLibs="false"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+        android:hardwareAccelerated="true">
+
+        <!-- Opens the app: copies the game data out of the APK after an install
+             or update (with a progress bar), then starts GameActivity. -->
+        <activity android:name="com.tekken3expanded.PrepareActivity"
+            android:label="Tekken 3 Expanded"
+            android:screenOrientation="sensorLandscape"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Back to launcher: ends the game's process, then starts the game
+             again on the launcher, from a process of its own. -->
+        <activity android:name="com.tekken3expanded.RelaunchActivity"
+            android:process=":relaunch"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="false" />
+
+        <!-- singleTask: the game shares PrepareActivity's task, so the home
+             screen icon and the recent apps bring the running game back
+             (singleInstance put it in a task of its own, and the icon started
+             PrepareActivity again). -->
+        <!-- Not exported: only PrepareActivity and RelaunchActivity start it
+             (other apps could otherwise open it, the launcher extra
+             included). SDL's USB_DEVICE_ATTACHED filter is left out: without
+             a device filter (meta-data) Android never matches it, and SDL
+             asks for USB controllers' permission itself (HIDDeviceManager). -->
+        <activity android:name="com.tekken3expanded.GameActivity"
+            android:label="Tekken 3 Expanded"
+            android:alwaysRetainTaskState="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:preferMinimalPostProcessing="true"
+            android:exported="false" />
+    </application>
+</manifest>

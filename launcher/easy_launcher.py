@@ -5,8 +5,14 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import setup_backend as backend
 
 SETTINGS='--settings' in sys.argv   # open the game's launcher even if it is skipped on boot
+# Build Android APK only: the APK page of a game already prepared, or the
+# Android game alone, files asked. The PC setup never builds an APK.
+ANDROID_ONLY='--android-only' in sys.argv
+# Setup Tekken 3 always opens the setup window; Tekken 3 Expanded (without
+# --setup) plays once setup is done.
+SETUP='--setup' in sys.argv
 
-# Windows owns the worker tree so Cancel also stops compilers and MAME.
+# Windows owns the worker tree so Cancel also stops the compilers.
 class ProcessJob:
     def __init__(self):
         self.handle=None
@@ -42,7 +48,9 @@ def reveal(path):
     if os.name=='nt':os.startfile(str(path))
     else:subprocess.Popen(['open' if sys.platform=='darwin' else 'xdg-open',str(path)])
 
-def gui(test_hook=None):
+def gui(test_hook=None,android_only=False,android_setup=False):
+    """android_only: the APK of a game already set up. android_setup: the
+    files, then the APK alone (no PC game), for the phone only."""
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     class App:
@@ -50,7 +58,8 @@ def gui(test_hook=None):
             self.window=tk.Tk();self.window.title('Tekken 3 — First setup')
             self.window.configure(bg='#11131b');self.window.resizable(False,False)
             self.job=None;self.process=None;self.events=queue.Queue();self.busy=False
-            self.epoch=0;self.completed=False
+            self.epoch=0;self.completed=False;self.apk=None;self.android_only=android_only
+            self.android_setup=android_setup
             s=ttk.Style(self.window);s.theme_use('clam')
             s.configure('.',font=(FONT,10),background='#11131b',foreground='#ececf2')
             s.configure('TFrame',background='#11131b')
@@ -67,31 +76,35 @@ def gui(test_hook=None):
             s.configure('TProgressbar',background='#9775ea',troughcolor='#232735',borderwidth=0)
             root=ttk.Frame(self.window,padding=28);root.pack(fill='both',expand=True)
             ttk.Label(root,text='TEKKEN 3',style='Title.TLabel').pack(anchor='w')
-            ttk.Label(root,text='Choose your files. We’ll take care of the setup.',style='Muted.TLabel').pack(anchor='w',pady=(4,22))
+            ttk.Label(root,text='Build the Android version of your game.' if android_only
+                      else 'Choose your files. We’ll build the game for your Android phone.' if android_setup
+                      else 'Choose your files. We’ll take care of the setup.',
+                      style='Muted.TLabel').pack(anchor='w',pady=(4,22))
             saved=backend.load_json(backend.STATE/'last-inputs.json')
             self.disc=tk.StringVar(value=saved.get('disc',''))
             self.ttt=tk.StringVar(value=saved.get('ttt1',''))
             self.ttt1=tk.BooleanVar(value=saved.get('include_ttt1',saved.get('jun',True)))
             self.tekken3=tk.StringVar(value=saved.get('tekken3',''))
             self.jin_red=tk.BooleanVar(value=saved.get('jin_red',False))
+            self.cinematics=tk.BooleanVar(value=saved.get('ttt_cinematics',False))
+            self.ttt_disc=tk.StringVar(value=saved.get('ttt_disc',''))
+            self.ttt_music=tk.BooleanVar(value=bool(saved.get('ttt_disc')))
             self.controls=[];self.ttt1_controls=[]
-            self.file_row(root,'Tekken 3 · USA PlayStation disc',self.disc,[('Disc image','*.cue *.bin *.iso')])
-            self.check=ttk.Checkbutton(root,text='Include the TTT1 characters',variable=self.ttt1,command=self.update_ttt1)
-            self.check.pack(anchor='w',pady=(18,6));self.controls.append(self.check)
-            self.file_row(root,'TTT1 arcade · tektagt.zip',self.ttt,[('Arcade ZIP','*.zip')],ttt1=True)
-            self.file_row(root,'Tekken 3 arcade · tekken3.zip (optional: arcade difficulty levels)',self.tekken3,[('Arcade ZIP','*.zip')],ttt1=True)
-            self.jin_check=ttk.Checkbutton(root,text="Add-on: Jin's red lightning (from your TTT1 ROM)",variable=self.jin_red)
-            self.jin_check.pack(anchor='w',pady=(6,0));self.controls.append(self.jin_check);self.ttt1_controls.append(self.jin_check)
-            ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+('Tools download automatically; ' if os.name=='nt' else 'Needs cmake, ninja, SDL3 and MAME (brew install cmake ninja sdl3 mame); ')
-                      +'the first setup with the TTT1 characters takes about 20 minutes.',
-                      style='Muted.TLabel',justify='left').pack(anchor='w',pady=(12,20))
-            self.status=tk.StringVar(value='Ready to set up')
-            self.detail=tk.StringVar(value='No Python, MAME or compiler installation needed.' if os.name=='nt' else 'Your files stay on this Mac.')
+            if android_only:self.android_page(root)
+            else:self.setup_page(root)
+            # An earlier setup: up to date (Setup Tekken 3 opened it), or an update needs it.
+            done=backend.ready()
+            self.updating=not android_setup and not done and bool(backend.load_json(backend.STATE/'ready.json'))
+            self.status=tk.StringVar(value='Ready to build the APK' if android_only or android_setup else 'Tekken 3 is set up' if done
+                                     else 'An update is ready to install' if self.updating else 'Ready to set up')
+            self.detail=tk.StringVar(value=f'It will be saved as {backend.APK.name} in the tekken3-expanded folder.' if android_only or android_setup
+                                     else 'No Python or compiler installation needed.' if os.name=='nt' else 'Your files stay on this Mac.')
             ttk.Label(root,textvariable=self.status,font=(FONT,11,'bold'),wraplength=585).pack(anchor='w')
             ttk.Label(root,textvariable=self.detail,style='Muted.TLabel',wraplength=585,justify='left').pack(anchor='w',pady=(5,10))
             self.progress=ttk.Progressbar(root,mode='indeterminate',length=590);self.progress.pack(fill='x',pady=(0,16))
             actions=ttk.Frame(root);actions.pack(fill='x')
-            self.primary=ttk.Button(actions,text='Set up & play',style='Play.TButton',command=self.start)
+            self.primary=ttk.Button(actions,text='Build Android APK' if android_only or android_setup else 'Update & play' if self.updating else 'Set up & play',
+                                    style='Play.TButton',command=self.start)
             self.primary.pack(side='right')
             self.cancel_button=ttk.Button(actions,text='Cancel',command=self.cancel,state='disabled')
             self.cancel_button.pack(side='right',padx=(0,9))
@@ -102,6 +115,33 @@ def gui(test_hook=None):
             width=self.window.winfo_reqwidth();height=self.window.winfo_reqheight()
             x=max(0,(self.window.winfo_screenwidth()-width)//2);y=max(0,(self.window.winfo_screenheight()-height)//2)
             self.window.geometry(f'+{x}+{y}')
+        def setup_page(self,root):
+            self.file_row(root,'Tekken 3 · USA PlayStation disc',self.disc,[('Disc image','*.cue *.bin *.iso')])
+            self.check=ttk.Checkbutton(root,text='Include the TTT1 characters',variable=self.ttt1,command=self.update_ttt1)
+            self.check.pack(anchor='w',pady=(18,6));self.controls.append(self.check)
+            self.file_row(root,'TTT1 arcade · tektagt.zip',self.ttt,[('Arcade ZIP','*.zip')],ttt1=True)
+            self.file_row(root,'Tekken 3 arcade · tekken3.zip (optional: arcade difficulty levels)',self.tekken3,[('Arcade ZIP','*.zip')],ttt1=True)
+            self.jin_check=ttk.Checkbutton(root,text="Add-on: Jin's red lightning (from your TTT1 ROM)",variable=self.jin_red)
+            self.jin_check.pack(anchor='w',pady=(6,0));self.controls.append(self.jin_check);self.ttt1_controls.append(self.jin_check)
+            self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",
+                                                  variable=self.cinematics,command=self.update_cinematics)
+            self.cinematics_check.pack(anchor='w',pady=(6,6));self.controls.append(self.cinematics_check);self.ttt1_controls.append(self.cinematics_check)
+            self.music_check=ttk.Checkbutton(root,text="TTT Cinematics music · requires your Tekken Tag Tournament PS2 disc",
+                                             variable=self.ttt_music,command=self.update_cinematics)
+            self.controls.append(self.music_check);self.ttt1_controls.append(self.music_check)
+            self.ttt_disc_row=self.file_row(root,"Tekken Tag Tournament · USA PS2 disc",self.ttt_disc,
+                                            [('Disc image','*.cue *.bin *.iso')],ttt1=True)
+            self.update_cinematics()
+            ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+
+                      ('Only the Android game is built, for an arm64 phone.\nThe first time also downloads the Android tools (about 1 GB).\n'
+                       if self.android_setup else '')+('Tools download automatically; ' if os.name=='nt' else 'Needs cmake, ninja and SDL3 (brew install cmake ninja sdl3); ')
+                      +'the first setup with the TTT1 characters takes about 20 minutes.',
+                      style='Muted.TLabel',justify='left').pack(anchor='w',pady=(12,20))
+        def android_page(self,root):
+            ttk.Label(root,text='Your game is set up. This builds the same game for Android phones (arm64),\n'
+                      'with the characters and options you chose. The first time downloads the\n'
+                      'Android tools (about 1 GB) and takes a while; later builds are quicker.',
+                      style='Muted.TLabel',justify='left').pack(anchor='w',pady=(0,20))
         def file_row(self,parent,label,value,types,ttt1=False):
             frame=ttk.Frame(parent);frame.pack(fill='x',pady=(0,9))
             ttk.Label(frame,text=label).pack(anchor='w',pady=(0,5))
@@ -111,6 +151,14 @@ def gui(test_hook=None):
             button.pack(side='right',padx=(9,0))
             self.controls.extend((entry,button))
             if ttt1:self.ttt1_controls.extend((entry,button))
+            return frame
+        def update_cinematics(self):
+            # The PS2 disc is optional and only for TTT Cinematics: asked once ticked.
+            # The music only with the cinematics, and the PS2 disc only with the music.
+            if self.cinematics.get():self.music_check.pack(anchor='w',padx=(22,0),pady=(0,6),after=self.cinematics_check)
+            else:self.music_check.pack_forget()
+            if self.cinematics.get() and self.ttt_music.get():self.ttt_disc_row.pack(fill='x',padx=(22,0),pady=(0,9),after=self.music_check)
+            else:self.ttt_disc_row.pack_forget()
         def browse(self,value,types):
             selected=filedialog.askopenfilename(parent=self.window,title='Choose your game file',filetypes=types)
             if selected:
@@ -128,20 +176,34 @@ def gui(test_hook=None):
             if value:self.progress.start(12)
             else:self.progress.stop()
         def start(self):
-            if not Path(self.disc.get()).is_file():self.detail.set('Choose your Tekken 3 USA disc image first.');return
-            if self.ttt1.get() and not Path(self.ttt.get()).is_file():
-                self.detail.set('Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.');return
-            if self.ttt1.get() and self.tekken3.get() and not Path(self.tekken3.get()).is_file():
-                self.detail.set('The Tekken 3 arcade ZIP was not found. Choose it again, or clear the field.');return
-            self.status.set('Starting setup');self.detail.set('Checking your game files…');self.set_busy(True)
-            self.epoch+=1;epoch=self.epoch;self.completed=False
+            if self.android_only and not self.android_setup:
+                self.status.set('Building the Android APK');self.detail.set('Checking the Android tools…')
+            else:
+                # An update reads only the files it needs: the disc for a new release,
+                # the ROM for a new TTT1 import.
+                disc,rom=backend.needs(self.ttt1.get(),self.jin_red.get(),self.tekken3.get() or None,self.cinematics.get())
+                if disc and not Path(self.disc.get()).is_file():self.detail.set('Choose your Tekken 3 USA disc image first.');return
+                if rom and not Path(self.ttt.get()).is_file():
+                    self.detail.set('Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.');return
+                if self.ttt1.get() and self.tekken3.get() and not Path(self.tekken3.get()).is_file():
+                    self.detail.set('The Tekken 3 arcade ZIP was not found. Choose it again, or clear the field.');return
+                if self.ttt1.get() and self.cinematics.get() and self.ttt_music.get() and not Path(self.ttt_disc.get()).is_file():
+                    self.detail.set('Choose your Tekken Tag Tournament PS2 disc, or turn off TTT Cinematics music.');return
+                self.status.set('Starting setup');self.detail.set('Checking your game files…')
+            self.set_busy(True)
+            self.epoch+=1;epoch=self.epoch;self.completed=False;self.apk=None
             python=Path(sys.executable).with_name('python.exe') if os.name=='nt' else Path(sys.executable)
-            command=[str(python),'-I',str(backend.ROOT/'launcher/setup_backend.py'),'--disc',self.disc.get(),'--wait-for-parent']
-            if self.ttt1.get():
-                command+=['--ttt1',self.ttt.get()]
+            command=[str(python),'-I',str(backend.ROOT/'launcher/setup_backend.py'),'--wait-for-parent']
+            if self.android_setup:command.append('--android-only')
+            if self.android_only and not self.android_setup:command.append('--android')
+            elif self.ttt1.get():
+                command+=['--disc',self.disc.get(),'--ttt1',self.ttt.get()]
                 if self.tekken3.get():command+=['--tekken3',self.tekken3.get()]
                 if self.jin_red.get():command.append('--jin-red-lightning')
-            else:command+=['--no-ttt1']
+                if self.cinematics.get():
+                    command.append('--ttt-cinematics')
+                    if self.ttt_music.get():command+=['--ttt-disc',self.ttt_disc.get()]
+            else:command+=['--disc',self.disc.get(),'--no-ttt1']
             try:
                 self.job=ProcessJob()
                 self.process=subprocess.Popen(command,cwd=backend.ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
@@ -169,10 +231,15 @@ def gui(test_hook=None):
                         self.detail.set(event.get('message','Setup stopped.'))
                         self.status.set('Setup needs attention');self.primary.configure(text='Try again');self.set_busy(False)
                     elif kind=='complete':self.completed=True
+                    elif kind=='apk':self.apk=event
                     elif kind=='exit':
                         if self.job:self.job.close();self.job=None
                         self.process=None;self.set_busy(False)
                         if self.completed and event['code']==0:
+                            if self.apk:self.show_apk()
+                            if self.android_only or self.android_setup:
+                                self.primary.configure(text='Build again');self.status.set('Android APK ready');self.detail.set(self.apk['detail'] if self.apk else '')
+                                self.window.after(100,self.poll);return
                             self.offer_free_space()
                             try:backend.launch_game(settings=SETTINGS);self.window.destroy();return
                             except Exception as error:self.status.set('Could not launch the game');self.detail.set(str(error))
@@ -181,6 +248,10 @@ def gui(test_hook=None):
                         self.primary.configure(text='Try again')
             except queue.Empty:pass
             self.window.after(100,self.poll)
+        def show_apk(self):
+            messagebox.showinfo('Android APK ready',self.apk['detail'],parent=self.window)
+            try:reveal(Path(self.apk['apk']).parent)
+            except Exception as error:backend.log_line(f'Show the APK: {error}')
         def offer_free_space(self):
             try:
                 size=backend.spare_size()
@@ -213,7 +284,12 @@ if __name__=='__main__':
         try:ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except (AttributeError,OSError):pass
     try:
-        if backend.ready():backend.launch_game(settings=SETTINGS)
+        # Build Android APK: the APK of a game already here (an older one is
+        # updated first), else the Android game alone, files asked once.
+        if ANDROID_ONLY:
+            prepared=backend.ready() or backend.android_ready() or bool(backend.load_json(backend.STATE/'ready.json'))
+            gui(android_only=prepared,android_setup=not prepared)
+        elif backend.ready() and (not SETUP or SETTINGS):backend.launch_game(settings=SETTINGS)
         else:gui()
     except Exception as error:
         import tkinter as tk

@@ -8,9 +8,22 @@ ROOT=Path(__file__).resolve().parents[1]
 STATE=ROOT/'.setup'
 BUILD=ROOT/'build-release'
 WINDOWS=os.name=='nt'
-EXE=BUILD/('Tekken_3_Recompiled.exe' if WINDOWS else 'Tekken_3_Recompiled')
-RELEASE='0.1.4-easy-setup'   # a new value makes existing installs rebuild once
-LOCK=json.loads((ROOT/'launcher/tools.lock.json').read_text())
+EXE=BUILD/('Tekken_3_Expanded.exe' if WINDOWS else 'Tekken_3_Expanded')
+# A new value makes existing installs generate and rebuild once (generated
+# code, setup). A change of the TTT1 import's output does not need it: that is
+# tools/ttt1_import_version.py's TTT1_IMPORT_VERSION.
+RELEASE='0.1.4-easy-setup'
+class _Lock(dict):
+    """launcher/tools.lock.json, the pinned downloads: Windows only (the compiler
+    pack), read when first needed, so macOS and Linux never need it."""
+    def __missing__(self,key):
+        if not self:
+            path=ROOT/'launcher/tools.lock.json'
+            try:self.update(json.loads(path.read_text(encoding='utf-8')))
+            except (OSError,ValueError) as error:
+                raise SetupError(f'{path.name} is missing or damaged: get this folder again (git pull, or the whole ZIP).') from error
+        return dict.__getitem__(self,key)
+LOCK=_Lock()
 
 class SetupError(Exception):
     pass
@@ -46,9 +59,31 @@ def ready():
     if not (ROOT/'disc/Tekken 3 (USA).cue').is_file():return False
     try:
         if digest(EXE)!=state.get('exe_sha256'):return False
-        if state.get('ttt1',state.get('jun')) and not ttt1_ready(BUILD/'mods/ttt1'):return False
+        # An older TTT1 import (after a git pull or a new release) needs the setup again.
+        if state.get('ttt1',state.get('jun')) and not ttt1_current(INSTALLED):return False
+        # Cinematics older than this checkout (tools/ttt_cinematics.py's CINEMATICS_VERSION).
+        if state.get('ttt_cinematics') and not cinematics_current():return False
     except OSError:return False
     return True
+
+def import_version():
+    """tools/ttt1_import_version.py: TTT1_IMPORT_VERSION, the stamp, the update steps."""
+    tools=str(Path(__file__).resolve().parents[1]/'tools')
+    if tools not in sys.path:sys.path.insert(0,tools)
+    import ttt1_import_version
+    return ttt1_import_version
+
+def ttt1_current(folder):
+    V=import_version()
+    return ttt1_ready(folder) and V.read_stamp(folder)>=V.TTT1_IMPORT_VERSION
+
+def android_ready():
+    """A game prepared for Android alone (prepare(..., pc=False)): its generated
+    code, disc and current imports are here, without the PC build."""
+    state=load_json(STATE/'android.json')
+    if state.get('ttt1') and not ttt1_current(ROSTER):return False
+    return (state.get('release')==RELEASE and (ROOT/'generated/SLUS_004.02_dispatch.c').is_file()
+            and (ROOT/'disc/Tekken 3 (USA).cue').is_file())
 
 def ttt1_ready(folder):
     """A TTT1 characters catalogue (tools/ttt1_stage_roster.py) with every
@@ -58,13 +93,81 @@ def ttt1_ready(folder):
     keys=[l.split()[0] for l in listed.read_text(encoding='utf-8').splitlines() if l.split()] if listed.is_file() else []
     return bool(keys) and all((folder/f'{k.capitalize()}-TTT1-combat.jmv').is_file() for k in keys)
 
+# The TTT1 import's catalogue, and its copy beside the game, which stays when
+# "free up disk space" deletes workspace/.
+WORK=ROOT/'workspace/ttt1-import'
+ROSTER=WORK/'roster'
+INSTALLED=BUILD/'mods/ttt1'
+# TTT Cinematics (tools/ttt_cinematics.py), beside the catalogue.
+CINEMATICS=BUILD/'mods/ttt-cinematics'
+# The same for the Android game set up alone (Build Android APK): the APK
+# takes it as mods/ttt-cinematics (tools/android/make_apk.py).
+ANDROID_CINEMATICS=ROOT/'workspace/ttt-cinematics'
+
+def cinematics_current():
+    tools=str(ROOT/'tools')
+    if tools not in sys.path:sys.path.insert(0,tools)
+    import ttt_cinematics as C
+    return (CINEMATICS/'cinematics.txt').is_file() and C.read_stamp(CINEMATICS)>=C.CINEMATICS_VERSION
+
+def cinematics_models_ready():
+    """Jin's models for the TTT cinematics, made once from the import's work files."""
+    return all((CINEMATICS/f'{m}-TTT1-arcade-P1.{e}').is_file() for m in ('JinPlain','DevilJinEnd') for e in ('3dm','relocs','tim'))
+
+def ttt1_plan(jin_red=False,tekken3=None,cinematics=False):
+    """What brings the TTT1 characters to this import version: ('current',[])
+    nothing; ('update',steps) those update steps (tools/ttt1_import_version.py),
+    on the roster or, workspace/ deleted, on a copy of build-release/mods/ttt1;
+    ('import',[]) a new import from the ROM."""
+    V=import_version()
+    folder=ROSTER if ttt1_ready(ROSTER) else INSTALLED if ttt1_ready(INSTALLED) else None
+    if folder is None:return 'import',[]
+    # Options the earlier setup was run without.
+    if jin_red and not any(p.is_file() for p in (WORK/'jin/Jin-TTT1-hiteffect.tim',BUILD/'mods/jin-ttt1-hit-effect/Jin-TTT1-hiteffect.tim')):
+        return 'import',[]
+    if tekken3 and not any(p.is_file() for p in (ROOT/'workspace/difficulty/levels.bin',BUILD/'mods/difficulty/levels.bin')):
+        return 'import',[]
+    # The TTT cinematics need Jin's models, made from the work files.
+    if cinematics and not cinematics_models_ready() and not ((WORK/'ttt1/bankedroms.bin').is_file() and (WORK/'captures').is_dir()):
+        return 'import',[]
+    steps=V.update_steps(V.read_stamp(folder))
+    if steps is None:return 'import',[]
+    work=(WORK/'ttt1/bankedroms.bin').is_file() and (WORK/'captures').is_dir() and folder==ROSTER
+    if not work and any(V.STEPS[s][0]=='workspace' for s in steps):return 'import',[]
+    return ('update' if steps else 'current'),steps
+
+def update_ttt1(steps,env):
+    """tools/ttt1_setup.py --update: the update steps, no MAME, each in the log."""
+    V=import_version()
+    if not ttt1_ready(ROSTER):
+        # workspace/ was deleted: work on a copy of the installed catalogue.
+        log_line(f'TTT1 update: {ROSTER} missing, working on a copy of {INSTALLED}')
+        shutil.rmtree(ROSTER,ignore_errors=True);shutil.copytree(INSTALLED,ROSTER)
+    log_line('TTT1 update steps: '+', '.join(f'{s} ({V.STEPS[s][1]})' for s in steps))
+    emit(message='Updating the TTT1 characters',detail=', '.join(V.STEPS[s][1] for s in steps)+'. No new import needed.')
+    run([sys.executable,ROOT/'tools/ttt1_setup.py','--update','--roster',ROSTER],environment=env,
+        friendly="The TTT1 characters' update could not finish. Open the setup log for details, then click Try again.")
+
+def install_roster():
+    """The roster beside the game, replacing the older copy (the build's own
+    copy only adds files, and only when the executable is linked again)."""
+    if not ttt1_ready(ROSTER):return
+    temp=INSTALLED.with_name('ttt1.new')
+    try:
+        shutil.rmtree(temp,ignore_errors=True);shutil.copytree(ROSTER,temp)
+        shutil.rmtree(INSTALLED,ignore_errors=True);temp.replace(INSTALLED)
+    except OSError as error:
+        log_line(str(error));raise SetupError('The TTT1 characters could not be copied beside the game. Close the game, then click Try again.') from error
+
 def log_line(text):
     STATE.mkdir(exist_ok=True)
     with (STATE/'setup.log').open('a',encoding='utf-8') as f:f.write(text+'\n')
 
-def run(command, *, environment=None, directory=ROOT, friendly='Setup could not finish.', timeout=None, only_code=None):
+def run(command, *, environment=None, directory=ROOT, friendly='Setup could not finish.', timeout=None, only_code=None,
+        progress='Preparing game files'):
     """friendly: the message for a failure; with only_code, for that exit code
-    only, and any other failure shows the last line of the command's output."""
+    only, and any other failure shows the last line of the command's output.
+    progress: the words before a build's step counter."""
     log_line('RUN '+subprocess.list2cmdline([str(x) for x in command]))
     with subprocess.Popen([str(x) for x in command],cwd=directory,env=environment,
             stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',
@@ -76,7 +179,7 @@ def run(command, *, environment=None, directory=ROOT, friendly='Setup could not 
             if line.strip():tail=line.strip()
             match=re.match(r'\[(\d+)/(\d+)\]',line)
             if match and time.monotonic()-last>.25:
-                emit(detail='Preparing game files: '+match[1]+' / '+match[2]);last=time.monotonic()
+                emit(detail=progress+': '+match[1]+' / '+match[2]);last=time.monotonic()
         code=process.wait(timeout=timeout)
     if code and only_code is not None and code!=only_code:
         raise SetupError(f'Setup stopped: {tail[-300:]} (details in {STATE/"setup.log"})')
@@ -151,22 +254,6 @@ def tools():
         save_json(marker,{'archive_sha256':LOCK['toolchain']['sha256']})
     return folder
 
-def mame():
-    if not WINDOWS:
-        found=shutil.which('mame') or next((p for p in ('/opt/homebrew/bin/mame','/usr/local/bin/mame') if Path(p).is_file()),None)
-        if not found:raise SetupError('MAME is missing (the TTT1 import runs your arcade ROM in it). On macOS: brew install mame')
-        return Path(found)
-    folder=STATE/'tools/mame-0.289';marker=folder/'.ready.json'
-    if load_json(marker).get('archive_sha256')!=LOCK['mame']['sha256'] or not (folder/'mame.exe').is_file():
-        emit(message='Getting the TTT1 import tool',detail='Downloading from the MAME project.')
-        archive=download(LOCK['mame'])
-        folder.mkdir(parents=True,exist_ok=True)
-        emit(message='Preparing the TTT1 import tool',detail='Your game files stay on this PC.')
-        run([archive,'-y','-o'+str(folder)],friendly='The TTT1 import tool could not be unpacked.')
-        if not (folder/'mame.exe').is_file():raise SetupError('The TTT1 import tool is missing after unpacking.')
-        save_json(marker,{'archive_sha256':LOCK['mame']['sha256']})
-    return folder/'mame.exe'
-
 def prepare_textures():
     from PIL import Image
     emit(message='Preparing the included mods',detail='Skins, outfit gallery and HD stage textures.')
@@ -183,6 +270,17 @@ def prepare_textures():
 
 def msf(text):
     m,s,f=(int(x) for x in text.split(':'));return (m*60+s)*75+f
+
+def cue_for(disc):
+    """A .bin chosen in place of its .cue: the .cue beside it that names it, if
+    any. A single-file dump holds every track, and only its .cue says where
+    track 1 (the one verified) ends."""
+    if disc.suffix.lower()!='.bin':return disc
+    for cue in sorted(disc.parent.glob('*.cue'))+sorted(disc.parent.glob('*.CUE')):
+        try:text=cue.read_text(encoding='utf-8',errors='replace')
+        except OSError:continue
+        if any(m.lower()==disc.name.lower() for m in re.findall(r'FILE\s+"([^"]+)"',text,flags=re.I)):return cue
+    return disc
 
 def single_bin(disc):
     """A .cue whose tracks all sit in one .bin (a single-file dump): write one
@@ -220,7 +318,7 @@ def single_bin(disc):
     return path
 
 REQUIRED=('psxrecomp/psxrecomp_cli.py','psxrecomp/tools/sdk_progress.py','psxrecomp/runtime','psxrecomp/recompiler/CMakeLists.txt',
-          'recomp-ui','tools/ttt1_import.py','tools/ttt1_setup.py','src','mods','CMakeLists.txt','game.toml')
+          'recomp-ui','tools/ttt1_import.py','tools/ttt1_setup.py','tools/ttt1_import_version.py','src','mods','CMakeLists.txt','game.toml')
 
 def complete():
     """A partly extracted download (an interrupted unzip, an antivirus, or
@@ -229,20 +327,25 @@ def complete():
     if missing:raise SetupError('This folder is incomplete (missing: '+', '.join(missing[:4])+'). Extract the whole download again '
                                 '(on Windows, to a short path such as C:\\Games, with 7-Zip or git clone), then run the setup again.')
 
-def validate_files(disc,ttt,include_ttt1):
-    if not disc.is_file():raise SetupError('Choose your Tekken 3 USA PS1 disc image first.')
+def validate_disc(disc,updating=False):
+    if not disc.is_file():
+        if updating:raise SetupError(f'This update needs your Tekken 3 disc image again: it is no longer at {disc}. Choose it, then click Try again.')
+        raise SetupError('Choose your Tekken 3 USA PS1 disc image first.')
     emit(message='Checking your game files',detail='Checking the supported disc revision.')
     run([sys.executable,ROOT/'psxrecomp/psxrecomp_cli.py','verify-disc','--project-root',ROOT,'--config',ROOT/'game.toml','--disc',disc],
         friendly='This disc does not match the supported Tekken 3 USA (SLUS-00402) release. Choose its CUE or BIN file, with all tracks present.',
         only_code=3)   # psxrecomp_cli: 3 = digest mismatch, 1 = an error of its own
-    if include_ttt1:
-        if not ttt.is_file():raise SetupError("Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.")
-        sys.path.insert(0,str(ROOT/'tools'))
-        import arcade_model_probe as probe
-        definitions=load_json(probe.MANIFEST)['sets']
-        try:probe.reconstruct(ttt,definitions['tektagt'])
-        except (ValueError,zipfile.BadZipFile,OSError) as error:
-            log_line(str(error));raise SetupError('The arcade ZIP does not match the supported set. The TTT1 characters need tektagt (World C1), non-merged.') from error
+
+def validate_ttt1(ttt,updating=False):
+    if not ttt.is_file():
+        if updating:raise SetupError(f'Updating the TTT1 characters needs your tektagt.zip again: it is no longer at {ttt}. Choose it, then click Try again.')
+        raise SetupError("Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.")
+    if str(ROOT/'tools') not in sys.path:sys.path.insert(0,str(ROOT/'tools'))
+    import arcade_model_probe as probe
+    definitions=load_json(probe.MANIFEST)['sets']
+    try:probe.reconstruct(ttt,definitions['tektagt'])
+    except (ValueError,zipfile.BadZipFile,OSError) as error:
+        log_line(str(error));raise SetupError('The arcade ZIP does not match the supported set. The TTT1 characters need tektagt (World C1), non-merged.') from error
 
 # tekken3.zip's program ROMs, TET2/VER.E1 (tet2vere1.2e, .2j), by CRC as MAME
 # finds them: sets from older MAME versions give the same chips other names.
@@ -272,6 +375,10 @@ def build_game(toolchain,env,include_ttt1):
     emit(message='Building your game',detail='This is the long part. Next time you can play immediately.')
     run([cmake,'--build',BUILD,'--target','psx-runtime','--parallel',env['CMAKE_BUILD_PARALLEL_LEVEL']],
         environment=env,friendly='The game build stopped. Open the setup log for the specific error, then click Try again. Completed work is kept.')
+    # Before 1.2 the game was Tekken_3_Recompiled: never leave it to run stale.
+    for old in ('Tekken_3_Recompiled.exe','Tekken_3_Recompiled'):
+        try:(BUILD/old).unlink()
+        except FileNotFoundError:pass
     if WINDOWS:play_exe(cmake,env)
     elif sys.platform=='darwin':play_app()
 
@@ -294,6 +401,7 @@ APP_PLIST='''<?xml version="1.0" encoding="UTF-8"?>
   <key>CFBundleExecutable</key><string>Tekken 3 Expanded</string>
   <key>CFBundleIdentifier</key><string>io.github.omarma.tekken3-expanded</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>icon</string>
   <key>LSUIElement</key><true/>
 </dict></plist>
 '''
@@ -313,13 +421,20 @@ def play_app():
         contents=PLAY_APP/'Contents';(contents/'MacOS').mkdir(parents=True,exist_ok=True)
         (contents/'Info.plist').write_text(APP_PLIST,encoding='utf-8')
         script=contents/'MacOS/Tekken 3 Expanded';script.write_text(APP_SCRIPT,encoding='utf-8');script.chmod(0o755)
-    except OSError as error:log_line(f'Tekken 3 Expanded.app skipped: {error}')
+    except OSError as error:log_line(f'Tekken 3 Expanded.app skipped: {error}');return
+    # The T3E icon (packaging/icon.png); without it Finder shows the generic one.
+    try:
+        from PIL import Image
+        (contents/'Resources').mkdir(exist_ok=True)
+        Image.open(ROOT/'packaging/icon.png').convert('RGBA').save(contents/'Resources/icon.icns')
+        os.utime(PLAY_APP)                         # Finder reads the icon again
+    except Exception as error:log_line(f'Tekken 3 Expanded.app icon skipped: {error}')
 
 # Only the setup and its updates read these: the downloaded tools, the TTT1
 # import's work files and the build's object files. generated/ stays: the game
 # checks for it at every start (psxrecomp/host/psxrecomp_codegen_host.c), and
 # disc/ holds its own copy of the tracks in .setup/disc-tracks.
-SPARE_FOLDERS=('.setup/tools','.setup/downloads','.setup/disc-tracks','workspace')
+SPARE_FOLDERS=('.setup/tools','.setup/downloads','.setup/android/downloads','.setup/disc-tracks','workspace')
 
 def spare_files():
     for name in SPARE_FOLDERS:
@@ -341,8 +456,8 @@ def offer_free_space(size):
 def free_space_question(size):
     return (f"{size/1024**3:.1f} GB in this folder are only used by the setup and by updates: the downloaded tools, "
             "the TTT1 import's work files and the build's intermediate files. The game does not need them.\n\n"
-            "If you delete them, the next update that rebuilds the game runs the whole first setup again "
-            "(about 17 minutes) and needs your disc image and tektagt.zip again.\n\nDelete them now?")
+            "If you delete them, the next update that rebuilds the game can take as long as the first setup "
+            "(about 17 minutes), and one that imports the TTT1 characters again needs your tektagt.zip again.\n\nDelete them now?")
 
 def decline_free_space():
     save_json(STATE/'free-space.json',{'declined':True})
@@ -355,23 +470,73 @@ def free_space():
         except OSError:pass
     log_line('Freed up disk space: '+', '.join(SPARE_FOLDERS)+' and the build objects deleted')
 
-def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
+def game_current():
+    """The game was generated by this release: an update only rebuilds it, without the disc."""
+    return (load_json(STATE/'ready.json').get('release')==RELEASE and (ROOT/'generated').is_dir()
+            and (ROOT/'disc/Tekken 3 (USA).cue').is_file())
+
+def needs(include_ttt1,jin_red=False,tekken3=None,cinematics=False):
+    """Which of the player's files this setup reads: (disc, TTT1 ROM)."""
+    try:rom=include_ttt1 and ttt1_plan(jin_red or cinematics,tekken3,cinematics)[0]=='import'
+    except Exception:rom=include_ttt1
+    return not game_current(),rom
+
+def ttt_disc_supported(path):
+    """A Tekken Tag Tournament USA PS2 disc with the endings' music."""
+    if str(ROOT/'tools') not in sys.path:sys.path.insert(0,str(ROOT/'tools'))
+    import ttt_cinematics
+    try:return ttt_cinematics.music_found(path)
+    except (OSError,ValueError,StopIteration,IndexError):return False
+
+def prepare_cinematics(ttt_disc,catalogue=None,out=None):
+    """The TTT cinematics beside the installed catalogue (tools/ttt_cinematics.py)."""
+    catalogue,out=catalogue or INSTALLED,out or CINEMATICS
+    # TTT Cinematics music off: Tekken 3's, even if a PS2 disc gave TTT's before.
+    if not ttt_disc:
+        try:(out/'ending-music.pcm').unlink()
+        except FileNotFoundError:pass
+    emit(message="Preparing the TTT cinematics",detail="With the music of TTT's endings from your PS2 disc." if ttt_disc
+         else "No Tekken Tag Tournament PS2 disc given: the cinematics play over Tekken 3's music.")
+    run([sys.executable,ROOT/'tools/ttt_cinematics.py','--catalogue',catalogue,'--out',out,*(['--ttt-disc',ttt_disc] if ttt_disc else [])],
+        friendly="The TTT cinematics could not be prepared. Open the setup log for details, then click Try again.")
+
+def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False,cinematics=False,ttt_disc=None,android=False,pc=True):
+    """First setup, or an update: generate the game again only for a new
+    RELEASE, and bring the TTT1 characters to this import version with the
+    least work (ttt1_plan). pc=False (with android, Build Android APK): only
+    what the Android APK needs, no PC build, for players who only want the
+    game on their phone."""
     STATE.mkdir(exist_ok=True)
     with (STATE/'setup.log').open('w',encoding='utf-8') as f:f.write('Tekken 3 easy setup '+RELEASE+'\n')
     # Only run in the unpacked writable application folder, never require admin.
     complete()
     if shutil.disk_usage(ROOT).free<4*1024**3:raise SetupError('Setup needs at least 4 GB of free space in this folder.')
+    updating=bool(load_json(STATE/'ready.json'))
     save_json(STATE/'last-inputs.json',{'disc':str(disc),'ttt1':str(ttt) if include_ttt1 else '',
-        'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),'jin_red':jin_red})
-    if disc.is_file():disc=single_bin(disc)
-    validate_files(disc,ttt,include_ttt1)
+        'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),'jin_red':jin_red,
+        'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'android':android})
+    # The TTT cinematics come with the TTT1 characters, and play Jin's red lightning.
+    cinematics=cinematics and include_ttt1
+    if cinematics and ttt_disc and not ttt_disc_supported(ttt_disc):
+        log_line(f'{ttt_disc}: not Tekken Tag Tournament USA (SLUS-20001) for PS2, endings music skipped')
+        emit(message="Skipping the TTT endings' music",detail="That disc is not Tekken Tag Tournament USA for PS2. The cinematics play over Tekken 3's music.")
+        ttt_disc=None
+    generate=not game_current()
+    if generate:
+        if disc.is_file():disc=single_bin(cue_for(disc))
+        validate_disc(disc,updating)
+    else:log_line(f'Game generated by release {RELEASE}: rebuilding only')
     # Optional: an unsupported tekken3.zip only costs the arcade difficulty
     # levels, checked now rather than failing at the end of the import.
     if tekken3 and not tekken3_supported(tekken3):
         log_line(f'{tekken3}: no TET2/VER.E1 program ROMs, arcade difficulty levels skipped')
         emit(message='Skipping the arcade difficulty levels',detail='Your tekken3.zip is not the TET2/VER.E1 set (see the README). Setup goes on without them.')
         tekken3=None
+    jin_red=jin_red or cinematics
+    plan,steps=ttt1_plan(jin_red,tekken3,cinematics) if include_ttt1 else ('none',[])
     if include_ttt1:
+        log_line(f'TTT1 characters: {plan}, import version {import_version().TTT1_IMPORT_VERSION}'+(' ('+', '.join(steps)+')' if steps else ''))
+        if plan=='import':validate_ttt1(ttt,updating)
         for module in ('PIL','numpy'):
             try:__import__(module)
             except ImportError as error:raise SetupError(f'The Python module {module} is missing. Run the setup script again (it installs it).') from error
@@ -382,27 +547,87 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False):
         # Keep compiler setup local to this process; do not modify the user's PATH.
         env['PATH']=str(toolchain/'bin')+os.pathsep+env.get('PATH','')
         env.update(PSXRECOMP_TOOLCHAIN_DIR=str(toolchain),RETCOMM_TOOLCHAIN_DIR=str(toolchain))
-    emit(message='Preparing your Tekken 3 disc',detail='Generating the game locally. Your files are not uploaded.')
-    run([sys.executable,ROOT/'psxrecomp/psxrecomp_cli.py','generate','--project-root',ROOT,
-         '--config',ROOT/'game.toml','--disc',disc,'--no-toolchain-download'],environment=env,
-        friendly='The game files could not be prepared. Open the setup log for details, then click Try again.')
+    if generate:
+        emit(message='Preparing your Tekken 3 disc',detail='Generating the game locally. Your files are not uploaded.')
+        run([sys.executable,ROOT/'psxrecomp/psxrecomp_cli.py','generate','--project-root',ROOT,
+             '--config',ROOT/'game.toml','--disc',disc,'--no-toolchain-download'],environment=env,
+            friendly='The game files could not be prepared. Open the setup log for details, then click Try again.')
     prepare_textures()
-    jin_effect=ROOT/'workspace/ttt1-import/jin/Jin-TTT1-hiteffect.tim'
-    levels=ROOT/'workspace/difficulty/levels.bin'
-    if include_ttt1 and (not ttt1_ready(ROOT/'workspace/ttt1-import/roster') or (jin_red and not jin_effect.is_file())
-                         or (tekken3 and not levels.is_file())):
-        oracle=mame()
+    if plan=='import':
         emit(message='Adding the TTT1 characters',detail='Importing their models, moves, voices and portraits from your ROM. The first time takes about 15 minutes. This runs muted.')
-        command=[sys.executable,ROOT/'tools/ttt1_setup.py','--ttt1',ttt,'--mame',oracle,'--no-rebuild']
+        command=[sys.executable,ROOT/'tools/ttt1_setup.py','--ttt1',ttt,'--no-rebuild']
         if jin_red:command.append('--jin-red-lightning')
         if tekken3:command+=['--tekken3',tekken3]
         run(command,
             environment=env,friendly="The TTT1 characters' import could not finish. Open the setup log for details, then click Try again.")
+    elif plan=='update':update_ttt1(steps,env)
+    if not pc:
+        # The Android build stages the TTT1 guests and the difficulty levels
+        # from workspace/ itself (CMakeLists.txt).
+        if include_ttt1 and not ttt1_current(ROSTER):
+            raise SetupError("The TTT1 characters' import is incomplete. Click Try again.")
+        if cinematics:prepare_cinematics(ttt_disc,ROSTER,ANDROID_CINEMATICS)
+        else:
+            try:(ANDROID_CINEMATICS/'cinematics.txt').unlink()
+            except FileNotFoundError:pass
+        save_json(STATE/'android.json',{'release':RELEASE,'ttt1':include_ttt1,'ttt_cinematics':cinematics})
+        android_apk(toolchain,env)
+        emit('complete',message='Android APK ready',detail='Setup is complete.')
+        return
     build_game(toolchain,env,include_ttt1)
     if not EXE.is_file():raise SetupError('The game executable was not created.')
-    if include_ttt1 and not ttt1_ready(BUILD/'mods/ttt1'):raise SetupError('The TTT1 characters are missing from the finished build. Click Try again.')
-    save_json(STATE/'ready.json',{'release':RELEASE,'ttt1':include_ttt1,'exe_sha256':digest(EXE)})
+    if include_ttt1:
+        install_roster()
+        if not ttt1_current(INSTALLED):raise SetupError('The TTT1 characters are missing from the finished build. Click Try again.')
+    if cinematics:prepare_cinematics(ttt_disc)
+    else:
+        # Turned off: the feature finds no settings and does nothing.
+        try:(CINEMATICS/'cinematics.txt').unlink()
+        except FileNotFoundError:pass
+    save_json(STATE/'ready.json',{'release':RELEASE,'ttt1':include_ttt1,'exe_sha256':digest(EXE),'ttt_cinematics':cinematics,
+                                  'ttt1_import':import_version().TTT1_IMPORT_VERSION if include_ttt1 else None})
+    # After ready.json: the PC game plays even if the Android build stops.
+    if android:android_apk(toolchain,env)
     emit('complete',message='Ready to play',detail='Setup is complete.')
+
+APK=ROOT/'Tekken3Expanded.apk'
+
+def android_apk(toolchain=None,env=None):
+    """The Android APK of the game just set up: tools/android/make_apk.py,
+    its progress shown here and its build output in the setup log."""
+    sys.path.insert(0,str(ROOT/'tools/android'))
+    import make_apk
+    emit(message='Building the Android APK',detail='The first time downloads the Android tools (about 1 GB).')
+    def step(command,environment):
+        run(command,environment=environment,progress='Building the Android game',
+            friendly='The Android build stopped. Open the setup log for the specific error, then click Try again. Completed work is kept.')
+    try:apk=make_apk.build(out=APK,say=lambda message,detail='':emit(message=message,detail=detail),run=step,toolchain=toolchain,env=env)
+    except make_apk.Stop as error:raise SetupError(str(error)) from error
+    log_line(f'Android APK: {apk}')
+    emit('apk',message='Android APK ready',detail=f'{apk}\n\n'+make_apk.install_hint(apk),apk=str(apk))
+    return apk
+
+def android_only():
+    """--android without --disc: the APK of a game already set up."""
+    STATE.mkdir(exist_ok=True)
+    with (STATE/'setup.log').open('w',encoding='utf-8') as f:f.write('Tekken 3 Android APK '+RELEASE+'\n')
+    # Never an APK of an older install: the setup's update first, same steps.
+    if not ready() and not android_ready():
+        if not load_json(STATE/'ready.json'):
+            raise SetupError('Choose your game files first (Build Android APK asks for them), then build the APK.')
+        update_install()
+        with (STATE/'setup.log').open('a',encoding='utf-8') as f:f.write('Tekken 3 Android APK '+RELEASE+'\n')
+    android_apk(tools())
+    emit('complete',message='Android APK ready',detail=str(APK))
+
+def update_install():
+    """--update: an existing install brought to this version with the files it
+    was set up with (.setup/last-inputs.json)."""
+    saved=load_json(STATE/'last-inputs.json')
+    if not saved or not load_json(STATE/'ready.json'):raise SetupError('No earlier setup was found here. Run the first setup.')
+    path=lambda key:Path(saved[key]) if saved.get(key) else Path()
+    prepare(path('disc'),path('ttt1'),saved.get('include_ttt1',True),path('tekken3') if saved.get('tekken3') else None,
+            saved.get('jin_red',False),saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None)
 
 def launch_game(settings=False):
     """The game opens on its launcher unless the player ticked its "Skip
@@ -414,27 +639,40 @@ def launch_game(settings=False):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('--disc',required=True,type=Path)
+    parser.add_argument('--disc',type=Path,help='required, unless --update, or --android builds the APK of a game already set up')
     parser.add_argument('--ttt1',type=Path,default=Path())
     parser.add_argument('--no-ttt1',action='store_true')
     parser.add_argument('--tekken3',type=Path,help='tekken3.zip: the arcade difficulty levels')
     parser.add_argument('--jin-red-lightning',action='store_true')
+    parser.add_argument('--ttt-cinematics',action='store_true',help="TTT Cinematics, the Tekken Tag Tournament endings")
+    parser.add_argument('--ttt-disc',type=Path,help="Tekken Tag Tournament USA PS2 disc: the endings' music")
     parser.add_argument('--wait-for-parent',action='store_true')
     parser.add_argument('--text',action='store_true',help='plain progress lines (terminal setup)')
     parser.add_argument('--play',action='store_true',help='start the game once setup is complete')
     parser.add_argument('--settings',action='store_true',help='with --play: open the launcher even if it is skipped on boot')
+    parser.add_argument('--update',action='store_true',help='update an existing install with the files it was set up with')
+    parser.add_argument('--android',action='store_true',help='Build Android APK: the APK of the game already set up, updated first')
+    parser.add_argument('--android-only',action='store_true',help='Build Android APK with --disc: the Android game alone, without the PC game')
     args=parser.parse_args()
+    if not args.disc and not args.update and not args.android:parser.error('--disc is required')
+    if args.android_only and not args.disc:parser.error('--android-only needs --disc')
     TEXT=args.text
     # Parent assigns the process to a Job before releasing this handshake.
     if args.wait_for_parent and sys.stdin.readline().strip()!='START':sys.exit(1)
-    try:prepare(args.disc.resolve(),args.ttt1.resolve(),not args.no_ttt1,
-                args.tekken3.resolve() if args.tekken3 else None,args.jin_red_lightning)
+    try:
+        if args.disc:prepare(args.disc.resolve(),args.ttt1.resolve(),not args.no_ttt1,
+                             args.tekken3.resolve() if args.tekken3 else None,args.jin_red_lightning,
+                             args.ttt_cinematics,args.ttt_disc.resolve() if args.ttt_disc else None,
+                             android=args.android or args.android_only,pc=not args.android_only)
+        elif args.android:android_only()
+        else:update_install()
     except Exception as error:
         import traceback
         log_line(traceback.format_exc())
         emit('error',message=str(error) if isinstance(error,SetupError) else f'Setup stopped unexpectedly. See {STATE/"setup.log"}.')
         sys.exit(1)
-    if args.text and sys.stdin.isatty():
+    # Android alone keeps workspace/: the next APK builds stage from it.
+    if args.text and args.disc and not args.android_only and sys.stdin.isatty():
         size=spare_size()
         if offer_free_space(size):
             if input(free_space_question(size)+' [y/N] ').strip().lower()[:1] in ('y','o'):

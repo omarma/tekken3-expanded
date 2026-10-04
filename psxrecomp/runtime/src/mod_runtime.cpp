@@ -472,7 +472,13 @@ bool run_xdelta_decode(const std::filesystem::path& executable,
                        const std::filesystem::path& patch,
                        const std::filesystem::path& output,
                        std::string* error) {
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    /* No program is run from the app's data folder on a phone (and Android
+     * refuses to run one there anyway): no mod derives a disc on Android. */
+    (void)executable; (void)source; (void)patch; (void)output;
+    if (error) *error = "mods that rebuild the disc are not supported on Android";
+    return false;
+#elif defined(_WIN32)
     std::wstring command =
         quote_windows_argument(executable.wstring()) + L" -f -n -d -s " +
         quote_windows_argument(source.wstring()) + L" " +

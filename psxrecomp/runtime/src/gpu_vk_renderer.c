@@ -22,6 +22,7 @@
 #include "gpu_vk_renderer.h"
 #include "gpu_sw_renderer.h"
 #include "host_osd.h"
+#include "touch_controls.h"   /* psx_safe_area_px */
 #include "crash_trace.h"
 #include "gpu_vk_upload.h"
 
@@ -865,8 +866,23 @@ static int create_swapchain(void) {
     ci.imageArrayLayers = 1;
     ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    ci.preTransform = caps.currentTransform;
+    /* No pre-rotation: frames are drawn upright and, when the display is
+     * rotated (a phone held in landscape reports ROTATE_90), the compositor
+     * turns them. Handing currentTransform over unrotated frames would show
+     * them sideways. Desktops report IDENTITY either way. */
+    ci.preTransform = (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                          ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : caps.currentTransform;
+    /* Many Android drivers only offer INHERIT; take OPAQUE when it exists. */
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    if (!(caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) {
+        static const VkCompositeAlphaFlagBitsKHR kAlpha[] = {
+            VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+            VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+            VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+        };
+        for (size_t i = 0; i < sizeof(kAlpha) / sizeof(kAlpha[0]); i++)
+            if (caps.supportedCompositeAlpha & kAlpha[i]) { ci.compositeAlpha = kAlpha[i]; break; }
+    }
     ci.presentMode = choose_present_mode();
     ci.clipped = VK_TRUE;
     if (p_vkCreateSwapchainKHR(s_dev, &ci, NULL, &s_swapchain) != VK_SUCCESS)
@@ -1639,6 +1655,18 @@ static void letterbox(int sw, int sh, int aw, int ah, VkOffset3D off[2]) {
     int tw = sw, th = sw * ah / aw;
     if (th > sh) { th = sh; tw = sh * aw / ah; }
     int x = (sw - tw) / 2, y = (sh - th) / 2;
+    /* Keep out of a display cutout's insets when the centred rect reaches
+     * into them (as gpu_gl_renderer.c's letterbox_rect_aspect). */
+    int l, t, r, b;
+    psx_safe_area_px(sw, sh, &l, &t, &r, &b);
+    if (b > t) t = b;
+    if ((x < l || x + tw > sw - r || y < t) && sw - l - r > 0 && sh - 2 * t > 0) {
+        const int aw2 = sw - l - r, ah2 = sh - 2 * t;
+        tw = aw2; th = aw2 * ah / aw;
+        if (th > ah2) { th = ah2; tw = ah2 * aw / ah; }
+        x = l + (aw2 - tw) / 2;
+        y = t + (ah2 - th) / 2;
+    }
     off[0].x = x;       off[0].y = y;       off[0].z = 0;
     off[1].x = x + tw;  off[1].y = y + th;  off[1].z = 1;
 }

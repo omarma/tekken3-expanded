@@ -269,6 +269,7 @@ set(PSXRECOMP_RUNTIME_SOURCES
     ${PSXRECOMP_ROOT}/runtime/src/bios_hle_plan.c
     ${PSXRECOMP_ROOT}/runtime/src/savestate.c
     ${PSXRECOMP_ROOT}/runtime/src/host_osd.c
+    ${PSXRECOMP_ROOT}/runtime/src/touch_controls.c
     ${PSXRECOMP_ROOT}/runtime/src/host_keymap.c
     ${PSXRECOMP_ROOT}/runtime/src/cosim_state.c
     ${PSXRECOMP_ROOT}/runtime/src/cosim.c
@@ -290,6 +291,7 @@ set(PSXRECOMP_RUNTIME_SOURCES
     ${PSXRECOMP_ROOT}/runtime/src/color_lut.c
     ${PSXRECOMP_ROOT}/runtime/src/iso_reader.cpp
     ${PSXRECOMP_ROOT}/runtime/src/iso_reader_c.cpp
+    ${PSXRECOMP_ROOT}/runtime/src/disc_sector_log.c
     ${PSXRECOMP_ROOT}/runtime/src/psx_cycles.c
     ${PSXRECOMP_ROOT}/runtime/src/psx_icache.c
     ${PSXRECOMP_ROOT}/runtime/src/starvation_ring.c
@@ -765,13 +767,47 @@ function(psxrecomp_add_runtime_target target)
         set(mode_source ${PSXRECOMP_ROOT}/runtime/src/stub_interpreter.c)
     endif()
 
-    add_executable(${target}
-        ${PSXRECOMP_RUNTIME_SOURCES}
-        ${mode_source}
-        ${generated_sources}
-        ${PSXRT_EXTRAS_SOURCES}
-    )
+    if(ANDROID)
+        # SDLActivity loads the game as libmain.so and calls its SDL_main,
+        # which android_main.c forwards to the runtime's main().
+        add_library(${target} SHARED
+            ${PSXRECOMP_RUNTIME_SOURCES}
+            ${PSXRECOMP_ROOT}/runtime/src/android_main.c
+            ${PSXRECOMP_ROOT}/runtime/src/android_apk_file.c
+            ${PSXRECOMP_ROOT}/runtime/src/disc_pack.c
+            ${mode_source}
+            ${generated_sources}
+            ${PSXRT_EXTRAS_SOURCES}
+        )
+        # The disc's tracks are read in place from the APK: every fopen in
+        # libmain.so (std::ifstream's included) goes through
+        # android_apk_file.c, which redirects the placeholders the app
+        # leaves for them.
+        target_link_options(${target} PRIVATE
+            "LINKER:--wrap=fopen" "LINKER:--wrap=fopen64")
+        # Only the JNI entry points and SDL_main are exported (libmain.map).
+        target_link_options(${target} PRIVATE
+            "LINKER:--version-script=${PSXRECOMP_ROOT}/runtime/android/libmain.map")
+        set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS
+            ${PSXRECOMP_ROOT}/runtime/android/libmain.map)
+    else()
+        add_executable(${target}
+            ${PSXRECOMP_RUNTIME_SOURCES}
+            ${mode_source}
+            ${generated_sources}
+            ${PSXRT_EXTRAS_SOURCES}
+        )
+    endif()
     target_link_libraries(${target} PRIVATE chdr-static)
+    # The HD texture packs as PNG (hd_png.c, recomp-ui's stb_image): what the
+    # Android APK ships instead of their .rgba. PC builds read only the .rgba
+    # (forest-hd's background.png there is the uncropped source).
+    if(ANDROID AND RECOMP_UI_ROOT AND EXISTS "${RECOMP_UI_ROOT}/src/third_party/stb_image.h")
+        target_sources(${target} PRIVATE ${PSXRECOMP_ROOT}/runtime/src/hd_png.c)
+        set_source_files_properties(${PSXRECOMP_ROOT}/runtime/src/hd_png.c PROPERTIES
+            INCLUDE_DIRECTORIES "${RECOMP_UI_ROOT}/src/third_party")
+        target_compile_definitions(${target} PRIVATE PSX_HD_PNG=1)
+    endif()
     # audio_trace.c uses C11 atomics. Make the runtime's actual language
     # requirement explicit instead of relying on a parent project's global
     # CMAKE_C_STANDARD setting.
@@ -795,6 +831,9 @@ function(psxrecomp_add_runtime_target target)
     endif()
     if(PSXRT_ORACLE)
         set(_psxrt_exe_name "${_psxrt_exe_name}_oracle")
+    endif()
+    if(ANDROID)
+        set(_psxrt_exe_name "main")
     endif()
     set_target_properties(${target} PROPERTIES OUTPUT_NAME "${_psxrt_exe_name}")
 

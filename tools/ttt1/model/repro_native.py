@@ -30,7 +30,7 @@ if work.exists(): shutil.rmtree(work)
 shutil.copytree(ROOT / 'workspace/fixtures/ps1-saves', work / 'saves', dirs_exist_ok=True)
 with socket.socket() as s:
     s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
-args = [str(ROOT / 'build-opt-dbg/Tekken_3_Recompiled'), '--game', str(ROOT / 'game.toml'),
+args = [str(ROOT / 'build-opt-dbg/Tekken_3_Expanded'), '--game', str(ROOT / 'game.toml'),
         '--disc', str(ROOT / 'disc/Tekken 3 (USA).cue'), '--no-launcher', '--renderer', 'software',
         '--headless', '--debug-port', str(port), '--memcard-dir', str(work / 'saves')]
 env = dict(os.environ, SDL_AUDIO_DRIVER='dummy', TEKKEN3_JUN_ASSETS=str(guest), TEKKEN3_JUN_ROSTER='1',

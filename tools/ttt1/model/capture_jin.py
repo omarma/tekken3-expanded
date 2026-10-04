@@ -22,7 +22,7 @@ log_path = OUT / 'run.log'
 def start():
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
-    args = [str(ROOT/BUILD/'Tekken_3_Recompiled'), '--game', str(ROOT/'game.toml'),
+    args = [str(ROOT/BUILD/'Tekken_3_Expanded'), '--game', str(ROOT/'game.toml'),
             '--disc', str(ROOT/'disc/Tekken 3 (USA).cue'), '--no-launcher',
             '--renderer', 'software', '--headless', '--debug-port', str(port),
             '--memcard-dir', str(ROOT/'workspace/fixtures/ps1-saves')]

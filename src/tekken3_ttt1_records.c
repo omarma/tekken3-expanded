@@ -331,9 +331,11 @@ static void time_attack_tick(void) {
     for(unsigned i=0;i<3;i++)ta_record->name[i]=psx_mod_read_byte(ta_row+4+i);
     save();
 }
+static void rx_tick(void);
 void tekken3_ranking_tick(void) {
     if(guests_pending){guests_pending=0;guests_back();}
     time_attack_tick();
+    rx_tick();
     if(!in_ranking()){ranking_guests_reset();ranking_live=0;descriptors_restore();tekken3_ranking_faces_restore();return;}
     for(int slot=0;slot<RANKING_SLOTS;slot++)
         if(ranking_live && ranking_map[slot]>=NATIVES)tekken3_ranking_face((unsigned)slot,(unsigned)ranking_map[slot]);
@@ -395,7 +397,137 @@ static void build_ranking(CPUState *cpu) {
     cpu->gpr[21]=(uint32_t)n;       /* the builder copies s5 entries */
     ranking_count=n;ranking_live=1;
 }
+/* RECORDS (OPTION MODE, state 5) with the guests. The overlay lists each of
+ * its four pages in a 0x20-byte structure {+0 scroll, +4 count, +8 ids}, so 24
+ * fighters at most, and reads a row by ID from two tables (TIME ATTACK
+ * 0x80097F4C, +2/+4 of the counters 0x8009804C) and a name from descriptor
+ * (id mod 22) * 4. Guests have IDs 23 and up. The mod therefore patches the
+ * overlay (each patch only where the original word is, so a reloaded overlay
+ * is patched again and another one left alone) to read its structures and
+ * tables from main RAM at RX (measured free in OPTION MODE: tools/
+ * ttt1_records_probe.py), 0x40 bytes per page (56 ids), and to look names up by
+ * the full ID (the descriptor tables are the guests' extended ones). The
+ * overlay's sort call (0x8004CD80, return 0x800E09DC TIME ATTACK, 0x800E0A94
+ * USAGE) is answered here: the list (stock and guests) is built, sorted and
+ * written into the page structure, and the overlay's own copy is skipped
+ * (its count register is zeroed). The loops that run before the sort write at
+ * most 22 pairs to the overlay's 23-pair stack array, so nothing overruns it. */
+enum { RX=0x801e0000, RX_END=RX+0x3a0, RX_TA=RX+0x100, RX_WL=RX+0x250, RX_PAGE=0x40, RX_IDS=RX_PAGE-8,
+       RECORDS_STATE=5, SCREEN_STATE=0x800ae204, USAGE_TOTAL=0x800ec450 };
+typedef struct { uint32_t address,original,value; } CodePatch;
+static const CodePatch rx_patches[]={
+    {0x800e08d0,0x3c02800f,0x3c02801e},{0x800e08d4,0x2455c458,0x24550000},   /* S1 page structures, init */
+    {0x800e0ad0,0x26d60020,0x26d60040},{0x800e0adc,0x26b50020,0x26b50040},   /* S2 S3 stride */
+    {0x800e0bc0,0x3c03800f,0x3c03801e},{0x800e0bc8,0x2463c458,0x24630000},   /* S4 page structures, per frame */
+    {0x800e0bcc,0x00021140,0x00021180},                                      /* S5 stride (shift 5 -> 6) */
+    {0x800df990,0x02042023,0x02002021},{0x800dfca8,0x02038023,0x02008021},   /* N1 N2 names: id, not id mod 22 */
+    {0x800dffb8,0x02042023,0x02002021},{0x800e04d4,0x02042023,0x02002021},   /* N3 N4 */
+    {0x800df8d4,0x3c028009,0x3c02801e},{0x800df8d8,0x24427f4c,0x24420100},   /* T1 TIME ATTACK rows */
+    {0x800e0414,0x3c02800a,0x3c02801e},{0x800e0418,0x2442804c,0x24420250},   /* T2 WINS/LOSSES rows */
+};
+enum { RX_PATCHES=sizeof rx_patches/sizeof *rx_patches };
+static void rx_w32(uint32_t a,uint32_t v){if(a>=RX && a+4<=RX_END)psx_mod_write_word(a,v);}
+static void rx_w8(uint32_t a,unsigned v){if(a>=RX && a<RX_END)psx_mod_write_byte(a,(uint8_t)v);}
+/* 0 = overlay not there (or another), 1 = stock words, 2 = patched. */
+static int rx_overlay(void) {
+    unsigned stock=0,patched=0;
+    for(unsigned i=0;i<RX_PATCHES;i++) {
+        uint32_t w=psx_mod_read_word(rx_patches[i].address);
+        stock+=w==rx_patches[i].original;patched+=w==rx_patches[i].value;
+    }
+    return patched==RX_PATCHES?2:stock==RX_PATCHES?1:0;
+}
+static void rx_tick(void) {
+    if(!tekken3_ttt1_roster_enabled() || psx_mod_read_word(SCREEN_STATE)!=RECORDS_STATE)return;
+    if(rx_overlay()!=1)return;
+    for(unsigned i=0;i<RX_PATCHES;i++)psx_mod_write_code_word(rx_patches[i].address,rx_patches[i].value);
+}
+typedef struct { int id; uint32_t key; } RxEntry;      /* key: what the page is sorted on */
+static int rx_ascending(const void *a,const void *b) {
+    const RxEntry *x=a,*y=b;
+    return x->key!=y->key?(x->key<y->key?-1:1):x->id-y->id;
+}
+static int rx_descending(const void *a,const void *b) {
+    const RxEntry *x=a,*y=b;
+    return x->key!=y->key?(x->key>y->key?-1:1):x->id-y->id;
+}
+static const TimeRecord *rx_find_time(unsigned id) {
+    const char *key=tekken3_guest_key(id);
+    if(!key)return NULL;
+    load();
+    for(unsigned i=0;i<time_record_count;i++)if(!strcmp(time_records[i].key,key))return &time_records[i];
+    return NULL;
+}
+static unsigned rx_publish(uint32_t page,const RxEntry *e,unsigned n) {
+    if(n>RX_IDS)n=RX_IDS;
+    for(unsigned i=0;i<n;i++)rx_w8(page+8+i,(unsigned)e[i].id);
+    rx_w32(page+4,n);
+    return n;
+}
+/* Returns 1 when the call was answered. */
+static int rx_sort(CPUState *cpu) {
+    uint32_t back=cpu->gpr[31],page=cpu->gpr[21];
+    if((back!=0x800e09dc && back!=0x800e0a94 && back!=0x800e0304) || !tekken3_ttt1_roster_enabled() ||
+       psx_mod_read_word(SCREEN_STATE)!=RECORDS_STATE || rx_overlay()!=2)return 0;
+    if(page<RX || page>=RX+4*RX_PAGE)return 0;
+    RxEntry list[RX_IDS+8];unsigned n=0;
+    if(back==0x800e0304) {                                     /* wins / losses page */
+        /* The overlay's own pairs {id, key} (stock fighters of the mask in s4) are
+         * on the stack at a0; the guests' keys are made the way it makes them. */
+        unsigned stock=cpu->gpr[19];
+        for(unsigned i=0;i<stock && i<22 && n<RX_IDS;i++) {
+            list[n].id=(int)psx_mod_read_word(cpu->gpr[4]+i*8);list[n++].key=psx_mod_read_word(cpu->gpr[4]+i*8+4);
+        }
+        for(unsigned id=0;id<NATIVES;id++)
+            for(unsigned i=0;i<8;i++)rx_w8(RX_WL+id*8+i,psx_mod_read_byte(NATIVE_RECORDS+id*8+i));
+        for(unsigned id=NATIVES;id<NATIVES+64 && id*8+8<=0x150;id++) {
+            for(unsigned i=0;i<8;i++)rx_w8(RX_WL+id*8+i,0);
+            if(tekken3_guest_character(id)<0)continue;
+            const GuestRecord *r=find_record(id);
+            for(unsigned f=0;r && f<4;f++){rx_w8(RX_WL+id*8+f*2,r->field[f]&0xff);rx_w8(RX_WL+id*8+f*2+1,r->field[f]>>8);}
+            unsigned a=r?r->field[1]:0,b=r?r->field[2]:0,sum=a+b,pct=0;
+            if(sum)pct=a*1000/sum;
+            if(n<RX_IDS){list[n].id=(int)id;list[n++].key=(pct<<20)+sum;}
+        }
+        qsort(list,n,sizeof *list,rx_descending);
+        rx_publish(page,list,n);
+        cpu->gpr[19]=0;
+    } else if(back==0x800e09dc) {                                     /* TIME ATTACK */
+        for(unsigned id=0;id<NATIVES;id++) {
+            uint32_t row=TA_TABLE+id*8,time=psx_mod_read_word(row);
+            for(unsigned i=0;i<8;i++)rx_w8(RX_TA+id*8+i,psx_mod_read_byte(row+i));
+            if(id!=21 && (id<10 || time<TA_NO_TIME) && n<RX_IDS){list[n].id=(int)id;list[n++].key=time;}
+        }
+        for(unsigned id=NATIVES;id<NATIVES+64 && id*8+8<=0x150;id++) {
+            for(unsigned i=0;i<8;i++)rx_w8(RX_TA+id*8+i,0);
+            if(tekken3_guest_character(id)<0)continue;
+            const TimeRecord *r=rx_find_time(id);
+            rx_w32(RX_TA+id*8,r?r->time:TA_NO_TIME);
+            for(unsigned i=0;i<4;i++)rx_w8(RX_TA+id*8+4+i,r?r->name[i]:0);
+            if(r && r->time<TA_NO_TIME && n<RX_IDS){list[n].id=(int)id;list[n++].key=r->time;}
+        }
+        qsort(list,n,sizeof *list,rx_ascending);
+        rx_publish(page,list,n);
+        cpu->gpr[17]=0;                                        /* the overlay's copy is skipped */
+    } else {                                                   /* USAGE */
+        uint32_t mask=cpu->gpr[19];uint32_t total=psx_mod_read_word(USAGE_TOTAL);
+        for(unsigned id=0;id<NATIVES;id++)
+            if(id!=21 && (mask>>id&1) && n<RX_IDS){list[n].id=(int)id;list[n++].key=games(id);}
+        for(unsigned id=NATIVES;id<NATIVES+64;id++) {
+            if(tekken3_guest_character(id)<0)continue;
+            unsigned g=games(id);total+=g;
+            if(n<RX_IDS){list[n].id=(int)id;list[n++].key=g;}
+        }
+        qsort(list,n,sizeof *list,rx_descending);
+        rx_publish(page,list,n);
+        psx_mod_write_word(USAGE_TOTAL,total);                 /* the overlay's own variable: guests' games added */
+        cpu->gpr[18]=0;
+    }
+    cpu->pc=back;
+    return 1;
+}
 void __wrap_func_8004CD80(CPUState *cpu) {
+    if(entry(cpu,0x8004cd80) && rx_sort(cpu))return;
     if(entry(cpu,0x8004cd80) && in_ranking()) {
         /* s3 = the structure it fills: the other rankings share it only
          * when they are the ones on screen. */

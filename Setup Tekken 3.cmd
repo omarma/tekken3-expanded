@@ -7,6 +7,7 @@ if not exist ".setup\venv\Scripts\python.exe" (
 )
 rem Also after an install cut short (no network, window closed): the venv then exists without them.
 .setup\venv\Scripts\python.exe -c "import PIL, numpy" 2>nul || (
-    .setup\venv\Scripts\python.exe -m pip install --quiet -r tools\requirements-import.txt || (echo Could not install Pillow and numpy.& pause & exit /b 1)
+    .setup\venv\Scripts\python.exe -m pip install --quiet --require-hashes --only-binary=:all: -r tools\requirements-pip.txt || (echo Could not install pip.& pause & exit /b 1)
+    .setup\venv\Scripts\python.exe -m pip install --quiet --require-hashes --only-binary=:all: -r tools\requirements-import.txt || (echo Could not install Pillow and numpy.& pause & exit /b 1)
 )
-start "" ".setup\venv\Scripts\pythonw.exe" launcher\easy_launcher.py %*
+start "" ".setup\venv\Scripts\pythonw.exe" launcher\easy_launcher.py --setup %*

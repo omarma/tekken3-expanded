@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ttt1_live as L
 
 NATIVES = {'paul': 0, 'law': 1, 'lei': 2, 'king': 3, 'yoshimitsu': 4, 'nina': 5,
-           'hwoarang': 6, 'xiaoyu': 7, 'eddy': 8, 'jin': 9, 'julia': 10,
-           'bryan': 12, 'heihachi': 13, 'anna': 18}
-PAD_RIGHT, PAD_LEFT, PAD_SQUARE, PAD_CROSS = 0xffdf, 0xff7f, 0x7fff, 0xbfff
+           'hwoarang': 6, 'xiaoyu': 7, 'eddy': 8, 'jin': 9, 'julia': 10, 'kuma': 11,
+           'bryan': 12, 'heihachi': 13, 'ogre': 14, 'gunjack': 16, 'anna': 18, 'trueogre': 20}
+PAD_RIGHT, PAD_LEFT, PAD_DOWN, PAD_SQUARE, PAD_CROSS = 0xffdf, 0xff7f, 0xffbf, 0x7fff, 0xbfff
 ACTOR = 0x800a9228; STRIDE = 0x188c
 
 
@@ -34,9 +34,11 @@ def run(s, native, cid, ttt1):
     s.wait(lambda: s.value(0x800ae204) == 9 and s.value(0x80118648) == 21,
            'The stock selector grid never appeared', 20)
     time.sleep(1.5)
-    for _ in range(24):
+    for _ in range(48):                              # right along a row, then down a row
         if s.value(0x80118668) == cid: break
+        before = s.value(0x80118668)
         s.press(PAD_RIGHT)
+        if _ % 12 == 11 or s.value(0x80118668) == before: s.press(PAD_DOWN)
     else: raise AssertionError(f'Cabinet navigation did not reach {native}')
     def pick(player, ttt1):
         """Square picks the native under the cursor: its MOVESET card opens
@@ -110,8 +112,9 @@ def main():
     ap.add_argument('--t3', action='store_true', help='keep the T3 moves (R1 not pressed)')
     ap.add_argument('--visible', action='store_true')
     ap.add_argument('--slot', type=int, default=7, help='selector save: 7 Arcade, 8 Practice')
+    ap.add_argument('--build', default=str(L.ROOT / 'build-opt-dbg'), help='build directory')
     a = ap.parse_args()
-    s = L.Session(visible=a.visible, guest='jun', slot=a.slot)
+    s = L.Session(visible=a.visible, guest='jun', slot=a.slot, build=Path(a.build))
     try:
         report = run(s, a.native, NATIVES[a.native], not a.t3)
         print(json.dumps(report, indent=2))

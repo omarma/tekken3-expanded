@@ -24,9 +24,17 @@ bool launcher_platform_open(LauncherPlatform* p, const char* title,
         return false;
     }
 
+#ifdef LNG_GLES2
+    // Android: an ES 2.0 context, matching the ImGui backend built with
+    // IMGUI_IMPL_OPENGL_ES2 (as launcher_platform_sdl2.c does).
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
 
@@ -35,7 +43,11 @@ bool launcher_platform_open(LauncherPlatform* p, const char* title,
     // logical-size buffer the compositor blurs up. RESIZABLE lets us exercise
     // the live-resize requirement.
     const SDL_WindowFlags flags =
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
+#if defined(__ANDROID__)
+        | SDL_WINDOW_FULLSCREEN   // the whole screen, without the status bar
+#endif
+        ;
 
     p->window = SDL_CreateWindow(title ? title : "Launcher",
                                  logical_w, logical_h, flags);

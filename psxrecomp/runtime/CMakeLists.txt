@@ -266,6 +266,16 @@ if(BUILD_TESTING)
     target_link_libraries(iso_reader_cdda_test PRIVATE chdr-static)
     add_test(NAME iso_reader_cdda_test COMMAND iso_reader_cdda_test)
 
+    # A damaged ISO9660 directory (a name past its record, a ~4 GB size)
+    # is refused instead of read past the reader's buffers.
+    add_executable(iso_reader_damaged_test
+        tests/test_iso_reader_damaged.cpp
+        src/iso_reader.cpp
+        src/cue_sheet.cpp)
+    target_include_directories(iso_reader_damaged_test PRIVATE include)
+    target_link_libraries(iso_reader_damaged_test PRIVATE chdr-static)
+    add_test(NAME iso_reader_damaged_test COMMAND iso_reader_damaged_test)
+
     add_executable(mod_packages_test
         tests/test_mod_packages.cpp
         src/mod_packages.cpp
@@ -275,6 +285,17 @@ if(BUILD_TESTING)
         include
         ../recompiler/lib/toml11)
     add_test(NAME mod_packages_test COMMAND mod_packages_test)
+
+    # toml11 recurses without a depth limit; every runtime TOML read goes
+    # through toml_depth_guard::parse, which must reject absurd nesting (stack
+    # overflow) and still accept the repo's own game.toml and mod manifests.
+    add_executable(toml_depth_guard_test tests/test_toml_depth_guard.cpp)
+    target_include_directories(toml_depth_guard_test PRIVATE
+        include
+        ../recompiler/lib/toml11)
+    target_compile_definitions(toml_depth_guard_test PRIVATE
+        TOML_GUARD_REPO_ROOT="${PSXRECOMP_ROOT}/..")
+    add_test(NAME toml_depth_guard_test COMMAND toml_depth_guard_test)
 
     add_executable(mod_runtime_test
         tests/test_mod_runtime.cpp
@@ -355,6 +376,22 @@ if(BUILD_TESTING)
     add_executable(gpu_primitive_reject_test tests/test_gpu_primitive_reject.c)
     target_include_directories(gpu_primitive_reject_test PRIVATE include)
     add_test(NAME gpu_primitive_reject_test COMMAND gpu_primitive_reject_test)
+
+    # Savestate restore must refuse out-of-range cursors/counts (sio/gpu/cdrom/
+    # spu/mdec) instead of letting them index fixed buffers. Links the real
+    # device modules plus the pure helpers gpu.c reaches; the test file stubs
+    # the rest (renderer, debug server, netplay, ISO reader, CPU bus).
+    add_executable(snapshot_bounds_test
+        tests/test_snapshot_bounds.c
+        src/sio.c src/gpu.c src/cdrom.c src/spu.c src/mdec.c src/memcard.c
+        src/crc32.c src/color_lut.c src/ws_ui_group.c src/ws_aspect_cone_math.c
+        src/tekken3_selector_layout.c src/tekken3_ball_background.c
+        src/tekken3_force_background.c src/widescreen_layer_classifier.c)
+    target_include_directories(snapshot_bounds_test PRIVATE include src)
+    if(NOT MSVC)
+        target_link_libraries(snapshot_bounds_test PRIVATE m)
+    endif()
+    add_test(NAME snapshot_bounds_test COMMAND snapshot_bounds_test)
 
     add_executable(gpu_sw_edges_test tests/test_gpu_sw_edges.c)
     target_include_directories(gpu_sw_edges_test PRIVATE src)

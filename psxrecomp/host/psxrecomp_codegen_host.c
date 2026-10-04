@@ -1,6 +1,7 @@
 /* Portable generate → rebuild (--no-pgo from setup) → relaunch host. */
 
 #include "psxrecomp_codegen_host.h"
+#include "psx_sha256.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #  include <dirent.h>
 #  include <errno.h>
 #  include <fcntl.h>
+#  include <limits.h>
 #  include <spawn.h>
 #  include <sys/stat.h>
 #  include <sys/wait.h>
@@ -1631,7 +1633,11 @@ static int run_cli_posix(char* const argv[],
 
 /* ---- Host-native toolchain install (no Store Python AppData redirect) ---- */
 
-static const char* k_tc_repo = "TechnicallyComputers/retcomm-toolchains";
+/* A fixed release, each archive checked against its SHA-256 before it is
+ * unpacked (the same pack launcher/tools.lock.json pins for Windows): a
+ * "latest" download would run whatever the release page holds that day. */
+static const char* k_tc_repo = "RetroPortingToolKit/RetroPorting-Toolchains";
+static const char* k_tc_tag = "v1.0.10";
 
 static const char* toolchain_zip_asset_name(void) {
 #if defined(_WIN32)
@@ -1643,9 +1649,44 @@ static const char* toolchain_zip_asset_name(void) {
 #endif
 }
 
+static const char* toolchain_zip_sha256(void) {
+#if defined(_WIN32)
+    return "2abd36016aa60510632cbe230b914b252fff3c41f7288ae20d90de16d0c19dee";
+#elif defined(__APPLE__)
+    return "0ef56c1a2594a5722a8b63352a737f2161954a278a495f53dea0c5fb32eb5b5e";
+#else
+    return "2bbf8a7b23bd17c4262c5b604c0afa982e988f34014038de865494b6f93df81b";
+#endif
+}
+
+/* 1 when the file's SHA-256 is `expected` (lowercase hex). */
+static int file_sha256_is(const char* path, const char* expected) {
+    static const char hex[] = "0123456789abcdef";
+    uint8_t buf[1 << 16], digest[32];
+    char got[65];
+    size_t n;
+    psx_sha256_ctx ctx;
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return 0;
+    psx_sha256_init(&ctx);
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        psx_sha256_update(&ctx, buf, n);
+    const int failed = ferror(f);
+    fclose(f);
+    if (failed)
+        return 0;
+    psx_sha256_final(&ctx, digest);
+    for (int i = 0; i < 32; ++i) {
+        got[2 * i] = hex[digest[i] >> 4];
+        got[2 * i + 1] = hex[digest[i] & 15];
+    }
+    got[64] = '\0';
+    return strcmp(got, expected) == 0;
+}
+
 /* Optional floor via RETCOMM_TOOLCHAIN_MIN_VERSION. Wizard/default is empty:
- * download GitHub /releases/latest and accept any usable pack (no per-title
- * version pinning to maintain). */
+ * accept any usable pack already installed; a download is k_tc_tag. */
 static const char* toolchain_min_version(void) {
     const char* env = getenv("RETCOMM_TOOLCHAIN_MIN_VERSION");
     if (env && env[0])
@@ -1935,7 +1976,7 @@ static int set_toolchain_latest_pointer(const char* cache_root,
     /* Already points at a usable pack (symlink or real dir with bin/). */
     if (pack_root_has_cmake_direct(latest)) {
 #if !defined(_WIN32)
-        char latest_res[1400], pack_res[1400];
+        char latest_res[PATH_MAX], pack_res[PATH_MAX];
         if (realpath(latest, latest_res) && realpath(resolved_pack, pack_res) &&
             strcmp(latest_res, pack_res) == 0)
             return 1;
@@ -2559,8 +2600,8 @@ static int host_download_and_install_toolchain(
     char url[512], zip_path[1400], tmp_dir[1100];
     const char* asset = toolchain_zip_asset_name();
     snprintf(url, sizeof(url),
-             "https://github.com/%s/releases/latest/download/%s", k_tc_repo,
-             asset);
+             "https://github.com/%s/releases/download/%s/%s", k_tc_repo,
+             k_tc_tag, asset);
 #if defined(_WIN32)
     {
         char tmp[512];
@@ -2572,10 +2613,16 @@ static int host_download_and_install_toolchain(
         snprintf(tmp_dir, sizeof(tmp_dir), "%spsxrecomp-tc-%lu", tmp,
                  (unsigned long)GetCurrentProcessId());
     }
-#else
-    snprintf(tmp_dir, sizeof(tmp_dir), "/tmp/psxrecomp-tc-%d", (int)getpid());
-#endif
     mkdir_p(tmp_dir);
+#else
+    /* A fresh private folder: a fixed /tmp name could be made beforehand
+     * by another user, who could then swap the archive. */
+    snprintf(tmp_dir, sizeof(tmp_dir), "/tmp/psxrecomp-tc-XXXXXX");
+    if (!mkdtemp(tmp_dir)) {
+        snprintf(err_msg, err_cap, "Cannot create a temporary folder.");
+        return 0;
+    }
+#endif
     if (!join_path(zip_path, sizeof(zip_path), tmp_dir, asset)) {
         snprintf(err_msg, err_cap, "Temp path too long.");
         return 0;
@@ -2583,6 +2630,13 @@ static int host_download_and_install_toolchain(
     if (on_progress)
         on_progress(progress_ctx, 0.1f, "Downloading portable cmake/clang…");
     if (!host_download_url_to_file(url, zip_path, err_msg, err_cap)) {
+        rmtree_path(tmp_dir);
+        return 0;
+    }
+    if (!file_sha256_is(zip_path, toolchain_zip_sha256())) {
+        snprintf(err_msg, err_cap,
+                 "The toolchain download (%s %s) is damaged or not the expected "
+                 "file. Run this again.", k_tc_tag, asset);
         rmtree_path(tmp_dir);
         return 0;
     }
@@ -2980,127 +3034,15 @@ static int host_local_toolchain_version(char* out, size_t cap) {
     return read_pack_version(pack, out, cap);
 }
 
-/* Parse "tag_name":"…" or a …/releases/tag/<ver> URL into *out. */
-static int parse_github_release_tag(const char* text, char* out, size_t cap) {
-    const char* p;
-    size_t i;
-    if (!text || !out || cap < 2)
-        return 0;
-    out[0] = '\0';
-    p = strstr(text, "\"tag_name\"");
-    if (p) {
-        p = strchr(p + 10, '"');
-        if (!p)
-            return 0;
-        ++p;
-        i = 0;
-        while (*p && *p != '"' && i + 1 < cap)
-            out[i++] = *p++;
-        out[i] = '\0';
-        return i > 0;
-    }
-    p = strstr(text, "/releases/tag/");
-    if (!p)
-        return 0;
-    p += strlen("/releases/tag/");
-    i = 0;
-    while (*p && *p != '"' && *p != '\'' && *p != ' ' && *p != '\n' &&
-           *p != '\r' && *p != '?' && *p != '#' && i + 1 < cap)
-        out[i++] = *p++;
-    out[i] = '\0';
-    return i > 0;
-}
-
-/* Query GitHub for the latest cmake-clang-v1 release tag (short timeout). */
+/* The version a download installs: the pinned release (no network). */
 static int host_remote_toolchain_version(char* out, size_t cap) {
-    char url[320], tmp[1400], buf[8192];
-    FILE* f;
-    size_t n;
-    char err[256];
     if (!out || cap < 2)
         return 0;
-    out[0] = '\0';
-    snprintf(url, sizeof(url),
-             "https://api.github.com/repos/%s/releases/latest", k_tc_repo);
-#if defined(_WIN32)
-    {
-        char tdir[512];
-        DWORD tn = GetTempPathA(sizeof(tdir), tdir);
-        if (tn == 0 || tn >= sizeof(tdir))
-            return 0;
-        snprintf(tmp, sizeof(tmp), "%spsxrecomp-tc-latest-%lu.json", tdir,
-                 (unsigned long)GetCurrentProcessId());
-    }
-#else
-    snprintf(tmp, sizeof(tmp), "/tmp/psxrecomp-tc-latest-%d.json", (int)getpid());
-#endif
-    /* GitHub API wants a UA; keep the request short so wizard open stays snappy. */
-#if defined(_WIN32)
-    {
-        char cmd[4096];
-        DWORD code = 1;
-        DeleteFileA(tmp);
-        snprintf(cmd, sizeof(cmd),
-                 "curl.exe -fsSL --connect-timeout 5 --max-time 15 "
-                 "-A psxrecomp-codegen -H \"Accept: application/vnd.github+json\" "
-                 "-o \"%s\" \"%s\"",
-                 tmp, url);
-        if (!run_cmdline_wait(cmd, &code) || code != 0 || !path_is_file(tmp)) {
-            /* Fallback via cmd so stdout redirect works under CreateProcess. */
-            DeleteFileA(tmp);
-            snprintf(cmd, sizeof(cmd),
-                     "cmd.exe /C \"curl.exe -fsSIL --connect-timeout 5 "
-                     "--max-time 15 -A psxrecomp-codegen -o NUL "
-                     "-w %%{url_effective} "
-                     "https://github.com/%s/releases/latest > \"%s\"\"",
-                     k_tc_repo, tmp);
-            if (!run_cmdline_wait(cmd, &code) || code != 0 || !path_is_file(tmp))
-                return 0;
-        }
-    }
-#else
-    {
-        char cmd[4096];
-        unlink(tmp);
-        snprintf(cmd, sizeof(cmd),
-                 "curl -fsSL --connect-timeout 5 --max-time 15 "
-                 "-A psxrecomp-codegen -H 'Accept: application/vnd.github+json' "
-                 "-o '%s' '%s'",
-                 tmp, url);
-        if (system(cmd) != 0 || !path_is_file(tmp)) {
-            unlink(tmp);
-            snprintf(cmd, sizeof(cmd),
-                     "curl -fsSIL --connect-timeout 5 --max-time 15 "
-                     "-A psxrecomp-codegen -o /dev/null -w '%%{url_effective}' "
-                     "'https://github.com/%s/releases/latest' > '%s'",
-                     k_tc_repo, tmp);
-            if (system(cmd) != 0 || !path_is_file(tmp))
-                return 0;
-        }
-    }
-#endif
-    (void)err;
-    f = fopen(tmp, "rb");
-    if (!f) {
-#if defined(_WIN32)
-        DeleteFileA(tmp);
-#else
-        unlink(tmp);
-#endif
-        return 0;
-    }
-    n = fread(buf, 1, sizeof(buf) - 1, f);
-    fclose(f);
-#if defined(_WIN32)
-    DeleteFileA(tmp);
-#else
-    unlink(tmp);
-#endif
-    buf[n] = '\0';
-    return parse_github_release_tag(buf, out, cap);
+    snprintf(out, cap, "%s", k_tc_tag);
+    return 1;
 }
 
-/* 1 = installed pack is older than GitHub /releases/latest (prompt to update).
+/* 1 = installed pack is older than the pinned release (prompt to update).
  * 0 = up to date, not installed, offline, or RETCOMM_TOOLCHAIN_SKIP_UPDATE.
  * Always fills local/remote when discoverable. */
 static int host_toolchain_update_available(char* local_ver, size_t local_cap,

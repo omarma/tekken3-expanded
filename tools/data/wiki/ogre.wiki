@@ -1,0 +1,337 @@
+'''Ogre/Tekken Tag Tournament Movelist''' is a list of all of the moves that [[Ogre]] can perform in ''[[Tekken Tag Tournament]]''.
+
+==Movelist==
+
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Lift Up|Body Slam]]
+!1+3
+!Front
+!30
+!1
+|-
+![[Bear Hug]]
+!2+4
+!Front
+!35
+!2
+|-
+![[Bear Slam|Ankle Slam]]
+!1+3 (or 2+4)
+!Left
+!50
+!1
+|-
+![[Hanging Neck Throw]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Swing Swung]]
+!1+3 (or 2+4)
+!Back
+!70
+!
+|-
+![[Lift Up|Reverse Throw]]
+!Back to opponent 1+3 (or 2+4)
+!Front
+!30
+!
+|-
+![[Waning Moon|Spin Behind Elbow Smash]]
+!d/f, d/f+2+4
+!Front
+!30
+!1+2
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+! style="background-color:#AC0A0A" |Properties
+|-
+![[Flash Punch Combo]]
+!1, 1, 2
+!5, 8, 15
+!High, high, mid
+!KND
+|-
+![[Left Right Combo]]
+!1, 2
+!5, 15
+!High, high
+!
+|-
+![[Demon Slayer (Mishima)|Demon Slayer]]
+!1, 2, 2
+!5, 15, 18
+!High, high, high
+!
+|-
+![[Demon Backhand Spin|Cross to Backhand]]
+!2, 2
+!12, 21
+!High, high
+!
+|-
+![[Demon Scissors]]
+!4~3
+!25
+!Mid
+!KND
+|-
+![[Supercharger]]
+!1+2+3+4
+!-
+!-
+!
+|-
+![[Power Punch]]
+!f+2
+!28
+!Mid
+!
+|-
+![[Right Splits Kick]]
+!f+4
+!27
+!Mid
+!
+|-
+![[Shoulder Tackle (King)|Shoulder Tackle]]
+!f+1+4
+!30
+!Mid
+!GB
+|-
+![[Double Elbow]]
+!WS+1, 2
+!10, 15
+!Mid, mid
+!JG
+|-
+![[Shin to Head Kick]]
+!d+4, 4
+!7, 20
+!Low, high
+!
+|-
+![[Bloody Scissors]]
+!d+1+2
+!50
+!!
+!KND
+|-
+![[Deadly Stab|Deadly Slice]]
+!b+2
+!22
+!!
+!
+|-
+![[Ancient Power]]
+!b+1+2
+!-
+!-
+!
+|-
+![[Killing Blow]]
+!b+2+3
+!60
+!!
+!
+|-
+![[Dragon Wheel Kick|Windmill Kick]]
+!u/b+3
+!20
+!Mid
+!
+|-
+![[Windmill Kick Tooth Fairy]]
+!u/b+3, 2
+!25
+!Mid, mid
+!
+|-
+![[Hunting Hawk]]
+!u/f+3, 4, 3
+!15, 14, 25
+!Mid, mid, high
+!
+|-
+![[Capital Punishment|Double Knuckle]]
+!u/f+1+2
+!45
+!Mid
+!
+|-
+![[Burning Knuckle|Super Knuckle Bomb]]
+!u/f+1+2, D
+!45
+!(!)
+!
+|-
+![[Capital Punishment|Jump to Double Knuckle]]
+!u/f, N, 1+2
+!45
+!m
+!
+|-
+![[Burning Knuckle|Burning Double Knuckle]]
+!u/f, N, 1+2, D
+!45
+!(!)
+!
+|-
+![[Advancing Deadly Stab|Deadly Slash]]
+!f, f, N, 2
+!25
+!(!)
+!
+|-
+![[Hammer Heel]]
+!f, f, N, 4
+!20
+!Mid
+!
+|-
+![[Lee Sliding|Spinning Slide Kick]]
+!f, f ,N, 3+4
+!15
+!Low
+!
+|-
+![[Serpent's Venom]]
+!f, f+2
+!28
+!Mid, (!)
+!
+|-
+![[Left Splits Kick]]
+!f, F+3
+!23
+!Mid
+!KND
+|-
+![[Leg Bazooka]]
+!f, f+4
+!35
+!High
+!GB
+|-
+![[Medium Power Punch]]
+!f, f+1+2
+!25
+!Mid
+!
+|-
+![[Exploder]]
+!f, f+3+4
+!40
+!Mid
+!KND
+|-
+![[Blazing Kick]]
+!d, d/b+4
+!30
+!Mid
+!
+|-
+![[Dragon Power Punch]]
+!b, b+1+2
+!100
+!!
+!KND
+|-
+![[Demon God Fist|Heavy Body Blow]]
+!WS+2
+!25
+!Mid
+!
+|-
+![[Infinite Kick Chain|Infinite Kick Chain 1]]
+!WS+3, 3, d/f+3, 3
+!10, 25, 15, 10, 10
+!Mid, mid, mid, high
+!
+|-
+![[Infinite Kick Chain|Infinite Kick Chain 2]]
+!WS+3, 3, d+3, 3, 3
+!10, 25, 15, 10, 10
+!Mid, mid, low, mid, high
+!
+|-
+![[Low Variation]]
+!During Infinite Kick Chain d+3, 3, ...
+!15, 10, 10...
+!Low, mid, high
+!
+|-
+![[High Variation]]
+!During Infinite Kick Chain u+3, 3, ...
+!15, 10, 10...
+!Mid, mid, high
+!
+|-
+![[Tsunami Kick (Mishima)|Tsunami Kick]]
+!WS+3, 3
+!13, 18
+!Mid, mid
+!
+|-
+![[Tornado Kick (All)|Rising Kick]]
+!WS+3+4
+!28
+!High
+!
+|-
+![[Snake Rocket|Demented Snake]]
+!FC+3, 3, 3
+!12, 19, 25
+!Low, low, mid
+!JG
+|-
+![[Snake Kick]]
+!FC+3, 3, d+3
+!12, 19, 7
+!Low, low, low
+!RC
+|-
+![[Cat Thrust|Groin Punch]]
+!FC+f+1
+!25
+!Mid
+!
+|-
+![[Right Hand Stab|Slap]]
+!FC+f+2
+!25
+!Mid
+!
+|-
+![[Right Handed Sweep|Crouching Jab]]
+!FC+d/f+2
+!22
+!Low
+!
+|-
+![[Azteca Shoot]]
+!SS+4
+!22
+!Low
+!JG
+|}
+
+[[Category:Moves Lists]]
+[[Category:Ogre Moves]]
+[[Category:Tekken Tag Tournament Move Lists]]

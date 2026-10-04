@@ -8,6 +8,14 @@ if(WIN32)
     add_executable(tekken3-play WIN32 launcher/bootstrap.c)
     target_link_libraries(tekken3-play PRIVATE user32)
     set_target_properties(tekken3-play PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    # The T3E icon (launcher/icon.rc) on both executables, when a resource
+    # compiler is there; without one they keep the default icon.
+    include(CheckLanguage)
+    check_language(RC)
+    if(CMAKE_RC_COMPILER)
+        enable_language(RC)
+        target_sources(tekken3-play PRIVATE launcher/icon.rc)
+    endif()
 endif()
 
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
@@ -33,7 +41,7 @@ psxrecomp_add_game_runtime(psx-runtime
     # ENABLE_NETPLAY_IF_PRESENT
     # NETPLAY_LOBBY_URL "ws://netplay.retcomm.net:8765"
     ENABLE_SETUP_WIZARD
-    WINDOW_TITLE "Tekken 3 Recompiled"
+    WINDOW_TITLE "Tekken 3 Expanded"
     DEFAULT_GAME_CONFIG_PATH "game.toml"
     MAX_PLAYERS 2
     # LAUNCHER_BOXART "${CMAKE_CURRENT_SOURCE_DIR}/launcher_assets/img/boxart.tga"
@@ -190,6 +198,7 @@ if(TEKKEN3_TTT1_CHARACTERS)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_motion.c")
     tekken3_wrap_symbol(func_8003AD10)
     tekken3_wrap_symbol(func_80037CBC)
+    tekken3_wrap_symbol(func_80034844)
     tekken3_wrap_symbol(func_8006A3BC)
     tekken3_wrap_symbol(func_8003C8F0)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_combat.c")
@@ -211,7 +220,10 @@ if(TEKKEN3_TTT1_CHARACTERS)
     tekken3_wrap_symbol(func_80040C90)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_sfx.c")
     tekken3_wrap_symbol(func_80040DF4)
+    tekken3_wrap_symbol(func_80041CB4)
     tekken3_wrap_symbol(func_800757A8)
+    tekken3_wrap_symbol(func_8008D658)
+    tekken3_wrap_symbol(func_8003CB84)
     tekken3_wrap_symbol(spu_render)
     tekken3_wrap_symbol(spu_set_host_mix_volume)
     tekken3_wrap_symbol(spu_init)
@@ -223,8 +235,10 @@ if(TEKKEN3_TTT1_CHARACTERS)
     tekken3_wrap_symbol(func_8002E8D0)
     tekken3_wrap_symbol(func_8002E0BC)
     tekken3_wrap_symbol(func_8002CC28)
+    tekken3_wrap_symbol(func_8002EE94)
     tekken3_wrap_symbol(func_8002CD7C)
     tekken3_wrap_symbol(func_80059890)
+    tekken3_wrap_symbol(func_8002C580)
     tekken3_wrap_symbol(func_8002A914)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_selector.c")
     # Natives on their TTT1 moves, chosen on the selector's MOVESET card
@@ -235,6 +249,12 @@ if(TEKKEN3_TTT1_CHARACTERS)
     tekken3_wrap_symbol(host_osd_outfit_image)
     tekken3_wrap_symbol(host_osd_draw_sdl)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_roster.c")
+    # Kazuya's TTT ending in place of his Arcade ending movie (TTT Cinematics).
+    target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_embu_scenes.c")
+    tekken3_wrap_symbol(func_80063EEC)
+    tekken3_wrap_symbol(func_8004FF74)
+    tekken3_wrap_symbol(func_8002A40C)
+    tekken3_wrap_symbol(func_8006D7CC)
     tekken3_wrap_symbol(func_80052938)
     tekken3_wrap_symbol(func_80052940)
     tekken3_wrap_symbol(func_8004B790)
@@ -383,12 +403,17 @@ add_custom_command(TARGET psx-runtime POST_BUILD
 if(TEKKEN3_TTT1_CHARACTERS)
     set(TTT1_PACKAGE "${CMAKE_CURRENT_SOURCE_DIR}/mods/local-packages/tekken3.character.ttt1/1.0.0/manifest.toml")
     set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS "${TTT1_PACKAGE}")
+    # TTT Cinematics: its data comes from the setup (tools/ttt_cinematics.py).
+    set(TTT_CINEMATICS_PACKAGE "${CMAKE_CURRENT_SOURCE_DIR}/mods/local-packages/tekken3.cinematic.ttt-cinematics/1.0.0/manifest.toml")
+    set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS "${TTT_CINEMATICS_PACKAGE}")
     add_custom_command(TARGET psx-runtime POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:psx-runtime>/mods/jun"
             "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.jun-probe"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.ttt1/1.0.0"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TTT1_PACKAGE}" "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.ttt1/1.0.0/manifest.toml"
-        COMMENT "Staging the TTT1 characters package"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.cinematic.ttt-cinematics/1.0.0"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TTT_CINEMATICS_PACKAGE}" "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.cinematic.ttt-cinematics/1.0.0/manifest.toml"
+        COMMENT "Staging the TTT1 characters and TTT Cinematics packages"
         VERBATIM)
     # TTT1 guests gathered by tools/ttt1_stage_roster.py, switched at the selector.
     set(TTT1_ROSTER "${CMAKE_CURRENT_SOURCE_DIR}/workspace/ttt1-import/roster")
@@ -413,18 +438,18 @@ if(EXISTS "${JIN_TTT1_HIT_EFFECT}")
         VERBATIM)
 endif()
 
+if(WIN32 AND CMAKE_RC_COMPILER)
+    target_sources(psx-runtime PRIVATE launcher/icon.rc)
+endif()
+
 # Finder draws a generic icon for a bare Unix executable, there being nowhere
-# in one to keep an icon. Give it a real one when the builder supplies the
-# artwork, without shipping any: TEKKEN3_MACOS_ICON names a PNG or an .icns,
-# and packaging/macos/icon.png is picked up when it happens to be there. With
-# no icon there is no step and the build is unchanged. Windows and Linux are
-# not concerned; the icon lives in a resource fork, which is a macOS notion.
+# in one to keep an icon: it gets the T3E icon (packaging/icon.png) in its
+# resource fork. TEKKEN3_MACOS_ICON names another PNG or .icns.
 if(APPLE)
     set(TEKKEN3_MACOS_ICON "" CACHE FILEPATH
         "PNG or .icns to use as the Finder icon of the built executable")
-    if(NOT TEKKEN3_MACOS_ICON
-       AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/icon.png")
-        set(TEKKEN3_MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/icon.png")
+    if(NOT TEKKEN3_MACOS_ICON)
+        set(TEKKEN3_MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png")
     endif()
     if(TEKKEN3_MACOS_ICON)
         set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS

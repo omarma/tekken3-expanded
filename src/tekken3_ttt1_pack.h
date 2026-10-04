@@ -57,7 +57,7 @@ static int ttt1_pack_validate(const unsigned char *p,size_t size) {
         for(unsigned j=0;j<nc;j++) {
             const unsigned char *c=p+cp+j*12;
             unsigned cmd=ttt1_pack_half(c);
-            if(!ttt1_pack_target(ttt1_pack_half(c+6),n) || c[2] || c[3]>=83 ||
+            if(!ttt1_pack_target(ttt1_pack_half(c+6),n) || c[2] || c[3]>=84 ||
                (cmd>=0x8000 && cmd!=0xc000 && cmd!=0xc001 && cmd!=0xc002 &&
                 !(cmd>=0xe000 && cmd-0xe000<patterns)))return 0;
         }

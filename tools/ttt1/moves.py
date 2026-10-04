@@ -75,6 +75,22 @@ def opponent_requirement(code):
     return code - 0x43 if 0x43 <= code < 0x64 else None
 
 
+# Laser reactions (Devil / Angel): the record the defender plays when the
+# beam hits (alias E23, shared by everyone) carries rules of other
+# characters, the Jacks' (movesets 0x10 Gun Jack, 0x13 Jack-2, 0x14 P.Jack):
+# at frame 30 they go haywire (E24..E26, the Windmill Punch, with their Clock
+# Up / sliding answers). In the arcade the rule tests the fighter that plays
+# the record, the defender: kept as this runtime condition (param = moveset,
+# src/tekken3_ttt1_combat.c), its moves resolved with that character's
+# alias table, read from its own selector capture.
+SELF_MOVESET = 83
+
+
+def moveset_requirement(code):
+    """Codes 0x01..0x21: the rule holds for moveset code - 1."""
+    return code - 1 if 1 <= code < 0x22 else None
+
+
 def character_requirement(code, moveset, body):
     """Whether a rule applies to this character (its keys at 0x29EF00), or
     None when it depends on something else."""
@@ -125,7 +141,7 @@ def hit_rows(ram,index):
     raise ValueError('Unterminated arcade hit-data list')
 
 
-def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=None):
+def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=None, aliases_of=None):
     """Returns (combat pack, tables pack, report).
 
     ram: 4 MiB TTT1 RAM with the character highlighted at the selector;
@@ -143,7 +159,11 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
     record, ahead of its own so that the donor's version of an input wins;
     a third item True also copies the donor's links back to its own slot).
     Grafted records are converted with the donor's aliases and keys; a
-    record the host already has stays the host's."""
+    record the host already has stays the host's.
+
+    aliases_of: moveset key -> that character's 5515 alias words (or None),
+    for the rules of other characters kept on the laser reactions
+    (SELF_MOVESET)."""
     if native_exe is None:native_exe=(ROOT/'disc/SLUS_004.02').read_bytes()
     if hashlib.sha256(native_exe).hexdigest()!=NATIVE_EXE_SHA:
         raise ValueError('disc/SLUS_004.02 is not the Tekken 3 USA executable')
@@ -183,6 +203,8 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
                       addresses.add(address);pending.append(address)
     walk(list(addresses), addresses, host_aliases, host_requirement)
     grafted=set()
+    self_context={}
+    self_rules=[0]
     if graft:
         # A donor alias whose slot the host fills with its own move (stance,
         # crouch, walks, recoveries) resolves to the host's: grafted moves
@@ -195,9 +217,48 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
         # A record the host already has is the host's: the walk stops there.
         walk(list(roots), grafted, graft_aliases, graft_requirement, frozenset(addresses))
         addresses|=grafted
+    # The reactions of the host's lasers (limb 24), and the moves of the
+    # characters their rules name (SELF_MOVESET), walked as a graft is.
+    laser_victims=set()
+    for a in list(addresses):
+        v=struct.unpack_from('<13I',ram,a&0x3fffff)
+        if 24 in struct.pack('<I',v[10]):
+            for hit in hit_rows(ram,v[5]&65535):
+                for reaction_id in (hit[2],hit[3]):
+                    if reaction_id:laser_victims.update(host_aliases[t] for t in solo.reaction(ram,reaction_id)[7:]
+                                                        if 0<=t<len(host_aliases))
+    laser_victims&=addresses
+    self_aliases={}
+    for a in sorted(laser_victims):
+        for cmd,req,param,nxt,kind,window,end in cancel_rows(ram,struct.unpack_from('<13I',ram,a&0x3fffff)[3]):
+            m=moveset_requirement(req&255)
+            if cmd==0x8000 or m is None or m==moveset or not aliases_of:continue
+            if m not in self_aliases:
+                other=aliases_of(m)
+                if other is None:continue
+                # As for a graft: an alias the host fills (stance, its own
+                # reactions when the Windmill Punch hits it) stays the host's;
+                # only those it leaves on the empty record take the other's.
+                self_aliases[m]=tuple(h if h in addresses and h!=0x8009374c else d for h,d in zip(host_aliases,other))
+            other=self_aliases[m]
+            if not 0<=nxt<len(other) or other[nxt]==0x8009374c:continue
+            self_set=set()
+            other_requirement=lambda code,m=m:character_requirement(code,m,None)
+            if other[nxt] not in addresses:
+                self_set.add(other[nxt])
+                walk([other[nxt]],self_set,other,other_requirement,frozenset(addresses))
+            for r in self_set:self_context.setdefault(r,(other,other_requirement))
+    addresses|=set(self_context)
     def context(address):
+        if address in self_context:return self_context[address]
         return (graft_aliases,graft_requirement) if address in grafted else (host_aliases,host_requirement)
-    addresses = sorted(addresses)
+    # TTT1 aliases with no Tekken 3 entry, played on a juggled victim by the
+    # arcade (solo.JUGGLE_ALIASES). Appended after the others: the number of
+    # every other record stays what it was (combos, move lists, batteries).
+    extra={aliases[a] for a in solo.JUGGLE_ALIASES if aliases[a]!=0x8009374c}-addresses
+    base=set(addresses)
+    walk(list(extra),extra,host_aliases,host_requirement,frozenset(base))
+    addresses = sorted(base)+sorted(extra-base)
     indices = {a:i for i,a in enumerate(addresses)}
     raw = [struct.unpack_from('<13I', ram, a & 0x3fffff) for a in addresses]
     skipped = collections.Counter()
@@ -281,6 +342,18 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
                 # The rule is the character's own; it is the opponent it
                 # depends on. Kept, with the condition exported apart (DYNC).
                 owner=True
+            m=moveset_requirement(req&255)
+            if owner is False and current[0] in laser_victims and m in self_aliases:
+                # Another character's rule on a laser reaction: the defender's.
+                other=self_aliases[m]
+                dest=BASE_ID+indices[other[nxt]] if 0<=nxt<len(other) and other[nxt] in indices else None
+                transition=solo.transition(kind)
+                if (req>>8)&127 or cmd>=0x8000 or cmd&0x4000 or dest is None or transition is None or kind&0x3f80:
+                    raise ValueError(f'Unconverted laser reaction rule {req:04x} -> {nxt:04x}')
+                self_rules[0]+=1
+                yield struct.pack('<4H4B',cmd,SELF_MOVESET<<8,m,dest,transition,window>>8,end&255,end>>8)
+                emitted += 1
+                continue
             if owner is False:
                 skipped['other_character_rule']+=1;continue
             if cmd<0x8000 and cmd&0x4000:
@@ -470,6 +543,10 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
     # Only when there are some, so packs without such rules keep their layout.
     if opponent_rules:
         chunk(b'DYNC',b''.join(struct.pack('<HHI',*row) for row in opponent_rules))
+    # The laser reaction moves of the characters SELF_MOVESET names: played
+    # by the defender from this pack, their rules are the defender's.
+    if self_context:
+        chunk(b'DEFR',b''.join(struct.pack('<H',indices[a]) for a in sorted(self_context)))
     struct.pack_into('<8I',tables,0,0x3154534a,2,len(tables),len(rx_blob)//42,len(push_blob),len(counter_blob)//4,0,0)
     unresolved={kind:n for kind,n in skipped.items() if not allowed(kind)}
     if unresolved or omitted_conditions:
@@ -481,6 +558,7 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
                 grafted_records=len(grafted),
                 animation_event_scripts=len(event_scripts),opponent_specific_hit_records=len(dynamic_hits),
                 opponent_specific_cancel_rules=len(opponent_rules),
+                defender_specific_cancel_rules=self_rules[0],laser_reaction_moves=len(self_context),
                 distance_specific_hit_records=len(distance_hits),
                 native_entry_points=len(native_aliases),native_fallback_templates=[],
                 source_default_reaction='8009374c' if 0x8009374c in indices else None,

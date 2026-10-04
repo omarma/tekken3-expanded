@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.cinematic.ttt-cinematics"
+version = "1.0.0"
+name = "TTT Cinematics"
+author = "Tekken3Recomp"
+description = "Cinematics from Tekken Tag Tournament (PS2) in the Tekken 3 engine: for now Kazuya's ending, in place of his Arcade ending movie. Needs TTT1 Characters and the setup's TTT Cinematics option."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "ttt-cinematics"
+name = "TTT Cinematics"
+description = "When Kazuya (TTT1 guest) clears the Arcade as player 1, his Tekken Tag Tournament ending plays in Ogre's temple instead of the ending movie: Jin, then Devil Jin. With the music of TTT's endings when the setup was given your Tekken Tag Tournament PS2 disc, otherwise with a piece of Tekken 3's music. Does nothing until the setup has prepared it."
+group = "Characters"
+default_enabled = true
+
+[[plugin]]
+feature = "ttt-cinematics"
+id = "tekken3.ttt-cinematics"

@@ -35,8 +35,13 @@ def properties(ram, pointer):
             group, action = divmod(kind-0x1b, 16)
             if action < 8:
                 translated = 0xe+group*16+action
-        if kind==0x26:
-            translated=0x40  # Jun facial expression, handled by her texture adapter.
+            elif action >= 10:
+                # Face expression action-10 (0..5) for `arg` frames, whatever the group
+                # (TTT1 800FC08C -> 80104E98 -> 80104C64), read by the runtime
+                # (tekken3_ttt1_face_tick): expression 1 stays 0x40 as the packs
+                # imported before the others had it; 0 (neutral) is 0x41, 2..5
+                # 0x42..0x45. The PS1 dispatch (800458C8) ignores kinds past 0x3D.
+                translated = {10: 0x41, 11: 0x40}.get(action, 0x42 + action - 12)
         if translated is None:
             omitted.append((frame, kind, arg))
         else:
@@ -162,6 +167,16 @@ def native_aliases():
         (0xd59,0xd60,0x511),(0xd67,0xd6a,0x52b)):
         result.update({i:i+delta for i in range(start,end+1)})
     return result
+
+
+# TTT1 engine aliases that Tekken 3 has no number for (so none can be a key of
+# native_aliases, whose keys are Tekken 3 aliases below 4023). TTT1's chooser of
+# the reaction of a fighter hit while airborne (0x8011643C, then the 8-row table
+# at 0x80016770) falls on 0x128B or 0x128C when the victim is in the face-down
+# stage of a juggle; Tekken 3 has no such rows. Their records are the same for
+# every character (0x8007E7BC, 0x8007E858) and the importer keeps them in the
+# pack (tools/ttt1/moves.py), where the runtime finds them by TTT1 address.
+JUGGLE_ALIASES = (0x128b, 0x128c)
 
 
 def group_at(ram, offset, limit=128):

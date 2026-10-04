@@ -19,8 +19,14 @@ static int loaded;
 static unsigned stance_frame, previous_frame;
 static int was_neutral;
 
+/* Tekken Force fields more actors than the two players: the enemies after
+ * the second take their poses through the same bridge, and a TTT1 pose
+ * decoded for an actor nobody recognised kept the arcade basis - upside down
+ * for the frames it lasted. Every slot of the actor array is recognised;
+ * only the first two can be a guest. */
+enum { ACTOR_SLOTS=8 };
 static uint32_t pose_actor(CPUState *cpu) {
-    for(unsigned p=0;p<2;p++) {
+    for(unsigned p=0;p<ACTOR_SLOTS;p++) {
         uint32_t actor=0x800a9228+p*0x188c;
         if(cpu->gpr[5]==actor+0xf74)return actor;
         /* The transition blender decodes the previous pose into its stack
@@ -38,7 +44,7 @@ static uint32_t pose_actor(CPUState *cpu) {
  * (mode 4) keeps its own, so the TTT1 poses change basis for it as for a
  * native thrown by a guest. */
 static int arcade_skeleton(uint32_t actor) {
-    return actor && tekken3_ttt1_guest_skeleton(actor==0x800aaab4)!=0;
+    return (actor==0x800a9228 || actor==0x800aaab4) && tekken3_ttt1_guest_skeleton(actor==0x800aaab4)!=0;
 }
 static void change_basis(uint32_t output) {
     for(unsigned bone=0;bone<18;bone++) {

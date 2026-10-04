@@ -25,6 +25,7 @@
 #include "launcher_sdlcompat.h"   // pulls the right SDL header + event shim
 
 #include "imgui.h"
+#include "imgui_internal.h"   // ClearActiveID: on phones a finger drag scrolls instead of pressing
 #if defined(LNG_SDL3)
   #include "imgui_impl_sdl3.h"
   #define LNG_ImplSDL_InitForOpenGL  ImGui_ImplSDL3_InitForOpenGL
@@ -102,6 +103,16 @@ namespace {
 // sized as well; the renderer scales their atlas with the framebuffer.
 // (Ported from launcher_ng's "Fix launcher DPI layout and text alignment".)
 float  px(float logical) { return logical; }
+// Set while the phone layout draws (always on Android; LNG_PHONE_LAYOUT=1 on
+// desktop). Shared panels read it to fit a phone screen: no window size,
+// fullscreen or renderer rows (one screen, one renderer), smaller pad art, no
+// file-picker buttons, settings in a two-column grid.
+bool g_phone_layout = false;
+// Two-column settings grid: while g_row_grid is set, each row_label() starts a
+// new cell (label above its control), two cells per line; the table opens on
+// the first row.
+bool g_row_grid = false;
+bool g_row_grid_open = false;
 ImVec4 col(const LngColor& c) { return ImVec4(c.r, c.g, c.b, c.a); }
 // g_th moved to external linkage above the anonymous namespace (see note).
 
@@ -489,8 +500,17 @@ void apply_scale(const LauncherTheme& th, float scale, const char* font_path,
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
     ImFontConfig cfg; cfg.OversampleH = 2; cfg.OversampleV = 2;
+#if defined(__ANDROID__)
+    // Android draws in physical pixels (2-4x a desktop point), so the atlas is
+    // rasterized at the display density and shown at 1/density: same layout
+    // size as elsewhere, crisp glyphs instead of a magnified 1x atlas.
+    const float raster = scale > 1.0f ? scale : 1.0f;
+    io.FontGlobalScale = 1.0f / raster;
+#else
+    const float raster = 1.0f;
     (void)scale;   // DPI is handled by the framebuffer scale, not by re-scaling layout/fonts
-    const float body = th.font_body;
+#endif
+    const float body = th.font_body * raster;
     // Cover Basic Latin + Latin-1 AND General Punctuation so em/en dashes and
     // curly quotes used in the game notes render as glyphs, not "?" tofu.
     static const ImWchar kRanges[] = {
@@ -869,6 +889,18 @@ void ws_cells_stepper(const char* id, LauncherModel* m, int* out_delta) {
 // the controls up into a clean grid. col_w == 0 keeps the legacy flow layout
 // (control hugs the label with a fixed gap).
 void row_label(const char* text, const LauncherTheme& th, float col_w = 0.0f) {
+    if (g_row_grid) {
+        if (!g_row_grid_open) {
+            g_row_grid_open = ImGui::BeginTable("##rowgrid", 2,
+                ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_PadOuterX);
+        }
+        if (g_row_grid_open) {
+            ImGui::TableNextColumn();
+            ImGui::Dummy(ImVec2(0, px(2.0f)));
+            ImGui::TextColored(col(th.text_muted), "%s", text);
+            return;
+        }
+    }
     float x0 = ImGui::GetCursorPosX();
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(col(th.text_muted), "%s", text);
@@ -1420,6 +1452,12 @@ void draw_memcard_slot(LauncherModel* m, const LauncherTheme& th, int slot) {
     const float bw = (cw - px(th.spacing_sm)) * 0.5f;
     const float btn_h = px(32.0f);
     const float btn_gap = px(16.0f);
+    if (g_phone_layout) {
+        // Android has no desktop file dialogs; the cards live in the app.
+        ImGui::PopStyleVar();  // body_alpha
+        ImGui::PopID();
+        return;
+    }
     if (g_save_fill_h) {
         const float slack = ImGui::GetContentRegionAvail().y - btn_h;
         ImGui::Dummy(ImVec2(0, slack > btn_gap ? slack : btn_gap));
@@ -1981,9 +2019,10 @@ void draw_player_panel(LauncherModel* m, const LauncherTheme& th, int p, float w
         // Center on the FITTED width so a near-square pad (N64) or a portrait
         // handheld (GB/GBC) sits centered, not left-shifted by the landscape
         // box's spare width.
-        image_fit_centered(art, 120, 78, inner);
+        if (g_phone_layout) image_fit_centered(art, 84, 44, inner);
+        else                image_fit_centered(art, 120, 78, inner);
     }
-    ImGui::Dummy(ImVec2(0, px(6)));
+    ImGui::Dummy(ImVec2(0, px(g_phone_layout ? 2 : 6)));
 
     // Pad-mode selector: only when the game supports pad modes AND the mode
     // is user-selectable (not locked to a single mode).
@@ -2340,7 +2379,9 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
     // Supersampling, Aspect ratio, Texture filtering, Antialiasing, Screen
     // model, Frame interpolation (+Presentation target), Skip FMVs, Turbo
     // loads, Fullscreen.
-    if (m->has_window_size) {
+    if (g_phone_layout) {
+        // No window to size.
+    } else if (m->has_window_size) {
         row_label("Window size", th);
         if (ImGui::Button(launcher_model_window_size_label(m), ImVec2(px(150), px(30))))
             launcher_model_cycle_window_size(m);
@@ -2361,7 +2402,7 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
         if (ImGui::Checkbox("##intscale", &is)) launcher_model_toggle_integer_scale(m);
     }
 
-    if (m->has_renderer) {
+    if (m->has_renderer && !g_phone_layout) {
         row_label("Renderer", th);
         if (ImGui::Button(launcher_model_renderer_label(m), ImVec2(px(220), px(30))))
             launcher_model_toggle_renderer(m);
@@ -2385,11 +2426,13 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
     // Universal fullscreen row (every console — no longer gated on the
     // vestigial has_fullscreen_toggle). Tri-state cycle replaces the old
     // binary checkbox so Exclusive mode is reachable again.
-    row_label("Fullscreen", th);
-    ImGui::PushID("fullscreen");
-    if (ImGui::Button(launcher_model_fullscreen_label(m), ImVec2(px(120), px(30))))
-        launcher_model_cycle_fullscreen(m);
-    ImGui::PopID();
+    if (!g_phone_layout) {
+        row_label("Fullscreen", th);
+        ImGui::PushID("fullscreen");
+        if (ImGui::Button(launcher_model_fullscreen_label(m), ImVec2(px(120), px(30))))
+            launcher_model_cycle_fullscreen(m);
+        ImGui::PopID();
+    }
     if (m->num_display_layouts > 0) {
         row_label("Screen layout", th);
         ImGui::PushID("screen_layout");
@@ -6179,6 +6222,160 @@ static bool set_all_mod_features(LauncherModel* m, bool enabled) {
     return true;
 }
 
+// A mod feature's details: description, owner files, diagnostics and its
+// options. The desktop draws it beside the list, the phone in a sheet.
+static void draw_mod_feature_detail(LauncherModel* m, const LauncherTheme& th,
+                                    const RecompLauncherCModFeature& feature) {
+    const auto* mods = m->mods;
+    ImGui::TextColored(col(th.accent2), "%s", feature.name);
+    if (feature.group[0]) {
+        ImGui::SameLine();
+        ImGui::TextColored(col(th.text_muted), "%s", feature.group);
+    }
+    ImGui::TextColored(
+        col(th.text_muted), "From %s%s%s",
+        feature.package_name[0] ? feature.package_name
+                                : feature.package_id,
+        feature.package_version[0] ? " " : "",
+        feature.package_version);
+    if (feature.author[0])
+        draw_linkified_mod_author(
+            feature.author, feature.author_links,
+            feature.author_link_count, th);
+    if (feature.source_url[0]) {
+        ImGui::TextColored(col(th.text_muted), "Source: ");
+        ImGui::SameLine(0, 0);
+        ImGui::TextLinkOpenURL(
+            feature.source_name[0] ? feature.source_name : "Project page",
+            feature.source_url);
+    }
+    if (feature.description[0])
+        ImGui::TextWrapped("%s", feature.description);
+    ImGui::Spacing();
+
+    if (feature.camera_controls) {
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::TextColored(col(th.accent), "3D camera controls");
+        ImGui::TextWrapped(
+            feature.enabled
+                ? "This mod adds live camera input. Review the current "
+                  "right-stick and keyboard bindings before playing."
+                : "Enable this feature to expose its camera bindings "
+                  "on the Controller page.");
+        if (feature.enabled &&
+            ImGui::Button("Review Camera Bindings")) {
+            launcher_model_open_config(m, 0);
+        }
+        ImGui::Spacing();
+    }
+
+    // The list-row checkbox is the single enable/disable control.
+    // The detail pane owns configuration values only.
+    if (mods->feature_resource_count &&
+        mods->feature_resource_get &&
+        mods->feature_resource_set_path) {
+        const int resource_count = mods->feature_resource_count(
+            mods->ctx, feature.package_id, feature.id);
+        if (resource_count > 0) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextColored(col(th.accent), "Required owner files");
+            for (int resource_index = 0;
+                 resource_index < resource_count; ++resource_index) {
+                RecompLauncherCModResource resource{};
+                if (!mods->feature_resource_get(
+                        mods->ctx, feature.package_id, feature.id,
+                        resource_index, &resource))
+                    continue;
+                ImGui::PushID(resource.id);
+                ImGui::TextUnformatted(resource.label);
+                if (resource.description[0])
+                    ImGui::TextWrapped("%s", resource.description);
+                ImGui::TextColored(
+                    resource.verified ? col(th.accent2) : col(th.warn),
+                    "%s", resource.status[0]
+                              ? resource.status : "Not selected");
+                if (resource.path[0]) {
+                    const char* basename = resource.path;
+                    for (const char* p = resource.path; *p; ++p)
+                        if (*p == '/' || *p == '\\') basename = p + 1;
+                    ImGui::TextColored(col(th.text_muted), "%s", basename);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", resource.path);
+                }
+                if (ImGui::Button(resource.path[0] ? "Change file"
+                                                   : "Select file")) {
+                    std::vector<std::string> owned_patterns;
+                    std::vector<const char*> patterns;
+                    std::string remaining = resource.file_patterns;
+                    size_t start = 0;
+                    while (start <= remaining.size()) {
+                        const size_t comma = remaining.find(',', start);
+                        std::string pattern = remaining.substr(
+                            start, comma == std::string::npos
+                                       ? std::string::npos
+                                       : comma - start);
+                        if (!pattern.empty())
+                            owned_patterns.push_back(pattern);
+                        if (comma == std::string::npos) break;
+                        start = comma + 1;
+                    }
+                    for (const std::string& pattern : owned_patterns)
+                        patterns.push_back(pattern.c_str());
+                    char path[RECOMP_LAUNCHER_MOD_PATH_MAX] = {};
+                    if (launcher_pick_file(
+                            resource.label,
+                            patterns.empty() ? nullptr : patterns.data(),
+                            (int)patterns.size(),
+                            resource.file_description[0]
+                                ? resource.file_description : nullptr,
+                            path, sizeof(path))) {
+                        if (!mods->feature_resource_set_path(
+                                mods->ctx, feature.package_id,
+                                feature.id, resource.id, path)) {
+                            mod_note_error(m);
+                        } else {
+                            std::snprintf(
+                                m->mod_status,
+                                sizeof(m->mod_status),
+                                "%s verified. Changes apply on PLAY.",
+                                resource.label);
+                        }
+                    }
+                }
+                ImGui::PopID();
+                ImGui::Spacing();
+            }
+        }
+    }
+    draw_mod_feature_diagnostics(m, th, feature);
+    if (feature.option_count > 0) {
+        ImGui::Spacing();
+        ImGui::Separator();
+    }
+    std::string last_group;
+    for (int index = 0; index < feature.option_count; ++index) {
+        RecompLauncherCModOption option{};
+        if (!mods->feature_option_get(
+                mods->ctx, feature.package_id, feature.id,
+                index, &option)) {
+            continue;
+        }
+        if (last_group != option.group) {
+            last_group = option.group;
+            ImGui::Spacing();
+            ImGui::TextColored(
+                col(th.accent), "%s",
+                last_group.empty() ? "Configuration"
+                                   : last_group.c_str());
+            ImGui::Separator();
+        }
+        draw_mod_feature_option(m, feature, option);
+    }
+}
+
 static void draw_mod_features(LauncherModel* m, const LauncherTheme& th) {
     const auto* mods = m ? m->mods : nullptr;
     if (!mods || !mods->feature_count || !mods->feature_get ||
@@ -6335,153 +6532,7 @@ static void draw_mod_features(LauncherModel* m, const LauncherTheme& th) {
         RecompLauncherCModFeature feature{};
         if (feature_count > 0 &&
             mods->feature_get(mods->ctx, m->mod_selected, &feature)) {
-            ImGui::TextColored(col(th.accent2), "%s", feature.name);
-            if (feature.group[0]) {
-                ImGui::SameLine();
-                ImGui::TextColored(col(th.text_muted), "%s", feature.group);
-            }
-            ImGui::TextColored(
-                col(th.text_muted), "From %s%s%s",
-                feature.package_name[0] ? feature.package_name
-                                        : feature.package_id,
-                feature.package_version[0] ? " " : "",
-                feature.package_version);
-            if (feature.author[0])
-                draw_linkified_mod_author(
-                    feature.author, feature.author_links,
-                    feature.author_link_count, th);
-            if (feature.source_url[0]) {
-                ImGui::TextColored(col(th.text_muted), "Source: ");
-                ImGui::SameLine(0, 0);
-                ImGui::TextLinkOpenURL(
-                    feature.source_name[0] ? feature.source_name : "Project page",
-                    feature.source_url);
-            }
-            if (feature.description[0])
-                ImGui::TextWrapped("%s", feature.description);
-            ImGui::Spacing();
-
-            if (feature.camera_controls) {
-                ImGui::Separator();
-                ImGui::Spacing();
-                ImGui::TextColored(col(th.accent), "3D camera controls");
-                ImGui::TextWrapped(
-                    feature.enabled
-                        ? "This mod adds live camera input. Review the current "
-                          "right-stick and keyboard bindings before playing."
-                        : "Enable this feature to expose its camera bindings "
-                          "on the Controller page.");
-                if (feature.enabled &&
-                    ImGui::Button("Review Camera Bindings")) {
-                    launcher_model_open_config(m, 0);
-                }
-                ImGui::Spacing();
-            }
-
-            // The list-row checkbox is the single enable/disable control.
-            // The detail pane owns configuration values only.
-            if (mods->feature_resource_count &&
-                mods->feature_resource_get &&
-                mods->feature_resource_set_path) {
-                const int resource_count = mods->feature_resource_count(
-                    mods->ctx, feature.package_id, feature.id);
-                if (resource_count > 0) {
-                    ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-                    ImGui::TextColored(col(th.accent), "Required owner files");
-                    for (int resource_index = 0;
-                         resource_index < resource_count; ++resource_index) {
-                        RecompLauncherCModResource resource{};
-                        if (!mods->feature_resource_get(
-                                mods->ctx, feature.package_id, feature.id,
-                                resource_index, &resource))
-                            continue;
-                        ImGui::PushID(resource.id);
-                        ImGui::TextUnformatted(resource.label);
-                        if (resource.description[0])
-                            ImGui::TextWrapped("%s", resource.description);
-                        ImGui::TextColored(
-                            resource.verified ? col(th.accent2) : col(th.warn),
-                            "%s", resource.status[0]
-                                      ? resource.status : "Not selected");
-                        if (resource.path[0]) {
-                            const char* basename = resource.path;
-                            for (const char* p = resource.path; *p; ++p)
-                                if (*p == '/' || *p == '\\') basename = p + 1;
-                            ImGui::TextColored(col(th.text_muted), "%s", basename);
-                            if (ImGui::IsItemHovered())
-                                ImGui::SetTooltip("%s", resource.path);
-                        }
-                        if (ImGui::Button(resource.path[0] ? "Change file"
-                                                           : "Select file")) {
-                            std::vector<std::string> owned_patterns;
-                            std::vector<const char*> patterns;
-                            std::string remaining = resource.file_patterns;
-                            size_t start = 0;
-                            while (start <= remaining.size()) {
-                                const size_t comma = remaining.find(',', start);
-                                std::string pattern = remaining.substr(
-                                    start, comma == std::string::npos
-                                               ? std::string::npos
-                                               : comma - start);
-                                if (!pattern.empty())
-                                    owned_patterns.push_back(pattern);
-                                if (comma == std::string::npos) break;
-                                start = comma + 1;
-                            }
-                            for (const std::string& pattern : owned_patterns)
-                                patterns.push_back(pattern.c_str());
-                            char path[RECOMP_LAUNCHER_MOD_PATH_MAX] = {};
-                            if (launcher_pick_file(
-                                    resource.label,
-                                    patterns.empty() ? nullptr : patterns.data(),
-                                    (int)patterns.size(),
-                                    resource.file_description[0]
-                                        ? resource.file_description : nullptr,
-                                    path, sizeof(path))) {
-                                if (!mods->feature_resource_set_path(
-                                        mods->ctx, feature.package_id,
-                                        feature.id, resource.id, path)) {
-                                    mod_note_error(m);
-                                } else {
-                                    std::snprintf(
-                                        m->mod_status,
-                                        sizeof(m->mod_status),
-                                        "%s verified. Changes apply on PLAY.",
-                                        resource.label);
-                                }
-                            }
-                        }
-                        ImGui::PopID();
-                        ImGui::Spacing();
-                    }
-                }
-            }
-            draw_mod_feature_diagnostics(m, th, feature);
-            if (feature.option_count > 0) {
-                ImGui::Spacing();
-                ImGui::Separator();
-            }
-            std::string last_group;
-            for (int index = 0; index < feature.option_count; ++index) {
-                RecompLauncherCModOption option{};
-                if (!mods->feature_option_get(
-                        mods->ctx, feature.package_id, feature.id,
-                        index, &option)) {
-                    continue;
-                }
-                if (last_group != option.group) {
-                    last_group = option.group;
-                    ImGui::Spacing();
-                    ImGui::TextColored(
-                        col(th.accent), "%s",
-                        last_group.empty() ? "Configuration"
-                                           : last_group.c_str());
-                    ImGui::Separator();
-                }
-                draw_mod_feature_option(m, feature, option);
-            }
+            draw_mod_feature_detail(m, th, feature);
         } else {
             ImGui::TextColored(col(th.text_muted),
                                "Install or select a feature to configure it.");
@@ -6534,6 +6585,39 @@ const LauncherPanel kPanelRegistry[] = {
     { "controller_config", LNG_VIEW_CONTROLLER, LNG_SLOT_WIDE, nullptr,      panel_controller_config_draw },
     { nullptr,              LNG_VIEW_DASHBOARD,  0,             nullptr,      nullptr },   // sentinel
 };
+
+// PLAY, the primary action: shared by the footer and the phone layout.
+void draw_play_cta(LauncherModel* m, ImVec2 size) {
+    const bool can_play = launcher_model_can_launch(m);
+    const bool bios_block = launcher_model_bios_blocks_play(m);
+    const bool play_enabled = can_play || bios_block;
+    if (neon_cta("##play", "PLAY", size, play_enabled)) {
+        /* Prefer mismatch prompt over launch even if can_play races true. */
+        if (bios_block)
+            launcher_model_bios_play_prompt(m);
+        else if (mod_commit_launch(m))
+            m->action = LNG_ACTION_LAUNCH;
+    } else if (!play_enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        const char* noun = m->rom_noun ? m->rom_noun : "ROM";
+        if (m->has_bios && !m->setup_bios_ok) {
+            ImGui::SetTooltip(
+                "Select a valid BIOS first (or Use OpenBIOS when this build "
+                "allows it).");
+        } else if (!m->rom_present || strcmp(m->rom_size, "--") == 0) {
+            ImGui::SetTooltip("Select a valid %s first", noun);
+        } else if (m->profile && m->profile->verify.mode == 1 &&
+                   (m->verify.verdict == 0 || m->verify.verdict == 3)) {
+            ImGui::SetTooltip("Select a verified %s first", noun);
+        } else if (m->setup_preparing) {
+            ImGui::SetTooltip("Wait for the current setup job to finish");
+        } else {
+            ImGui::SetTooltip("Select a valid %s first", noun);
+        }
+    }
+    if (!play_enabled && ImGui::IsItemClicked() && m->setup_wizard_supported)
+        m->setup_wizard_open = true;
+    ImGui::SetItemDefaultFocus();   // gamepad/keyboard start on the primary action
+}
 
 // Footer: a fixed-height band with the neon divider pinned to its TOP and the
 // CTA vertically centred inside it. Laid out from an explicit origin (not the
@@ -6686,35 +6770,7 @@ void draw_footer(LauncherModel* m, const LauncherTheme& th, float footer_h) {
         }
     }
     ImGui::SetCursorScreenPos(ImVec2(play_x, cta_y));
-    const bool can_play = launcher_model_can_launch(m);
-    const bool bios_block = launcher_model_bios_blocks_play(m);
-    const bool play_enabled = can_play || bios_block;
-    if (neon_cta("##play", "PLAY", ImVec2(play_w, play_h), play_enabled)) {
-        /* Prefer mismatch prompt over launch even if can_play races true. */
-        if (bios_block)
-            launcher_model_bios_play_prompt(m);
-        else if (mod_commit_launch(m))
-            m->action = LNG_ACTION_LAUNCH;
-    } else if (!play_enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        const char* noun = m->rom_noun ? m->rom_noun : "ROM";
-        if (m->has_bios && !m->setup_bios_ok) {
-            ImGui::SetTooltip(
-                "Select a valid BIOS first (or Use OpenBIOS when this build "
-                "allows it).");
-        } else if (!m->rom_present || strcmp(m->rom_size, "--") == 0) {
-            ImGui::SetTooltip("Select a valid %s first", noun);
-        } else if (m->profile && m->profile->verify.mode == 1 &&
-                   (m->verify.verdict == 0 || m->verify.verdict == 3)) {
-            ImGui::SetTooltip("Select a verified %s first", noun);
-        } else if (m->setup_preparing) {
-            ImGui::SetTooltip("Wait for the current setup job to finish");
-        } else {
-            ImGui::SetTooltip("Select a valid %s first", noun);
-        }
-    }
-    if (!play_enabled && ImGui::IsItemClicked() && m->setup_wizard_supported)
-        m->setup_wizard_open = true;
-    ImGui::SetItemDefaultFocus();   // gamepad/keyboard start on the primary action
+    draw_play_cta(m, ImVec2(play_w, play_h));
     (void)win;
 }
 
@@ -7758,6 +7814,409 @@ void draw_ui(LauncherModel* m, const LauncherTheme& th, int logical_w, int logic
     (void)logical_h;
 }
 
+// ---- Phone layout (Android) --------------------------------------------------
+// A landscape phone is ~900 x 400 dp: too short for the header + two-column
+// dashboard + footer. The same panels are shown one section at a time instead:
+// a rail on the left (title, sections, PLAY at the bottom) and the section on
+// the right, scrolled with a finger. Panels are the ones the profile composes,
+// so a setting added to a panel shows up here too. Disc and BIOS pickers are
+// left out: the APK carries the game. Always on for Android; LNG_PHONE_LAYOUT=1
+// previews it on desktop (e.g. with LNG_SCRIPT="size:900x410;...").
+enum MobileTab {
+    MOBILE_GAME, MOBILE_CONTROLS, MOBILE_DISPLAY, MOBILE_AUDIO,
+    MOBILE_SYSTEM, MOBILE_MODS, MOBILE_CREDITS,
+};
+int  g_mobile_tab = MOBILE_CONTROLS;
+bool g_mobile_drag_scroll = false;
+
+// The APK fixes the BIOS and a phone has no keyboard hotkeys: only the input
+// panel (and the GBA solar sensor, for other consoles) is left.
+const char* const kMobileSystemPanels[] = { "input", "solar" };
+
+bool mobile_has_system(LauncherModel* m) {
+    const SystemProfile* prof = (const SystemProfile*)m->profile;
+    for (const char* id : kMobileSystemPanels)
+        if (find_composed(prof->panels_settings, id, m)) return true;
+    return false;
+}
+
+// Inside the section's scrolling child: a mostly-vertical finger drag scrolls
+// it, even when it started on a button (the press is cancelled, so lifting
+// the finger does not click). Horizontal drags stay with sliders.
+void mobile_drag_scroll() {
+    ImGuiIO& io = ImGui::GetIO();
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) { g_mobile_drag_scroll = false; return; }
+    if (!g_mobile_drag_scroll) {
+        if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows |
+                                    ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+            return;
+        const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+        if (fabsf(drag.y) < px(12.0f) || fabsf(drag.y) < fabsf(drag.x) * 1.5f) return;
+        g_mobile_drag_scroll = true;
+        ImGui::ClearActiveID();
+    }
+    ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+}
+
+bool mobile_tab_button(const char* label, int tab, const LauncherTheme& th, float w) {
+    const bool on = g_mobile_tab == tab;
+    if (on) {
+        ImGui::PushStyleColor(ImGuiCol_Button, col(th.accent_dim));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, col(th.accent_dim));
+        ImGui::PushStyleColor(ImGuiCol_Text, col(th.accent_text));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+    const bool pressed = ImGui::Button(label, ImVec2(w, px(34.0f)));
+    ImGui::PopStyleVar();
+    if (on) ImGui::PopStyleColor(3);
+    return pressed;
+}
+
+void mobile_select(LauncherModel* m, int tab) {
+    g_mobile_tab = tab;
+    LngView view = LNG_VIEW_DASHBOARD;
+    if (tab == MOBILE_DISPLAY || tab == MOBILE_AUDIO || tab == MOBILE_SYSTEM)
+        view = LNG_VIEW_SETTINGS;
+    else if (tab == MOBILE_MODS)
+        view = LNG_VIEW_MODS;
+    else if (tab == MOBILE_CREDITS)
+        view = LNG_VIEW_CREDITS;
+    launcher_model_set_view(m, view);
+}
+
+void mobile_section_title(const char* title, const LauncherTheme& th) {
+    ImGui::PushStyleColor(ImGuiCol_Text, col(th.accent2));
+    ImGui::SetWindowFontScale(1.25f);
+    ImGui::TextUnformatted(title);
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, px(4.0f)));
+}
+
+void draw_mobile_mods(LauncherModel* m, const LauncherTheme& th);   // below
+
+void draw_mobile_section(LauncherModel* m, const LauncherTheme& th) {
+    const SystemProfile* prof = (const SystemProfile*)m->profile;
+    const float gap = px(th.spacing_md);
+    switch (g_mobile_tab) {
+    case MOBILE_GAME: {
+        if (const LauncherPanel* save_p = find_composed(prof->panels_dashboard, "save", m)) {
+            save_p->draw(m, &th);
+            ImGui::Dummy(ImVec2(0, gap));
+        }
+        bool skip = m->s.skip_launcher != 0;
+        if (ImGui::Checkbox("Skip launcher on boot", &skip))
+            launcher_model_request_skip_toggle(m);
+        break;
+    }
+    case MOBILE_CONTROLS:
+        if (m->view == LNG_VIEW_CONTROLLER) {
+            // A player's Configure opened the binding page.
+            if (ImGui::Button("< Controllers", ImVec2(px(170.0f), px(40.0f))))
+                launcher_model_set_view(m, LNG_VIEW_DASHBOARD);
+            ImGui::Dummy(ImVec2(0, gap));
+            draw_controller(m, th);
+        } else if (!m->lock_device) {
+            // Players side by side, so both fit without scrolling.
+            int n = launcher_model_visible_player_count(m);
+            if (n < 1) n = 1;
+            if (n > LNG_MAX_PLAYERS) n = LNG_MAX_PLAYERS;
+            const int cols = n < 2 ? 1 : 2;
+            const float cardw = (ImGui::GetContentRegionAvail().x - gap * (cols - 1)) / cols;
+            for (int p = 0; p < n; ++p) {
+                if (p % cols) ImGui::SameLine(0, gap);
+                else if (p) ImGui::Dummy(ImVec2(0, gap));
+                char cid[16];
+                std::snprintf(cid, sizeof(cid), "mpc%d", p);
+                begin_container(cid, ImVec2(cardw, 0), ImGuiChildFlags_AutoResizeY);
+                draw_player_panel(m, th, p, cardw);
+                end_container();
+            }
+        }
+        break;
+    case MOBILE_DISPLAY:
+        // Two settings per line, so the list fits a phone screen.
+        if (find_composed(prof->panels_settings, "video", m)) {
+            if (begin_panel("disp", 0, false)) {
+                g_row_grid = true;
+                draw_display_controls(m, th);
+                if (g_row_grid_open) ImGui::EndTable();
+                g_row_grid = g_row_grid_open = false;
+            }
+            end_panel();
+        }
+        break;
+    case MOBILE_AUDIO:
+        if (const LauncherPanel* p = find_composed(prof->panels_settings, "audio", m))
+            p->draw(m, &th);
+        break;
+    case MOBILE_SYSTEM:
+        for (const char* id : kMobileSystemPanels) {
+            if (const LauncherPanel* p = find_composed(prof->panels_settings, id, m)) {
+                p->draw(m, &th);
+                ImGui::Dummy(ImVec2(0, gap));
+            }
+        }
+        if (launcher_model_can_restore_defaults(m) &&
+            ImGui::Button("Restore Defaults", ImVec2(px(190.0f), px(40.0f))))
+            launcher_model_request_restore_defaults(m);
+        break;
+    case MOBILE_MODS:
+        draw_mobile_mods(m, th);
+        break;
+    case MOBILE_CREDITS:
+        draw_credits(m, th);
+        break;
+    }
+}
+
+// ---- Phone mods: categories + a grid of switches ----------------------------
+// One category at a time (the mods' own groups), each mod a card with an
+// on/off switch; touching its name opens its details and options in a sheet.
+std::string g_mobile_mod_group;
+bool g_mobile_mod_sheet = false;
+char g_mobile_mod_package[RECOMP_LAUNCHER_MOD_ID_MAX];
+char g_mobile_mod_feature[RECOMP_LAUNCHER_MOD_ID_MAX];
+
+// An iOS-style switch: a finger-sized target that reads as on/off at a glance.
+bool touch_switch(const char* id, bool on, const LauncherTheme& th) {
+    const ImVec2 size(px(52.0f), px(30.0f));
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton(id, size);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float r = size.y * 0.5f;
+    dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                      imcol(on ? th.accent : th.control), r);
+    dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), imcol(th.border), r);
+    const float knob_x = on ? pos.x + size.x - r : pos.x + r;
+    dl->AddCircleFilled(ImVec2(knob_x, pos.y + r), r - px(4.0f), imcol(th.text));
+    return pressed;
+}
+
+void draw_mobile_mod_sheet(LauncherModel* m, const LauncherTheme& th) {
+    const auto* mods = m->mods;
+    if (g_mobile_mod_sheet) {
+        ImGui::OpenPopup("##mod_sheet");
+        g_mobile_mod_sheet = false;
+    }
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(vp->Size.x * 0.78f, vp->Size.y * 0.86f), ImGuiCond_Always);
+    if (!ImGui::BeginPopupModal("##mod_sheet", nullptr,
+                                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
+                                ImGuiWindowFlags_NoResize))
+        return;
+    RecompLauncherCModFeature feature{};
+    bool found = false;
+    const int count = mods && mods->feature_count ? mods->feature_count(mods->ctx) : 0;
+    for (int i = 0; i < count && !found; ++i) {
+        if (mods->feature_get(mods->ctx, i, &feature) &&
+            std::strcmp(feature.package_id, g_mobile_mod_package) == 0 &&
+            std::strcmp(feature.id, g_mobile_mod_feature) == 0)
+            found = true;
+    }
+    const float close_h = px(40.0f);
+    begin_container("##mod_sheet_body",
+                    ImVec2(0, ImGui::GetContentRegionAvail().y - close_h - px(th.spacing_md)));
+    if (found) draw_mod_feature_detail(m, th, feature);
+    else       ImGui::TextColored(col(th.text_muted), "This mod is no longer installed.");
+    mobile_drag_scroll();
+    end_container();
+    if (ImGui::Button("Close", ImVec2(ImGui::GetContentRegionAvail().x, close_h)))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void draw_mobile_mods(LauncherModel* m, const LauncherTheme& th) {
+    const auto* mods = m ? m->mods : nullptr;
+    if (!mods || !mods->feature_count || !mods->feature_get || !mods->feature_enable) {
+        ImGui::TextColored(col(th.text_muted), "No mods in this build.");
+        return;
+    }
+    const int count = mods->feature_count(mods->ctx);
+    std::vector<ModFeatureListItem> items;
+    for (int index = 0; index < count; ++index) {
+        ModFeatureListItem item{};
+        item.index = index;
+        if (mods->feature_get(mods->ctx, index, &item.feature)) items.push_back(item);
+    }
+    std::stable_sort(items.begin(), items.end(), mod_feature_less);
+    if (items.empty()) {
+        ImGui::TextColored(col(th.text_muted), "No mods in this build.");
+        return;
+    }
+
+    // Categories, in list order; the selection survives while it exists.
+    std::vector<std::string> groups;
+    for (const ModFeatureListItem& item : items) {
+        const std::string g = item.feature.group[0] ? item.feature.group : "General";
+        if (groups.empty() || groups.back() != g) groups.push_back(g);
+    }
+    if (std::find(groups.begin(), groups.end(), g_mobile_mod_group) == groups.end())
+        g_mobile_mod_group = groups.front();
+
+    const float gap = px(th.spacing_sm);
+    const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        const bool on = groups[i] == g_mobile_mod_group;
+        const float w = ImGui::CalcTextSize(groups[i].c_str()).x + px(28.0f);
+        if (i > 0) {
+            ImGui::SameLine(0, gap);
+            if (ImGui::GetCursorPosX() + w > right) ImGui::NewLine();
+        }
+        if (on) {
+            ImGui::PushStyleColor(ImGuiCol_Button, col(th.accent_dim));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, col(th.accent_dim));
+            ImGui::PushStyleColor(ImGuiCol_Text, col(th.accent_text));
+        }
+        ImGui::PushID((int)i);
+        if (ImGui::Button(groups[i].c_str(), ImVec2(w, px(34.0f))))
+            g_mobile_mod_group = groups[i];
+        ImGui::PopID();
+        if (on) ImGui::PopStyleColor(3);
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, m->mod_status[0] ? col(th.warn) : col(th.text_muted));
+    ImGui::TextWrapped("%s", m->mod_status[0] ? m->mod_status
+                                              : "Touch a mod's name for its details and options.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, gap));
+
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const int cols = avail >= px(3 * 230.0f) ? 3 : 2;
+    const float card_w = (avail - gap * (cols - 1)) / cols;
+    const float card_h = px(56.0f);
+    int col_index = 0;
+    for (const ModFeatureListItem& item : items) {
+        const RecompLauncherCModFeature& f = item.feature;
+        const std::string g = f.group[0] ? f.group : "General";
+        if (g != g_mobile_mod_group) continue;
+        if (col_index % cols) ImGui::SameLine(0, gap);
+        ++col_index;
+        ImGui::PushID(f.package_id);
+        ImGui::PushID(f.id);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(px(12.0f), px(8.0f)));
+        ImGui::BeginChild("##card", ImVec2(card_w, card_h), ImGuiChildFlags_Borders,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar();
+        {
+            const float sw = px(52.0f);
+            const float inner_w = ImGui::GetContentRegionAvail().x;
+            const float inner_h = ImGui::GetContentRegionAvail().y;
+            // The name opens the details (and options, when it has some).
+            char label[160];
+            std::snprintf(label, sizeof(label), "%s%s", f.has_error ? "! " : "", f.name);
+            ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+            if (ImGui::Selectable(label, false, 0, ImVec2(inner_w - sw - px(8.0f), inner_h))) {
+                std::snprintf(g_mobile_mod_package, sizeof(g_mobile_mod_package), "%s", f.package_id);
+                std::snprintf(g_mobile_mod_feature, sizeof(g_mobile_mod_feature), "%s", f.id);
+                g_mobile_mod_sheet = true;
+            }
+            ImGui::PopStyleVar();
+            ImGui::SameLine(0, px(8.0f));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (inner_h - px(30.0f)) * 0.5f);
+            if (touch_switch("##on", f.enabled != 0, th)) {
+                if (!mods->feature_enable(mods->ctx, f.package_id, f.id, f.enabled ? 0 : 1))
+                    mod_note_error(m);
+                else
+                    std::snprintf(m->mod_status, sizeof(m->mod_status),
+                                  "Changes apply when you press PLAY.");
+            }
+        }
+        ImGui::EndChild();
+        ImGui::PopID();
+        ImGui::PopID();
+    }
+}
+
+void draw_ui_mobile(LauncherModel* m, const LauncherTheme& th) {
+    g_phone_layout = true;
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    draw_crt_background(vp->Pos, vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
+    ImGui::Begin("##launcher", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoBringToFrontOnFocus |
+                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+
+    // A section that is gone (no mods, no credits) falls back to Controls.
+    if ((g_mobile_tab == MOBILE_MODS && !m->mods) ||
+        (g_mobile_tab == MOBILE_CREDITS && !(m->credits_text && m->credits_text[0])) ||
+        (g_mobile_tab == MOBILE_SYSTEM && !mobile_has_system(m)))
+        g_mobile_tab = MOBILE_CONTROLS;
+    if (m->view == LNG_VIEW_CONTROLLER) g_mobile_tab = MOBILE_CONTROLS;
+
+    const float gap    = px(th.spacing_md);
+    const float rail_w = px(190.0f);
+    const float play_h = px(48.0f);
+    const float full_h = ImGui::GetContentRegionAvail().y;
+
+    begin_container("m_rail", ImVec2(rail_w, full_h), ImGuiChildFlags_None,
+                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    {
+        const float w = ImGui::GetContentRegionAvail().x;
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + w);
+        ImGui::SetWindowFontScale(1.1f);
+        ImGui::TextUnformatted(m->game_name ? m->game_name : "");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0, px(2.0f)));
+
+        // Sections scroll inside the rail when the phone is very short, so
+        // PLAY always keeps its place at the bottom.
+        const float list_h = ImGui::GetContentRegionAvail().y - play_h - gap;
+        begin_container("m_tabs", ImVec2(w, list_h > px(40.0f) ? list_h : px(40.0f)),
+                        ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, px(4.0f)));
+        if (mobile_tab_button("Controllers", MOBILE_CONTROLS, th, w)) mobile_select(m, MOBILE_CONTROLS);
+        if (mobile_tab_button("Display", MOBILE_DISPLAY, th, w))      mobile_select(m, MOBILE_DISPLAY);
+        if (mobile_tab_button("Audio", MOBILE_AUDIO, th, w))          mobile_select(m, MOBILE_AUDIO);
+        if (mobile_has_system(m) &&
+            mobile_tab_button("System", MOBILE_SYSTEM, th, w))        mobile_select(m, MOBILE_SYSTEM);
+        if (m->mods && mobile_tab_button("Mods", MOBILE_MODS, th, w)) mobile_select(m, MOBILE_MODS);
+        if (mobile_tab_button("Memory cards", MOBILE_GAME, th, w))    mobile_select(m, MOBILE_GAME);
+        if (m->credits_text && m->credits_text[0] &&
+            mobile_tab_button("Credits", MOBILE_CREDITS, th, w))      mobile_select(m, MOBILE_CREDITS);
+        ImGui::PopStyleVar();
+        mobile_drag_scroll();
+        end_container();
+
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y - play_h);
+        draw_play_cta(m, ImVec2(w, play_h));
+    }
+    end_container();
+
+    ImGui::SameLine(0, gap);
+    begin_container("m_body", ImVec2(0, full_h));
+    if (!m->rom_present) {
+        // A phone cannot generate the game: the setup on PC builds the APK
+        // with it. Only a bare runtime build (a test APK) gets here.
+        ImGui::PushStyleColor(ImGuiCol_Text, col(th.warn));
+        ImGui::TextWrapped("This build has no game in it. Build the APK with the setup on your computer.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, gap));
+    }
+    draw_mobile_section(m, th);
+    ImGui::Dummy(ImVec2(0, px(24.0f)));   // room to scroll the last row clear
+    mobile_drag_scroll();
+    end_container();
+
+    // Dialogs, as on the desktop layout, except first-run setup: it builds
+    // the game, which only the PC can do.
+    draw_bios_confirm_modal(m, th);
+    draw_bios_play_modal(m, th);
+    draw_pgo_confirm_modal(m, th);
+    draw_fmv_timing_confirm_modal(m, th);
+    draw_skip_modal(m);
+    draw_restore_defaults_modal(m);
+    if (m->tpak_slots > 0) draw_tpak_modal(m, th);
+    if (m->mods) draw_mobile_mod_sheet(m, th);
+    ImGui::End();
+}
+
 bool is_modifier_scancode(SDL_Scancode sc) {
     return sc == SDL_SCANCODE_LCTRL || sc == SDL_SCANCODE_RCTRL ||
            sc == SDL_SCANCODE_LALT  || sc == SDL_SCANCODE_RALT  ||
@@ -8015,7 +8474,9 @@ std::string asset(const char* rel) {
     std::string path = normalized_path(rel);
     if (is_absolute_path(path)) return path;
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && SDL_MAJOR_VERSION >= 3
+    const char* base = SDL_GetAndroidInternalStoragePath();
+#elif defined(__ANDROID__)
     const char* base = SDL_AndroidGetInternalStoragePath();
 #else
     const char* base = SDL_GetBasePath();
@@ -8187,6 +8648,12 @@ extern "C" LngAction launcher_backend_run(LauncherPlatform* p,
     const char* force_scale_env = SDL_getenv("LNG_FORCE_SCALE");
     const bool force_dpi = force_scale_env && force_scale_env[0] && SDL_atof(force_scale_env) > 1.0;
     bool first_present_marked = false;
+#if defined(__ANDROID__)
+    const bool phone_layout = true;
+#else
+    const char* phone_env = SDL_getenv("LNG_PHONE_LAYOUT");
+    const bool phone_layout = phone_env && phone_env[0] == '1';
+#endif
 
     while (m->action == LNG_ACTION_NONE && !p->should_quit) {
         if (smoke_frames > 0 && ++frame > smoke_frames) { m->action = LNG_ACTION_QUIT; break; }
@@ -8196,6 +8663,17 @@ extern "C" LngAction launcher_backend_run(LauncherPlatform* p,
             if (ev.type == SDL_EVENT_QUIT) p->should_quit = true;
             if (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) p->should_quit = true;
             if (try_capture(m, ev)) continue;
+#if defined(__ANDROID__)
+            // SDL reports Android pointers in physical pixels; ImGui lays out
+            // in dp (see the DisplaySize override below).
+            if (p->display_scale > 1.0f) {
+                const float inv = 1.0f / p->display_scale;
+                if (ev.type == SDL_EVENT_MOUSE_MOTION) { ev.motion.x *= inv; ev.motion.y *= inv; }
+                else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+                    ev.button.x *= inv; ev.button.y *= inv;
+                }
+            }
+#endif
             LNG_ImplSDL_ProcessEvent(&ev);
         } while (SDL_PollEvent(&ev));
 
@@ -8249,8 +8727,16 @@ extern "C" LngAction launcher_backend_run(LauncherPlatform* p,
             io.DisplaySize = ImVec2((float)p->logical_w, (float)p->logical_h);
             io.DisplayFramebufferScale = ImVec2(p->display_scale, p->display_scale);
         }
+#if defined(__ANDROID__)
+        if (p->display_scale > 1.0f) {   // physical pixels -> dp
+            ImGuiIO& io = ImGui::GetIO();
+            io.DisplaySize = ImVec2(p->pixel_w / p->display_scale, p->pixel_h / p->display_scale);
+            io.DisplayFramebufferScale = ImVec2(p->display_scale, p->display_scale);
+        }
+#endif
         ImGui::NewFrame();
-        draw_ui(m, *th, p->logical_w, p->logical_h);
+        if (phone_layout) draw_ui_mobile(m, *th);
+        else              draw_ui(m, *th, p->logical_w, p->logical_h);
         ImGui::Render();
 
         glViewport(0, 0, p->pixel_w, p->pixel_h);

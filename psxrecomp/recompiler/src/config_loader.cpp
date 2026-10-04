@@ -19,6 +19,8 @@
 // toml11 is header-only.
 #define TOML11_USE_UNRELEASED_TOML_FEATURES
 #include "toml.hpp"
+// Shared with the runtime: rejects over-nested TOML before toml11 recurses.
+#include "../../runtime/include/toml_depth_guard.h"
 
 namespace PSXRecompV4 {
 
@@ -820,7 +822,7 @@ BiosConfig load_bios_config(const fs::path& config_path_in) {
 
     toml::value cfg;
     try {
-        cfg = toml::parse(config_path);
+        cfg = toml_depth_guard::parse(config_path);
     } catch (const toml::syntax_error& ex) {
         throw std::runtime_error(
             fmt::format("TOML syntax error in {}: {}", config_path.string(), ex.what()));
@@ -1075,7 +1077,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
 
     toml::value cfg;
     try {
-        cfg = toml::parse(config_path);
+        cfg = toml_depth_guard::parse(config_path);
     } catch (const toml::syntax_error& ex) {
         throw std::runtime_error(
             fmt::format("TOML syntax error in {}: {}", config_path.string(), ex.what()));
@@ -2292,7 +2294,7 @@ GameOptions load_game_options(const fs::path& path) {
     std::error_code ec;
     if (path.empty() || !fs::exists(path, ec)) return go;
 
-    const toml::value doc = toml::parse(path.string());
+    const toml::value doc = toml_depth_guard::parse(path);
     if (!doc.contains("option")) return go;
     const auto& arr = toml::find<toml::array>(doc, "option");
     for (const auto& item : arr) {
@@ -2331,7 +2333,7 @@ UserSettings load_user_settings(const fs::path& path) {
 
     toml::value doc;
     try {
-        doc = toml::parse(path.string());
+        doc = toml_depth_guard::parse(path);
     } catch (const std::exception&) {
         // Malformed file: fall back to all-defaults rather than refuse to boot,
         // but tell the caller so the user hears about it (and so the file can
@@ -2409,6 +2411,16 @@ UserSettings load_user_settings(const fs::path& path) {
             if (s.fullscreen < 0 || s.fullscreen > 2) s.fullscreen = 0;
             s.has_fullscreen = true;
         });
+        if (v.contains("hide_mouse_cursor")) try_get([&]{
+            try {
+                const std::string m = toml::find<std::string>(v, "hide_mouse_cursor");
+                s.hide_mouse_cursor = m == "always" ? 2 : m == "fullscreen" ? 1
+                                    : m == "idle" ? 3 : 0;
+            } catch (const std::exception&) {
+                s.hide_mouse_cursor = toml::find<bool>(v, "hide_mouse_cursor") ? 2 : 0;
+            }
+            s.has_hide_mouse_cursor = true;
+        });
         if (v.contains("low_latency_input")) try_get([&]{
             s.low_latency_input = toml::find<bool>(v, "low_latency_input");
             s.has_low_latency_input = true;
@@ -2444,6 +2456,11 @@ UserSettings load_user_settings(const fs::path& path) {
         const toml::value& a = toml::find(doc, "audio");
         if (a.contains("spu_hq")) try_get([&]{
             s.spu_hq = toml::find<bool>(a, "spu_hq"); s.has_spu_hq = true;
+        });
+        if (a.contains("master_volume")) try_get([&]{
+            const int v = toml::find<int>(a, "master_volume");
+            s.master_volume = v < 0 ? 0 : v > 100 ? 100 : v;
+            s.has_master_volume = true;
         });
     }
     if (doc.contains("launcher")) {
@@ -2650,6 +2667,10 @@ bool save_user_settings(const fs::path& path, const UserSettings& s) {
         f << "bios_hle          = " << (s.bios_hle ? "true" : "false") << "\n";
     if (s.has_fullscreen)
         f << "fullscreen        = " << s.fullscreen << "\n";
+    if (s.has_hide_mouse_cursor)
+        f << "hide_mouse_cursor  = \"" << (s.hide_mouse_cursor == 2 ? "always"
+           : s.hide_mouse_cursor == 1 ? "fullscreen"
+           : s.hide_mouse_cursor == 3 ? "idle" : "off") << "\"\n";
     if (s.has_low_latency_input)
         f << "low_latency_input = " << (s.low_latency_input ? "true" : "false") << "\n";
     if (s.has_vsync)
@@ -2665,6 +2686,8 @@ bool save_user_settings(const fs::path& path, const UserSettings& s) {
     f << "\n[audio]\n";
     if (s.has_spu_hq)
         f << "spu_hq = " << (s.spu_hq ? "true" : "false") << "\n";
+    if (s.has_master_volume)
+        f << "master_volume = " << s.master_volume << "\n";
     if (s.has_skip_launcher)
         f << "\n[launcher]\nskip_launcher = " << (s.skip_launcher ? "true" : "false") << "\n";
     if ((s.has_netplay_player_name && !s.netplay_player_name.empty()) ||

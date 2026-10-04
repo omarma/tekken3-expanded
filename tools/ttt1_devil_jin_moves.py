@@ -96,20 +96,11 @@ def main():
     (OUT / f'{PREFIX}-combat.jmv').write_bytes(combat)
     (OUT / f'{PREFIX}-tables.jst').write_bytes(tables)
     shutil.copyfile(WORK / 'unknown/guest/Unknown@Jin-TTT1-idle.poses', OUT / f'{PREFIX}-idle.poses')
-    # Move sounds, grafted moves' included (laser...), from the recorded
-    # oracle (captures/sfx-oracle): refused rather than run MAME outside
-    # slot.py when a sound is missing from it.
-    import sfx, ttt1_import
+    # Move sounds, grafted moves' included (laser...), replayed from the
+    # measured table (tools/ttt1/sfx.py), without MAME.
+    import ttt1_import
     capture = WORK / 'captures/unknown@jin-select-ram.bin'
-    table = sfx.table(capture.read_bytes())
     jin_sound = struct.unpack_from('<3H', jin, KEYS + 0x10)[2]
-    # Only the sounds this pack asks for (the oracle now records the ones the
-    # guests use, tools/data/ttt1_sfx_used.json, not the whole table).
-    need = set(report['sound_indexes']) | {sfx.name_index(capture.read_bytes(), jin_sound)}
-    stems = [f'{i}' for i, (d, p) in enumerate(table) if i and d and i in need] + [f'{i}' for i in sfx.RAW if i in need]
-    oracle = WORK / 'captures/sfx-oracle'
-    missing = [s for s in stems if not (oracle / f'{s}.wav').exists() or not (oracle / f'{s}.csv').exists()]
-    if missing: raise SystemExit(f'sound oracle incomplete ({len(missing)}): run tools/ttt1_import.py through slot.py')
     ttt1_import.sounds(capture, report['sound_indexes'], jin_sound, OUT, PREFIX.removesuffix('-TTT1'))
     print(f'{PREFIX}: {report["records"]} records, {report["grafted_records"]} from Devil '
           f'({", ".join(GRAFTS)}) -> {OUT}')

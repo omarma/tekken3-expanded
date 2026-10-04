@@ -100,6 +100,13 @@ void gr_vram_write(int x, int y, uint16_t pixel);
 uint16_t gr_vram_read(int x, int y);
 void gr_vram_transfer_in(int x, int y, int w, int h, const uint16_t *data);
 void gr_vram_transfer_out(int x, int y, int w, int h, uint16_t *data);
+/* Write watch: flag a VRAM rectangle whenever a canonical write can reach it
+ * (upload, fill, copy, pixel, primitive while the draw area overlaps it).
+ * gr_vram_watch returns an id (-1 if none left, 16 at most); take returns
+ * whether the rectangle may have been written since the last take, and
+ * clears the flag. A new watch starts flagged. */
+int gr_vram_watch(int x, int y, int w, int h);
+int gr_vram_watch_take(int id);
 
 /* Draw area / offset */
 void gr_set_draw_area(int x1, int y1, int x2, int y2);
