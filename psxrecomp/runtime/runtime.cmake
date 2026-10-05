@@ -1276,7 +1276,12 @@ function(psxrecomp_add_runtime_target target)
         # Invoking py.exe with a .py file can honor that file's /usr/bin/env
         # shebang and accidentally select an unrelated MSYS Python, which cannot
         # open the native absolute paths emitted by Windows CMake/Ninja.
-        if(WIN32 AND NOT PSX_PYTHON)
+        # The build's own Python first (Build Android APK passes its venv's):
+        # cross-compiling for Android, WIN32 is false even on a Windows host.
+        if(NOT PSX_PYTHON AND Python3_EXECUTABLE)
+            set(PSX_PYTHON "${Python3_EXECUTABLE}")
+        endif()
+        if(CMAKE_HOST_WIN32 AND NOT PSX_PYTHON)
             find_program(_psx_python_launcher NAMES py)
             if(_psx_python_launcher)
                 execute_process(
