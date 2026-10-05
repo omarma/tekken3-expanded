@@ -272,7 +272,23 @@ def check_paths_for_cmd(*paths, windows: bool = os.name == "nt") -> None:
                              f"{' '.join(bad)} in it; move the folder or rename it")
 
 
+# The PC setup's toolchain pack, which runtime.cmake searches for SDL3 and zlib:
+# they are Windows or macOS builds, so the Android build must not see them.
+PC_TOOLCHAIN_VARS = ("RETCOMM_TOOLCHAIN_DIR", "PSXRECOMP_TOOLCHAIN_DIR", "BPE_TOOLCHAIN_DIR", "TOOLCHAIN_DIR")
+
+
+def android_env(build_dir: Path) -> dict:
+    """The environment without the PC toolchain pack, and a CMake cache that
+    found its SDL3 or zlib (Build Android APK 1.2.0 on Windows) dropped."""
+    packs = [Path(os.environ[k]).as_posix() for k in PC_TOOLCHAIN_VARS if os.environ.get(k)]
+    cache = build_dir / "CMakeCache.txt"
+    if packs and cache.is_file() and any(p in cache.read_text(errors="replace") for p in packs):
+        cache.unlink()
+    return {k: v for k, v in os.environ.items() if k not in PC_TOOLCHAIN_VARS}
+
+
 def build_native(args, build_dir: Path) -> Path:
+    env = android_env(build_dir)
     toolchain = args.ndk / "build/cmake/android.toolchain.cmake"
     glslc = find_glslc(args.ndk)
     configure = [
@@ -287,8 +303,8 @@ def build_native(args, build_dir: Path) -> Path:
     if args.ninja:
         configure.append(f"-DCMAKE_MAKE_PROGRAM={args.ninja}")
     configure += [f"-D{option}" for option in native_defines(args.define, args.allow_debug_features)]
-    run(configure)
-    run([args.cmake, "--build", build_dir, "--target", "psx-runtime"])
+    run(configure, env=env)
+    run([args.cmake, "--build", build_dir, "--target", "psx-runtime"], env=env)
     library = build_dir / "libmain.so"
     if not library.is_file():
         raise SystemExit(f"The build did not produce {library}")
