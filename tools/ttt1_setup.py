@@ -102,9 +102,11 @@ def guests(args, wanted):
 def natives(args):
     """Kuma, Ogre, Gun Jack and True Ogre on their TTT1 moves: the natives the
     donors of Unknown leave out, captured at their own index (natives section)."""
-    keys = list(json.loads((ROOT / 'tools/data/ttt1_characters.json').read_text())['natives'])
-    print(f'Natives: {len(keys)} TTT1 movesets, {args.jobs} at a time...', flush=True)
-    parallel(args.jobs, [(k, importer(args, k), LOGS / f'native-{k}.log') for k in keys])
+    table = json.loads((ROOT / 'tools/data/ttt1_characters.json').read_text())['natives']
+    print(f'Natives: {len(table)} TTT1 movesets, {args.jobs} at a time...', flush=True)
+    # True Ogre converts Ogre's select RAM: run it after Ogre has written it.
+    for keys in ([k for k in table if 'capture' not in table[k]], [k for k in table if 'capture' in table[k]]):
+        parallel(args.jobs, [(k, importer(args, k), LOGS / f'native-{k}.log') for k in keys])
 
 
 def donors(args, wanted):
