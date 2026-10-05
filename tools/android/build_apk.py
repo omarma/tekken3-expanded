@@ -331,8 +331,14 @@ def compile_java(args, build_dir: Path, work: Path) -> Path:
     dex = work / "dex"
     shutil.rmtree(dex, ignore_errors=True)
     dex.mkdir()
+    # One jar, not every .class: d8.bat runs through cmd.exe, whose command line
+    # stops at 8191 characters (about 70 classes under a long Windows folder).
+    jar = work / "classes.jar"
+    with zipfile.ZipFile(jar, "w") as out:
+        for item in sorted(classes.rglob("*.class")):
+            out.write(item, item.relative_to(classes).as_posix())
     run([tool(args.build_tools, "d8"), "--release", "--min-api", MIN_SDK,
-         "--lib", android_jar, "--output", dex, *sorted(classes.rglob("*.class"))])
+         "--lib", android_jar, "--output", dex, jar])
     return dex / "classes.dex"
 
 
