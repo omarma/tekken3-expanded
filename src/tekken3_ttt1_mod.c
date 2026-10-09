@@ -156,6 +156,8 @@ void tekken3_ttt1_after_init(void) { if(initializing>0) initializing--; }
 typedef struct { int frame; char prefix[40]; } ModelStep;
 static ModelStep model_steps[2][8];
 static int model_step_count[2]={-1,-1};
+/* Another cutscene selected (a TTT ending's own TEKKEN3_EMBU_MODEL_P1 / _P2): read again. */
+void tekken3_ttt1_embu_models_reset(void) { model_step_count[0]=model_step_count[1]=-1; }
 extern int tekken3_cine_frame(void);
 extern int tekken3_cine_pending(void);
 static const char *embu_model(unsigned player) {
@@ -345,7 +347,9 @@ static int native_moves_player(unsigned player) {
      * numbers: on his TTT1 alias table they fell to his stance, and he
      * stood in guard while Heihachi was lifted. */
     unsigned phase=psx_mod_read_half(0x800ae224);
-    if(psx_mod_read_word(0x800ae204)==8 && (phase==16 || phase==17))return 0;
+    /* Not on a cutscene of ours on those phases (a TTT ending): its native
+     * partner (King beside Armor King) plays its TTT1 clips there. */
+    if(psx_mod_read_word(0x800ae204)==8 && (phase==16 || phase==17) && !tekken3_cine_pending())return 0;
     return id<23 && psx_mod_read_half(0x800a9240+player*0x188c)==id;
 }
 unsigned tekken3_ttt1_player_motion_mode(unsigned player) {
@@ -1097,12 +1101,58 @@ void __wrap_func_800293BC(CPUState *cpu) {
     }
     __real_func_800293BC(cpu);
 }
+/* Tails, ears, loincloth, hair (B31). The native solver 0x80037CBC swings an accessory bone like a
+ * spring. Its parameters are a 16-byte block per model and bone (table 0x8009623C, six bones 18..23
+ * from model * 24), copied at load by 0x80037C58 to actor +0x136C + 4 * (bone - 18), with the bone's
+ * rest angles at +0x129E + 8 * (bone - 18) (row words 7..9) and a first-frame flag at +0x1360 +
+ * 2 * (bone - 18). King's tail (model 6) is three such bones. TTT1 keeps the table (0x8019D674 by
+ * model slot, loaded by 0x801648E0, solved by 0x80163B68) with the same fields from +2 on; its +0
+ * is a switch where T3 has an axis convention (table 0x80095D20), 1 for King's tail, which makes
+ * Roger's tail follow the arcade's (term by term correlation 0.8 to 0.98). A guest's model is 52,
+ * past the end of the T3 table, so its accessory bones were kept rigid below: the bones the arcade
+ * swings get the arcade's block and the native solver runs. The converter keeps the TTT1 bone on
+ * the same PS1 bone, except Roger's and Armor King's third tail piece, baked into bone 19 (five
+ * accessories, four parts): their bones 20 and 21 are TTT1's 21 and 22. */
+enum { SOFT=1,KING_TAIL,JUN_HAIR,JUN_SKIRT };
+static const int16_t swing_values[][8]={
+    {1,1,128,24,128,128,0,0},           /* 0x8019CECC */
+    {1,2,128,64,144,192,0,0},           /* 0x8019CF3C, King's and Armor King's tail */
+    {1,2,128,48,128,192,0,0},           /* 0x8019D454 */
+    {1,2,192,24,128,192,0,0},           /* 0x8019D57C */
+};
+static const struct { const char *key; int costume; unsigned char block[4]; } swings[]={
+    {"roger",-1,{SOFT,SOFT,SOFT,SOFT}},                 /* tail, ears */
+    {"alex",-1,{SOFT,SOFT,SOFT,0}},                     /* tail */
+    {"armorking",-1,{KING_TAIL,KING_TAIL,SOFT,SOFT}},  /* tail, loincloth */
+    {"jun",0,{JUN_HAIR,SOFT,0,0}},                      /* hair, bow */
+    {"jun",1,{SOFT,0,0,0}},
+    {"jun",2,{JUN_HAIR,JUN_SKIRT,JUN_SKIRT,0}},
+};
+extern const char *tekken3_guest_key(unsigned id);
+extern unsigned tekken3_guest_costume(unsigned player);
+static uint32_t swing_block(unsigned player,unsigned id,unsigned bone) {
+    static uint32_t blocks;
+    const char *key=tekken3_guest_key(id);
+    if(!key || bone>21)return 0;
+    for(unsigned i=0;i<sizeof swings/sizeof *swings;i++) {
+        if(strcmp(key,swings[i].key) || (swings[i].costume>=0 &&
+           (unsigned)swings[i].costume!=tekken3_guest_costume(player)))continue;
+        unsigned k=swings[i].block[bone-18];
+        if(!k)return 0;
+        if(!blocks) {
+            if(!(blocks=psx_mod_alloc_guest_memory(sizeof swing_values,16)))return 0;
+            for(unsigned j=0;j<sizeof swing_values/2;j++)psx_mod_write_half(blocks+j*2,(uint16_t)swing_values[0][j]);
+        }
+        return blocks+(k-1)*16;
+    }
+    return 0;
+}
 extern void __real_func_80037CBC(CPUState *cpu);
 void __wrap_func_80037CBC(CPUState *cpu) {
     /* The native accessory solver initializes its angles from Jin's empty
-     * accessory slots and overwrites our matrices on the next frame. Jun's
-     * donor hair and bow have their own rest rotations. Keep these rigid
-     * until the donor's secondary-motion solver is ported. */
+     * accessory slots and overwrites our matrices on the next frame: a guest's
+     * accessory bones take their own rest rotation, and those the arcade swings
+     * (swing_block above) their own parameters before the solver runs. */
     if(cpu->pc==0 || cpu->pc==0x80037cbc) {
         uint32_t actor=cpu->gpr[4];unsigned bone=cpu->gpr[5];
         for(unsigned p=0;p<2;p++) if(actor==0x800a9228+p*0x188c &&
@@ -1119,6 +1169,17 @@ void __wrap_func_80037CBC(CPUState *cpu) {
                     fprintf(stderr,"%s model: accessoire P%u os %u -> ligne %u ; "
                             "angles %08X %08X %08X\n",name_for(p),p+1,bone,row,
                             psx_mod_read_word(r+28),psx_mod_read_word(r+32),psx_mod_read_word(r+36)); }
+            }
+            uint32_t block=swing_block(p,psx_mod_read_half(actor+0x18),bone);
+            if(block) {
+                unsigned i=bone-18;
+                if(psx_mod_read_word(actor+0x136c+i*4)!=block) {
+                    psx_mod_write_word(actor+0x136c+i*4,block);
+                    psx_mod_write_half(actor+0x1360+i*2,0);       /* first frame: the rest pose */
+                }
+                for(unsigned k=0;k<3;k++)
+                    psx_mod_write_half(actor+0x129e + i*8+k*2,(uint16_t)psx_mod_read_word(skeleton+24+row*56+28+k*4));
+                break;
             }
             accessory_rotation(actor+0xf74+bone*32,skeleton+24+row*56);
             cpu->pc=cpu->gpr[31];return;
@@ -1410,6 +1471,11 @@ extern int tekken3_guest_id(const char *key);
 extern void tekken3_guest_follow(unsigned player,unsigned id,unsigned costume);
 static const char *const t3_keys[20]={"paul","law","lei","king","yoshimitsu","nina","hwoarang","xiaoyu",
     "eddy","jin","julia","kuma","bryan","heihachi","ogre","mokujin","gunjack","gon","anna","drb"};
+/* A Tekken 3 native's id by its key (King 3), -1 for anything else. */
+int tekken3_t3_key_id(const char *key) {
+    for(unsigned i=0;key && i<20;i++)if(!strcmp(key,t3_keys[i]))return (int)i;
+    return -1;
+}
 static int embu_cast[20],embu_parsed;
 static char embu_option_cast[512];
 /* Activation of the Embu TTT feature: its options become the casting. */

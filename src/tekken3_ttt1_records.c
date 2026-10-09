@@ -316,13 +316,60 @@ void __wrap_func_8004CC08(CPUState *cpu) {
     for(unsigned i=0;i<3;i++)ta_record->name[i]=psx_mod_read_byte(ta_row+4+i);
     save();
 }
+/* The name entry (states 16 and 17) lists the records of the stock rows 0..20 (the
+ * ranking overlay's builder 0x800C172C, sort called from 0x800C1804, list
+ * at 0x800CB878) and finds the player's rank as the listed row whose
+ * address is in 0x80097F44; the list scrolls to it and the cursor sits on
+ * it. A guest's new record is in our row (mod memory, unreadable by the
+ * overlay and out of the table): no rank was found, the list never moved
+ * to the player and the guest was not on it. At that sort, for player 1's
+ * entry (bit 0 of 0x800980FE) of the guest the record is for, the guest joins
+ * the list under its own ID (its icon and name are drawn by ID), its row
+ * lent at 0x80097F4C + 8 * ID with our row's bytes and 0x80097F44 pointed
+ * there, where the name entry writes. The name goes back to our row every
+ * frame; the bytes under the lent row come back when the screen ends and
+ * around each card write (save_guard). */
+enum { TA_LIST_SORT=0x800c180c, NAME_ENTRY_FLAGS=0x800980fe, TA_PAIRS_MAX=22 };
+/* The ranking screens: 16, then 17 by the time the list is built (mode
+ * 0x800AFA88 is 6 there, no longer Time Attack's 3). */
+static int ranking_state(void){unsigned s=psx_mod_read_word(0x800ae204);return s==16 || s==17;}
+static uint32_t ne_row;
+static unsigned char ne_backup[8];
+static void ne_copy(uint32_t to,uint32_t from){for(unsigned i=0;i<8;i++)psx_mod_write_byte(to+i,psx_mod_read_byte(from+i));}
+static void ne_give_back(void) {
+    if(!ne_row)return;
+    ne_copy(ta_row,ne_row);
+    for(unsigned i=0;i<8;i++)psx_mod_write_byte(ne_row+i,ne_backup[i]);
+    if(psx_mod_read_word(TA_POINTER)==ne_row)psx_mod_write_word(TA_POINTER,ta_row);
+    ne_row=0;
+}
+static void ta_list_sort(CPUState *cpu) {
+    unsigned id=psx_mod_read_byte(TA_FIGHTER),n=cpu->gpr[5];
+    if(cpu->gpr[31]!=TA_LIST_SORT || !tekken3_ttt1_roster_enabled() || !ta_row || !ta_record ||
+       !ranking_state() ||
+       !(psx_mod_read_byte(NAME_ENTRY_FLAGS)&1) || psx_mod_read_word(TA_POINTER)!=ta_row ||
+       tekken3_guest_character(id)<0 || !tekken3_guest_key(id) || strcmp(ta_record->key,tekken3_guest_key(id)) ||
+       n>=TA_PAIRS_MAX)return;
+    ne_give_back();
+    ne_row=TA_TABLE+id*8;
+    for(unsigned i=0;i<8;i++)ne_backup[i]=psx_mod_read_byte(ne_row+i);
+    ne_copy(ne_row,ta_row);
+    psx_mod_write_word(TA_POINTER,ne_row);
+    psx_mod_write_word(cpu->gpr[4]+n*8,id);psx_mod_write_word(cpu->gpr[4]+n*8+4,psx_mod_read_word(ne_row));
+    cpu->gpr[5]=cpu->gpr[17]=n+1;                  /* sort and builder count (a1, s1) */
+    psx_mod_write_half(cpu->gpr[19]+12,(uint16_t)(n+1));   /* list count, stored before the sort */
+}
 /* Every frame: the lent row back if no record took it; the name the name
  * entry writes in our row goes to the file. */
 static void time_attack_tick(void) {
     ta_ticks++;
     if(!ta_row)ta_row=psx_mod_alloc_guest_memory(8,4);
     if(ta_lent && ta_ticks-ta_lent_tick>=2)ta_give_back();
-    if(!ta_row || !ta_record || psx_mod_read_word(TA_POINTER)!=ta_row)return;
+    if(ne_row) {
+        if(!ranking_state())ne_give_back();
+        else ne_copy(ta_row,ne_row);
+    }
+    if(!ta_row || !ta_record || (psx_mod_read_word(TA_POINTER)!=ta_row && !ne_row))return;
     int changed=0;
     for(unsigned i=0;i<8;i++)changed|=psx_mod_read_byte(ta_row+i)!=ta_shown[i];
     if(!changed)return;
@@ -528,6 +575,7 @@ static int rx_sort(CPUState *cpu) {
 }
 void __wrap_func_8004CD80(CPUState *cpu) {
     if(entry(cpu,0x8004cd80) && rx_sort(cpu))return;
+    if(entry(cpu,0x8004cd80))ta_list_sort(cpu);
     if(entry(cpu,0x8004cd80) && in_ranking()) {
         /* s3 = the structure it fills: the other rankings share it only
          * when they are the ones on screen. */
@@ -556,6 +604,11 @@ static uint32_t survival_row(unsigned row){return SURVIVAL+row*8;}
 static int save_guard(void) {
     int changed=0;
     load();
+    if(ne_row) {                        /* the name entry's lent row: the card gets its own bytes */
+        ne_copy(ta_row,ne_row);
+        for(unsigned i=0;i<8;i++)psx_mod_write_byte(ne_row+i,ne_backup[i]);
+        changed=1;
+    }
     for(unsigned row=0;row<SURVIVAL_ROWS;row++) {
         uint32_t at=survival_row(row);unsigned id=psx_mod_read_half(at);
         SurvivalMark *m=&survival_marks[row];
@@ -601,6 +654,7 @@ static void guests_back(void) {
         if(id>=0 && psx_mod_read_byte(LAST_CHOICE+p)==JIN*4+choice_marks[p].costume)
             psx_mod_write_byte(LAST_CHOICE+p,(uint8_t)(id*4+choice_marks[p].costume));
     }
+    if(ne_row)ne_copy(ne_row,ta_row);       /* the name entry's lent row, over what came back */
 }
 /* The guests come back once the write has copied its blocks: at once when
  * the call returns, else on the next frame (tekken3_ranking_tick). */

@@ -578,6 +578,30 @@ static void bound(uint32_t address,unsigned stock,unsigned target) {
     if(cur==target || cur<stock || cur>target)return;
     patch(address,op,(op&0xffff0000)|target);
 }
+/* The icon tile's palette, dark to light as the stock ones are. The game
+ * greys a chosen or defeated fighter's icon (grid, FIGHT screen, results)
+ * with one ramp for all, (256, 501), black at index 0 up to light grey at
+ * 255: it gives each pixel the grey of its index, not of its colour. The
+ * import ranks a guest's colours light to dark, so its grey came out
+ * inverted. Index 0 (transparent) stays; the pixels follow their colours. */
+static unsigned colour_luminance(const unsigned char *c) {
+    unsigned v=u16(c);
+    return (v&31)*299+(v>>5&31)*587+(v>>10&31)*114;
+}
+static void icon_palette_dark_to_light(unsigned char *block,unsigned pixel_count) {
+    unsigned char *palette=block+20,*pixels=block+544,order[256],to[256],sorted[512];
+    unsigned n=1;
+    for(unsigned i=0;i<pixel_count;i++)if(pixels[i]>=n)n=pixels[i]+1u;
+    for(unsigned i=0;i<n;i++) {                   /* stable insertion sort from 1 */
+        unsigned j=i;
+        while(j>1 && colour_luminance(palette+order[j-1]*2)>colour_luminance(palette+i*2)){order[j]=order[j-1];j--;}
+        order[j]=(unsigned char)i;
+    }
+    memcpy(sorted,palette,sizeof sorted);
+    for(unsigned i=0;i<n;i++){memcpy(sorted+i*2,palette+order[i]*2,2);to[order[i]]=(unsigned char)i;}
+    memcpy(palette,sorted,sizeof sorted);
+    for(unsigned i=0;i<pixel_count;i++)pixels[i]=to[pixels[i]];
+}
 /* The interface pack (<prefix>-ui.jui) alone: portrait, tiles, loading card. */
 static int load_ui_pack(Tekken3Guest *g) {
     const char *root=tekken3_ttt1_asset_root();char path[4096];
@@ -600,6 +624,7 @@ static int load_ui_pack(Tekken3Guest *g) {
         g->ui_offsets[i]=o;g->ui_lengths[i]=n;
     }
     if(!ok){free(g->ui);g->ui=NULL;return 0;}
+    icon_palette_dark_to_light(g->ui+g->ui_offsets[2],32*58);
     /* Arcade loading thumbnails have half-height pixels. The PS1's framed
      * team cards use 58 rows, so preserve their aspect ratio. */
     const unsigned char *small=g->ui+g->ui_offsets[4]+544;

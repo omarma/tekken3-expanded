@@ -10,6 +10,7 @@ static const Tekken3SelectorPacket force[] = {
 static const Tekken3SelectorPacket team[] = {
 #include "fixtures/tekken3_team_loading_packets.inc"
 };
+static int same_cell(Tekken3ForceCell a, Tekken3ForceCell b) { return a.tile==b.tile && a.clut==b.clut; }
 static void loading(const Tekken3SelectorPacket *input, size_t n, int kind, int delta) {
     Tekken3SelectorPacket p[160];
     Tekken3LoadingFrame frame;
@@ -38,6 +39,44 @@ static void loading(const Tekken3SelectorPacket *input, size_t n, int kind, int 
     for(size_t i=0;i<n;i++)if(p[i].source_addr==frame.left_source)p[i].width--;
     assert(!tekken3_loading_analyze_frame(p,n,368,480,&frame));
     assert(!tekken3_loading_analyze_frame(input,n,320,240,&frame));
+}
+
+/* The last stage (Heihachi's bridge): a 3x5 map under a steep tilt, so the
+ * guest skips every cell above y = -64 and the top rows hold 3 or 6 sprites. */
+static int floor3(int n) { return n < 0 ? (n-2)/3 : n/3; }
+static void bridge(void) {
+    Tekken3ForceCell map[15];
+    Tekken3ForceSprite sprites[42];
+    Tekken3ForceReveal out[36];
+    const int slope=270396, top=-82;
+    for(int i=0;i<15;i++)map[i]=(Tekken3ForceCell){(uint16_t)(0x800|i),(uint16_t)(0x7803+i)};
+    for(int scroll=0;scroll<192;scroll++) {
+        int first=scroll/64, x0=-(scroll%64);
+        size_t count=0;
+        for(int row=0;row<5;row++)for(int col=0;col<7;col++) {
+            int y=top+64*row-(int)((long long)slope*(floor3(first+col)-floor3(first))/4096);
+            if(y<-64||y>480)continue;
+            sprites[count]=(Tekken3ForceSprite){0x100004u+(unsigned)count*20,x0+col*64,y,map[row*3+(first+col)%3]};
+            count++;
+        }
+        size_t n=tekken3_force_reveal(map,3,5,scroll,slope,61,sprites,count,out,36);
+        for(size_t i=0;i<n;i++) {
+            int col=(out[i].x-x0)/64, row=-1;
+            if(out[i].x<x0)col=-1;
+            assert(out[i].x+64<=0 || out[i].x>=368);
+            for(int r=0;r<5;r++)
+                if(out[i].y==top+64*r-(int)((long long)slope*(floor3(first+col)-floor3(first))/4096))row=r;
+            assert(row>=0 && same_cell(out[i].cell,map[row*3+((first+col)%3+3)%3]));
+        }
+        /* Guest cells plus reveals cover every map cell in the top band of both margins. */
+        for(int x=-61;x<429;x++)for(int y=20;y<100;y+=4) {
+            int c=(x-x0+640)/64-10, r=y-(top-(int)((long long)slope*(floor3(first+c)-floor3(first))/4096));
+            int covered=(x>=0&&x<368)||r<0||r>=5*64;      /* outside the map: the guest's filler */
+            for(size_t i=0;i<count;i++)covered|=x>=sprites[i].x&&x<sprites[i].x+64&&y>=sprites[i].y&&y<sprites[i].y+64;
+            for(size_t i=0;i<n;i++)covered|=x>=out[i].x&&x<out[i].x+64&&y>=out[i].y&&y<out[i].y+64;
+            assert(covered);
+        }
+    }
 }
 
 static void reveal(void) {
@@ -69,7 +108,8 @@ static void reveal(void) {
     }
     sprites[0].cell.clut^=1;sprites[7].cell.clut^=1;
     assert(!tekken3_force_reveal(map,16,2,2048,0,61,sprites,14,out,12));
-    assert(!tekken3_force_reveal(map,16,2,2048,0,61,sprites,6,out,12));
+    /* A partial row (cells above the screen are skipped) still places the plane. */
+    assert(tekken3_force_reveal(map,16,2,2048,0,61,sprites+8,6,out,12)==2);
     /* The original background tilt changes height at each third column. */
     for(int slope=-12288;slope<=12288;slope+=24576)for(int first=0;first<16;first++) {
         for(int row=0;row<2;row++)for(int col=0;col<7;col++) {
@@ -80,12 +120,12 @@ static void reveal(void) {
         size_t n=tekken3_force_reveal(map,16,2,first*64+31,slope,61,sprites,14,out,12);
         assert(n==4);
         for(size_t i=0;i<n;i++) {
-            int index=(int)(out[i].edge_source-0x100004u)/20;
-            int anchor=index%7, col=(out[i].x+31)/64;
+            int col=(out[i].x+31)/64, row=out[i].y>=32?1:0;
             int thirds=(first+col<0?(first+col-2)/3:(first+col)/3);
-            assert(out[i].y==sprites[index].y-(thirds-(first+anchor)/3)*slope/4096);
+            assert(out[i].y==row*64-(thirds-first/3)*slope/4096);
         }
     }
+    bridge();
 }
 int main(void) {
     loading(force,sizeof(force)/sizeof(*force),2,0);
@@ -93,6 +133,6 @@ int main(void) {
     loading(team,sizeof(team)/sizeof(*team),1,0);
     loading(team,sizeof(team)/sizeof(*team),1,-0x3c00);
     reveal();
-    puts("PASS: Force original-map reveal, Force and Team Battle loading A/B");
+    puts("PASS: Force original-map reveal (incl. the tilted bridge), Force and Team Battle loading A/B");
     return 0;
 }

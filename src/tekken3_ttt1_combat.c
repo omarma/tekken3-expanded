@@ -15,6 +15,7 @@ extern unsigned tekken3_ttt1_player_motion_mode(unsigned player);
 extern int tekken3_devil_jin_player(unsigned player);
 extern unsigned tekken3_native_moves_id(unsigned player);
 extern int tekken3_ttt1_roster_enabled(void);
+extern int tekken3_ending_pack_wanted(unsigned player);
 extern void tekken3_ttt1_face_tick(unsigned player,int advanced,int expression,unsigned duration,unsigned flag);
 static uint32_t face_record[2];
 static unsigned face_frame[2];
@@ -338,8 +339,9 @@ static int load_combat(unsigned s) {
     if(c->attempted)return c->loaded;c->attempted=1;
     const char *root=tekken3_ttt1_asset_root();if(!root)return 0;
     /* TEKKEN3_ENDING_PACKS (the TTT Cinematics feature): a folder of packs that
-     * add an ending's clips to a guest's own, used in its place. */
-    const char *packs=getenv("TEKKEN3_ENDING_PACKS");
+     * add an ending's clips to a guest's own, used in its place where the
+     * ending can play (tekken3_ending_pack_wanted). */
+    const char *packs=tekken3_ending_pack_wanted(s)?getenv("TEKKEN3_ENDING_PACKS"):NULL;
     char path[4096];FILE *f=NULL;
     if(packs && *packs && snprintf(path,sizeof path,"%s/%s-combat.jmv",packs,tekken3_guest_moves_prefix_for(s))<(int)sizeof path &&
        (f=fopen(path,"rb")))fprintf(stderr,"%s combat: ending pack %s\n",tekken3_guest_name_for(s),path);
@@ -362,15 +364,25 @@ static int load_combat(unsigned s) {
         free(c->data);c->data=NULL;return 0;
     }
     /* Slot 1's graph lives at 8192+4096: move each record's next move and
-     * its cancel destinations, now that the pack has been checked. */
+     * its cancel destinations, now that the pack has been checked. Records
+     * may share a cancel list (an ending pack's clips are copies of the
+     * stance, tools/ttt1/pack_edit.py): each entry moves once. Moved once
+     * per record, the stance's destinations went past 0x8000 for the CPU's
+     * Kazuya and Devil, read as negative aliases: stray records (B30). */
+    unsigned char *moved=s?calloc(c->size/8+1,1):NULL;
+    if(s && !moved){free(c->data);c->data=NULL;return 0;}
     if(s)for(unsigned i=0;i<c->count;i++) {
         uint32_t rp=c->records+i*56,cp=word(c->data+rp+12),n=word(c->data+32+i*16+12);
         if(ttt1_pack_half(c->data+rp+16)>=SLOT_BASE)put_half(c->data+rp+16,ttt1_pack_half(c->data+rp+16)+s*SLOT_STRIDE);
         for(unsigned j=0;j<n;j++) {
-            unsigned char *e=c->data+cp+j*12+6;
+            uint32_t at=cp+j*12+6;
+            if(moved[at>>3]&1u<<(at&7))continue;
+            moved[at>>3]|=(unsigned char)(1u<<(at&7));
+            unsigned char *e=c->data+at;
             if(ttt1_pack_half(e)>=SLOT_BASE)put_half(e,ttt1_pack_half(e)+s*SLOT_STRIDE);
         }
     }
+    free(moved);
     /* Keep decoded motion in host memory; guest records point at compact
      * clip headers consumed by the decoder bridge. */
     uint32_t compact=c->records+c->count*56;
@@ -1156,8 +1168,15 @@ static void place_hit_effect(unsigned player) {
  * file, absolute or under the TTT1 asset root): Jin's red TTT1 lightning
  * for his transformation in Kazuya's TTT ending, which the lightning aura
  * (timed property 6) draws with. */
+static unsigned char *embu_effect_pack[2];static unsigned embu_effect_frames[2];static int embu_effect_tried[2];
+static int embu_light_want=-2;
+/* Another cutscene selected (a TTT ending's own effect packs and light): read again. */
+void tekken3_ttt1_embu_effects_reset(void) {
+    for(unsigned p=0;p<2;p++){free(embu_effect_pack[p]);embu_effect_pack[p]=NULL;embu_effect_tried[p]=0;}
+    embu_light_want=-2;
+}
 void tekken3_ttt1_embu_effects(void) {
-    static unsigned char *pack[2];static unsigned frames[2];static int tried[2];
+    unsigned char **pack=embu_effect_pack;unsigned *frames=embu_effect_frames;int *tried=embu_effect_tried;
     for(unsigned p=0;p<2;p++) {
         if(!tried[p]) {
             tried[p]=1;
@@ -1191,8 +1210,9 @@ void tekken3_ttt1_embu_effects(void) {
  * the Embu runs, the stock colours back as soon as it ends. */
 void tekken3_ttt1_embu_light(int embu) {
     enum { HEADERS=0x80027950, HEADER=6, IDS=22 };
-    static int want=-2;static unsigned char saved[IDS][3];static int lit;
-    if(want==-2){const char *e=getenv("TEKKEN3_EMBU_EFFECT_LIGHT");want=e&&*e?(int)strtol(e,NULL,16):-1;}
+    static unsigned char saved[IDS][3];static int lit;
+    int want=embu_light_want;
+    if(want==-2){const char *e=getenv("TEKKEN3_EMBU_EFFECT_LIGHT");want=embu_light_want=e&&*e?(int)strtol(e,NULL,16):-1;}
     if(want<0)return;
     if(embu && !lit) {
         for(unsigned id=0;id<IDS;id++)for(unsigned k=0;k<3;k++) {

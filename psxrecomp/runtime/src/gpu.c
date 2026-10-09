@@ -121,6 +121,18 @@ static Tekken3SelectorFrame t3_selector_session_frame;
 static Tekken3LoadingFrame t3_loading_frame;
 static Tekken3ForceReveal t3_force_reveals[36];
 static size_t t3_force_reveal_count;
+/* The last Force background frame's cells, for the debug server: a later
+ * list without the plane resets the live set. */
+static Tekken3ForceReveal t3_force_shown[36];
+static size_t t3_force_shown_count;
+int gpu_ws_force_reveals(int *xyf, int max) {
+    int n = 0;
+    for (size_t i = 0; i < t3_force_shown_count && n < max; i++, n++) {
+        xyf[3*n] = t3_force_shown[i].x; xyf[3*n+1] = t3_force_shown[i].y;
+        xyf[3*n+2] = t3_force_shown[i].filler && psx_read_word(0x800B6BB0u) == 3;
+    }
+    return n;
+}
 static int t3_force_background_active;
 static int t3_retained_gameplay;
 int gpu_tekken3_selector_active(void) {
@@ -4113,6 +4125,16 @@ static void gp0_exec_mono_rect(void) {
     if (draw_area_out_rect(x0, y0, w, h)) return;
     gr_set_semi_transparency(semi_trans, (int)semi_transparency);
     gr_draw_flat_rect(x0, y0, w, h, color);
+    /* Force's underlay at its two packet slots fills above the sprite plane.
+     * A partial one that meets a screen edge (272 px from x = 0 on the last
+     * stage) continues into that 16:9 margin, in the sidecar only. */
+    uint32_t src = gp0_cmd_source_addr & 0x1fffffu;
+    int margin = ws_nw_offset(), sx = x0 - draw_offset_x;
+    if (t3_force_background_active && margin > 0 && w < 368 &&
+        (src == 0xB6B18u || src == 0xB6B28u)) {
+        if (sx == 0) gr_draw_flat_rect(x0 - margin, y0, margin, h, color);
+        if (sx + w == 368) gr_draw_flat_rect(x0 + w, y0, margin, h, color);
+    }
 }
 
 /* Additional Force cells lie wholly outside the original framebuffer. The
@@ -4127,6 +4149,11 @@ static void t3_force_draw_reveal(uint32_t source, uint32_t color24, int semi, in
             (r->cell.tile & 3)*64, ((r->cell.tile >> 2)&3)*64,
             (r->cell.clut & 63)*16, (r->cell.clut >> 6)&511,
             (current_texpage() & ~31u) | ((r->cell.tile >> 8)&31));
+        if (r->filler && psx_read_word(0x800B6BB0u) == 3) {
+            gr_set_semi_transparency(0, (int)semi_transparency);
+            gr_draw_flat_rect(r->x + draw_offset_x, r->y + 64 + draw_offset_y, 64, 32,
+                rgb888_to_rgb555(psx_read_word(0x800B6B38u) & 0xFFFFFFu));
+        }
     }
 }
 
@@ -4863,7 +4890,8 @@ static void t3_force_prepare_reveal(void) {
     int sine = (int16_t)psx_read_half(0x8001E8C4u+angle*2u);
     if (!cosine) return;
     int64_t slope = (int64_t)(0xc0000/cosine)*sine;
-    if (slope < -64*4096 || slope > 64*4096) return;
+    /* The last stage's bridge tilts 66 px per three columns. */
+    if (slope < -128*4096 || slope > 128*4096) return;
     int columns = (int)psx_read_word(0x800B6B94u);
     int rows = (int)psx_read_word(0x800B6B98u);
     int divisor = (int)psx_read_word(0x800B6BA4u);
@@ -4904,6 +4932,8 @@ static void t3_force_prepare_reveal(void) {
             ws_nw_offset(), sprites, count, t3_force_reveals+t3_force_reveal_count,
             36-t3_force_reveal_count);
     }
+    memcpy(t3_force_shown, t3_force_reveals, t3_force_reveal_count*sizeof(*t3_force_reveals));
+    t3_force_shown_count = t3_force_reveal_count;
 }
 
 void gpu_ws_prepass_linked_list(uint32_t start_addr) {

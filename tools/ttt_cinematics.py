@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Prepare the TTT Cinematics feature (src/tekken3_embu_scenes.c): Kazuya's
-Tekken Tag Tournament (PS2) ending, played by the Tekken 3 engine in place of
-his Arcade ending movie.
+"""Prepare the TTT Cinematics feature (src/tekken3_embu_scenes.c): the
+Tekken Tag Tournament (PS2) endings of Kazuya and Armor King, played by the
+Tekken 3 engine in place of their Arcade ending movies.
 
     python3 tools/ttt_cinematics.py [--catalogue DIR] [--out DIR] [--ttt-disc DISC]
 
-The ending's poses and camera ship in the repository
-(tools/data/ttt_cinematics/kazuya.json.gz, from branch endings-release, where
-the capture and retargeting tools live). From the player's own TTT1 import
-this writes, into --out (default build-release/mods/ttt-cinematics, beside the
-TTT1 catalogue the game reads):
+Each ending's poses and camera ship in the repository
+(tools/data/ttt_cinematics/<key>.json.gz: {about, p1, p2: {guest, poses},
+camera}, the retarget files of branch endings-release, where the capture and
+retargeting tools live; ENDINGS below holds every other setting of an
+ending, explicit, never taken from the fight). From the player's own TTT1
+import this writes, into --out (default build-release/mods/ttt-cinematics,
+beside the TTT1 catalogue the game reads):
 
-- Kazuya's and Devil's combat packs with the ending's clips added
-  (TEKKEN3_ENDING_PACKS: the game uses them in place of the catalogue's);
+- each participant's combat pack with the ending's clips added: Kazuya's and
+  Devil's, Armor King's and King's (a native: his TTT1 pack, played on his
+  own model) (TEKKEN3_ENDING_PACKS: the game uses them in place of the
+  catalogue's);
 - Jin's model without the Devil and Devil Jin's without wings, the same
   geometry (tools/ttt1_devil_jin.py, from the import's work files; kept once
   made);
@@ -21,7 +25,9 @@ TTT1 catalogue the game reads):
 - with --ttt-disc (your Tekken Tag Tournament USA PS2 disc, .cue, .bin or
   .iso), the music of TTT's endings, decoded from it; without it, a piece of
   Tekken 3's own music, decoded from the player's disc (disc/);
-- cinematics.txt, the feature's settings, and version.txt.
+- cinematics.txt, the feature's settings: the shared lines, then a section
+  "[ending <key>]" per ending with its own TEKKEN3_* lines, selected by the
+  game when that character finishes the Arcade; and version.txt.
 
 Run again after any new TTT1 import: the packs come from the catalogue's.
 Game data: everything written stays out of the repository.
@@ -37,22 +43,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools/ttt1'))
 from pack_edit import Pack
 
-CINEMATICS_VERSION = 1
+CINEMATICS_VERSION = 3
 STAMP = 'version.txt'
-DATA = ROOT / 'tools/data/ttt_cinematics/kazuya.json.gz'
+DATA = ROOT / 'tools/data/ttt_cinematics'
 WORK = ROOT / 'workspace/ttt1-import'
 START = 14              # the ending's first frame in the cutscene (black before)
 CHUNK = 240             # frames a clip (its length is one byte)
 HOLD = 130              # frames the last pose is held
 SLOT_BASE, SLOT_STRIDE = 8192, 4096
-# Jin's lightning aura (timed property 6) from his transformation (capture
-# frame 832) on, one entry every 2 frames, each on the next T3 bone.
-AURA = (832, 1023, [2, 13, 6, 17, 3, 10, 16, 5, 14, 7, 12, 8, 15, 4], 2)
-DEVIL_FROM = 832        # capture frame: Jin's textures become Devil Jin's
 FADE_IN, FADE_OUT = 40, 90
-ARENA, DARK = 6, 0      # Ogre's temple, lit (tools/ps2/ttt_endings.json on endings-release)
 MODELS = {'JinPlain': ['--plain'], 'DevilJinEnd': ['--wings', 'none']}
 EFFECT = 'Jin-TTT1-hiteffect.tim'
+# The endings, each with every setting of its own (the user's rule: explicit
+# per ending, never taken from the fight): the T3 arena it plays in and its
+# dark look (True Ogre's) or not (tools/ps2/ttt_endings.json on
+# endings-release); p2_aura: player 2's lightning aura (timed property 6)
+# over capture frames, one entry every `step` frames on the next T3 bone;
+# p2_models: player 2 drawn with other model files from a capture frame on;
+# effects: the lightning pack of both players and the strong-hit light.
+ENDINGS = {
+    'kazuya': dict(arena=6, dark=0,                                   # Ogre's temple, lit
+                   p2_aura=(832, 1023, [2, 13, 6, 17, 3, 10, 16, 5, 14, 7, 12, 8, 15, 4], 2),
+                   p2_models='JinPlain@0,DevilJinEnd@832',             # Jin, then Devil Jin from his transformation
+                   effects=True),
+    'armorking': dict(arena=11, dark=0),                              # King's stage, King on his own model
+}
 
 # The music of TTT's in-engine endings: headerless PS-ADPCM in TEKKEN.BIN,
 # stereo interleaved by 1 024-byte blocks, 44 100 Hz, disc sectors 110 777 to
@@ -216,6 +231,65 @@ def effect(out):
         raise ValueError(f"Jin's red lightning is missing: run tools/ttt1_jin_hit_effect.py (the setup's Jin option)")
 
 
+def fade_spans(levels, offset, tol=6):
+    """TEKKEN3_EMBU_FADE spans for per-frame levels (a captured ending's own
+    fades): straight pieces within `tol` of every frame, frames at 0 left
+    out (the switch off). As ttt_ending_pack.py's on endings-release."""
+    spans, i, n = [], 0, len(levels)
+    while i < n:
+        if levels[i] == 0: i += 1; continue
+        j = i
+        while j + 1 < n and levels[j + 1] != 0:
+            k = j + 1
+            if not all(abs(levels[i] + (levels[k] - levels[i]) * (m - i) / (k - i) - levels[m]) <= tol for m in range(i, k + 1)): break
+            j = k
+        spans.append(f'{offset + i}-{offset + j}:{levels[i]}:{levels[j]}')
+        i = j + 1
+    return spans
+
+
+def ending(key, e, catalogue, out):
+    """One ending's packs, script and camera files; its cinematics.txt section."""
+    data = json.loads(gzip.decompress((DATA / f'{key}.json.gz').read_bytes()))
+    script, end = clips(data['p1']['poses'], data['p1']['guest'], 0, catalogue, out)
+    recs, end2 = clips(data['p2']['poses'], data['p2']['guest'], 1, catalogue, out, e.get('p2_aura'))
+    script = sorted(script + recs, key=lambda r: (r[0], r[1])); end = max(end, end2)
+    # Ended by a -1 record once the fade to black, over the held last pose, is done.
+    (out / f'{key}.cine.txt').write_text(''.join(' '.join(map(str, r)) + '\n' for r in script + [[end + FADE_OUT + 10, -1, 0, 0, 0]]))
+    # The camera turned as the actors are, (x, z) -> (-z, x); the first shot
+    # held before the ending starts, the last one after it.
+    cams = data['camera']
+    turn = lambda c: [-c[2], c[1], c[0], -c[5], c[4], c[3]]
+    track = [cams[0]] * START + cams
+    track += [cams[-1]] * max(0, end + 1000 - len(track))
+    (out / f'{key}.camera.txt').write_text('0\n' + '\n'.join(' '.join(map(str, turn(c))) for c in track) + '\n')
+    # Model files under the catalogue (mods/ttt1): ours are beside it. Every
+    # key written, empty when the ending has none: a selection replaces the
+    # previous ending's lines.
+    steps = [m.split('@') for m in e.get('p2_models', '').split(',') if m]
+    # The fades: the PS2 cutscene's own when captured (black before it, then
+    # black after it if it ended so), else in over FADE_IN, out over FADE_OUT.
+    if data.get('fade'):
+        lv = data['fade']
+        spans = [f'0-{START - 1}:-256:-256'] + fade_spans(lv, START)
+        spans += ([f'{START + len(lv)}-{end + 1000}:-256:-256'] if lv[-1] <= -200 else
+                  [f'{end}-{end + FADE_OUT}:0:-256', f'{end + FADE_OUT}-{end + 1000}:-256:-256'])
+        fade = ';'.join(spans)
+    else:
+        fade = (f'0-{START}:-256:-256;{START}-{START + FADE_IN}:-256:0;'
+                f'{end}-{end + FADE_OUT}:0:-256;{end + FADE_OUT}-{end + 1000}:-256:-256')
+    return {
+        'TEKKEN3_ENDING': f"{data['p1']['guest']}:{data['p2']['guest']}:{e['arena']}:{e['dark']}",
+        'TEKKEN3_FIGHT_CINE': f'$DIR/{key}.cine.txt@ending',
+        'TEKKEN3_EMBU_CAMERA_TRACK': f'$DIR/{key}.camera.txt',
+        'TEKKEN3_EMBU_MODEL_P2': ','.join(f'../ttt-cinematics/{m}-TTT1@{START + int(f)}' for m, f in steps),
+        'TEKKEN3_EMBU_EFFECT_P1': f'$DIR/{EFFECT}' if e.get('effects') else '',
+        'TEKKEN3_EMBU_EFFECT_P2': f'$DIR/{EFFECT}' if e.get('effects') else '',
+        'TEKKEN3_EMBU_EFFECT_LIGHT': 'ff2020' if e.get('effects') else '',
+        'TEKKEN3_EMBU_FADE': fade,
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--catalogue', type=Path, default=ROOT / 'build-release/mods/ttt1', help="the installed TTT1 catalogue")
@@ -224,39 +298,19 @@ def main(argv=None):
     a = ap.parse_args(argv)
     out = a.out or a.catalogue.parent / 'ttt-cinematics'
     out.mkdir(parents=True, exist_ok=True)
-    data = json.loads(gzip.decompress(DATA.read_bytes()))
-    script, end = clips(data['p1']['poses'], data['p1']['guest'], 0, a.catalogue, out)
-    recs, end2 = clips(data['p2']['poses'], data['p2']['guest'], 1, a.catalogue, out, AURA)
-    script = sorted(script + recs, key=lambda r: (r[0], r[1])); end = max(end, end2)
-    # Ended by a -1 record once the fade to black, over the held last pose, is done.
-    (out / 'kazuya.cine.txt').write_text(''.join(' '.join(map(str, r)) + '\n' for r in script + [[end + FADE_OUT + 10, -1, 0, 0, 0]]))
-    # The camera turned as the actors are, (x, z) -> (-z, x); the first shot
-    # held before the ending starts, the last one after it.
-    cams = data['camera']
-    turn = lambda c: [-c[2], c[1], c[0], -c[5], c[4], c[3]]
-    track = [cams[0]] * START + cams
-    track += [cams[-1]] * max(0, end + 1000 - len(track))
-    (out / 'kazuya.camera.txt').write_text('0\n' + '\n'.join(' '.join(map(str, turn(c))) for c in track) + '\n')
+    sections = {key: ending(key, e, a.catalogue, out) for key, e in ENDINGS.items()}
     models(out)
     effect(out)
     if a.ttt_disc: music(a.ttt_disc, out)
-    settings = {
-        'TEKKEN3_ENDING': f"{data['p1']['guest']}:{data['p2']['guest']}:{ARENA}:{DARK}",
-        'TEKKEN3_FIGHT_CINE': '$DIR/kazuya.cine.txt@ending',
-        'TEKKEN3_EMBU_CAMERA_TRACK': '$DIR/kazuya.camera.txt',
-        'TEKKEN3_ENDING_PACKS': '$DIR',
-        # Model files under the catalogue (mods/ttt1): ours are beside it.
-        'TEKKEN3_EMBU_MODEL_P2': f'../ttt-cinematics/JinPlain-TTT1@0,../ttt-cinematics/DevilJinEnd-TTT1@{START + DEVIL_FROM}',
-        'TEKKEN3_EMBU_EFFECT_P1': f'$DIR/{EFFECT}', 'TEKKEN3_EMBU_EFFECT_P2': f'$DIR/{EFFECT}',
-        'TEKKEN3_EMBU_EFFECT_LIGHT': 'ff2020',
-        'TEKKEN3_EMBU_FADE': (f'0-{START}:-256:-256;{START}-{START + FADE_IN}:-256:0;'
-                              f'{end}-{end + FADE_OUT}:0:-256;{end + FADE_OUT}-{end + 1000}:-256:-256'),
-    }
+    settings = {'TEKKEN3_ENDING_PACKS': '$DIR'}
     if (out / 'ending-music.pcm').is_file(): settings['TEKKEN3_EMBU_MUSIC'] = f'$DIR/ending-music.pcm@{START}'
     else:
         if read_stamp(out) != CINEMATICS_VERSION or not (out / 't3-music.pcm').is_file(): t3_music(out)
         settings['TEKKEN3_EMBU_MUSIC'] = f'$DIR/t3-music.pcm@{START}'
-    (out / 'cinematics.txt').write_text(''.join(f'{k}={v}\n' for k, v in settings.items()))
+    text = ''.join(f'{k}={v}\n' for k, v in settings.items())
+    for key, lines in sections.items():
+        text += f'[ending {key}]\n' + ''.join(f'{k}={v}\n' for k, v in lines.items())
+    (out / 'cinematics.txt').write_text(text)
     (out / STAMP).write_text(f'{CINEMATICS_VERSION}\n')
     print(f"TTT cinematics ready in {out}{'' if (out / 'ending-music.pcm').is_file() else ' (Tekken 3 music: no TTT PS2 disc given)'}")
 

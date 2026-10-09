@@ -7807,6 +7807,19 @@ static void handle_ws_nw(int id, const char *json)
              id, psx_ws_get_native_wide(), ws.mode, ws.nw_extra);
 }
 
+/* force_reveals: the 64x64 Tekken Force cells the 16:9 sidecar adds this frame. */
+static void handle_force_reveals(int id, const char *json)
+{
+    (void)json;
+    int xy[3*64], n = gpu_ws_force_reveals(xy, 64);
+    char buf[2048];
+    int pos = snprintf(buf, sizeof buf, "{\"id\":%d,\"ok\":true,\"cells\":[", id);
+    for (int i = 0; i < n; i++)
+        pos += snprintf(buf + pos, sizeof buf - (size_t)pos, "%s[%d,%d,%d]", i ? "," : "", xy[3*i], xy[3*i+1], xy[3*i+2]);
+    snprintf(buf + pos, sizeof buf - (size_t)pos, "]}");
+    debug_server_send_line(buf);
+}
+
 /* ws_backdrop_ring: dump the always-on auto_backdrop rewrite ring (which windows
  * fire, live extent/camera/DL-count, orig vs final bound). Read-only; small
  * heap envelope so the per-byte stall of a giant read is never in play. */
@@ -13295,6 +13308,7 @@ static const CmdEntry s_commands[] = {
     { "kernel_bless",      handle_kernel_bless },
     { "ws_aspect",         handle_ws_aspect },
     { "ws_nw",             handle_ws_nw },
+    { "force_reveals",     handle_force_reveals },
     { "ws_backdrop_ring",  handle_ws_backdrop_ring },
     { "ws_backdrop_margin", handle_ws_backdrop_margin },
     { "ws_backdrop_stretch", handle_ws_backdrop_stretch },

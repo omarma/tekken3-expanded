@@ -15,7 +15,7 @@ DEV DIARY 1.2 : https://youtu.be/YvDqCwzFNps
 - **Tag page on the select screen:** press **L2 / R2** to switch rosters. It works in every mode, and P1 and P2 can each pick a different guest.
 - **ALL Costumes Available** by pressing Punch, Kick or Start.
 - **From TTT:** the voices, sounds, portraits and announcer calls, and each character's own strong-hit effect, fade-out included.
-- **Closer to the arcade:** hands that close into each character's own fist, Devil's and Angel's wings that flap, faces that blink and shut their eyes when hit, metallic hit sounds for Jack-2 and P.Jack, the KO cry with Tekken 3's echo.
+- **Closer to the arcade:** hands that close into each character's own fist, Devil's and Angel's wings that flap, tails that swing for Roger, Alex and Armor King, faces that blink and shut their eyes when hit, metallic hit sounds for Jack-2 and P.Jack, the KO cry with Tekken 3's echo.
 - **Unknown** works as in Tekken Tag Tournament: she fights with the TTT movesets and switches style with **L1**, from 23 styles.
 - **Tetsujin** draws a random moveset every round from the TTT characters added to the game, and wears gold on **Start**.
 - **Devil and Angel** fire the arcade's laser beams along their facing, Air Inferno upwards. The CPU side-steps them, and the Jacks go haywire when hit.
@@ -26,7 +26,7 @@ DEV DIARY 1.2 : https://youtu.be/YvDqCwzFNps
 After you pick one of the 18 characters below, a **MOVESET** card lets you choose **TEKKEN 3** or **TEKKEN TAG TOURNAMENT**. The command list and Combo Training follow your choice.
 Paul, Law, Lei, King, Yoshimitsu, Nina, Hwoarang, Xiaoyu, Eddy, Jin, Julia, Bryan, Heihachi, Anna, Kuma, Ogre, Gun Jack, True Ogre (with his fire).
 
-The CPU draws its own moveset once per fight: set it in **Options → CPU MOVESET** (original, TTT or random).
+The card also shows in Tekken Ball. The CPU draws its own moveset once per fight: set it in **Options → CPU MOVESET** (original, TTT or random).
 
 ### Combos and move lists
 - **TTT characters:** each has their TTT move list and their own Combo Training, 88 combos in all.
@@ -54,7 +54,7 @@ The setup offers them as checkboxes. Leave them unticked and nothing changes.
 | Add-on | What it does | Extra file needed |
 |---|---|---|
 | **Jin's red lightning** | Jin's strong hits use his red TTT lightning instead of the blue one. | None, the arcade ROM is enough |
-| **TTT Cinematics** | Finish Arcade with Kazuya: his Tekken Tag Tournament ending plays in Tekken 3's engine, in place of his ending movie. For now, Kazuya's is the only ending. | None: it plays over Tekken 3's music |
+| **TTT Cinematics** | Finish Arcade with Kazuya or Armor King: their Tekken Tag Tournament ending plays in Tekken 3's engine, in place of the ending movie. Two endings for now, more to come. | None: it plays over Tekken 3's music |
 | **TTT Cinematics music** | The ending's original music. | Your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
 
 ## Coming in a future release

@@ -462,6 +462,8 @@ typedef struct {
     uint32_t angle_max_widened;
 } GpuWsDebug;
 void gpu_ws_get_debug(GpuWsDebug* out);
+/* Tekken Force cells added to the 16:9 margins (x, y, filler below) triples. */
+int gpu_ws_force_reveals(int* xyf, int max);
 
 typedef struct {
     uint32_t address;

@@ -1,6 +1,6 @@
-/* Our cutscenes in a fight: Kazuya's Tekken Tag Tournament (PS2) ending, in
- * place of his Arcade ending movie (the TTT Cinematics feature,
- * tools/ttt_cinematics.py). Ported from the attract-mode Embu's tools (branch
+/* Our cutscenes in a fight: the Tekken Tag Tournament (PS2) endings of
+ * Kazuya and Armor King, in place of their Arcade ending movies (the TTT
+ * Cinematics feature, tools/ttt_cinematics.py). Ported from the attract-mode Embu's tools (branch
  * endings-release), which keeps the capture and conversion tools.
  *
  * The feature's activation reads mods/ttt-cinematics/cinematics.txt beside the TTT1
@@ -81,9 +81,22 @@ static uint32_t ogre_scripts[TRAMPOLINE_WORDS];
  * state's phase 2 plays movie 0x800ADC94 (0x800FDC78, `jal` at 0x800FF2CC,
  * ending overlay) then starts the credits: the call is dropped. */
 static int ending_p1=-2, ending_p2, ending_arena=-1, ending_dark, ending_stage, cine_in_round;
+/* The endings table: cinematics.txt sections "[ending KEY]", one per
+ * character whose Arcade ends on a cutscene, each with its own TEKKEN3_*
+ * lines (explicit settings per ending, never taken from the fight). The
+ * one whose P1 finishes the Arcade is selected as its ending starts: its
+ * lines go to the environment and every reader of them reads again
+ * (cine_reset). TEKKEN3_ENDING already in the environment (a test) defines
+ * a single ending from the environment instead, the sections ignored. */
+enum { ENDINGS_MAX=8 };
+static struct { char key[32]; char lines[4096]; int p1,p2; } endings[ENDINGS_MAX];
+static int ending_count, ending_selected=-1;
 extern int tekken3_guest_id(const char *key);
+extern int tekken3_t3_key_id(const char *key);
 static int character(const char *token) {
-    return *token>='0' && *token<='9' ? atoi(token) : tekken3_guest_id(token);
+    if(*token>='0' && *token<='9') return atoi(token);
+    int id=tekken3_guest_id(token);
+    return id>=0?id:tekken3_t3_key_id(token);        /* a native partner (King) by its key */
 }
 static void ending_parse(void) {
     if(ending_p1!=-2) return;
@@ -96,11 +109,62 @@ static void ending_parse(void) {
     fprintf(stderr,"Ending: P1 %d's Arcade ends on a cutscene with %d, arena %d%s\n",
             ending_p1,ending_p2,ending_arena,ending_dark?", dark":"");
 }
+/* The table's ending for this character as P1, -1 for none (keys resolved
+ * once the roster is read). */
+static int ending_for(unsigned id) {
+    for(int i=0;i<ending_count;i++) {
+        if(endings[i].p1==-2) {
+            const char *e=strstr(endings[i].lines,"\nTEKKEN3_ENDING=");
+            char p1[32],p2[32];
+            if(!e || sscanf(e+16,"%31[^:]:%31[^:]",p1,p2)<2) { endings[i].p1=-1; continue; }
+            int a=character(p1),b=character(p2);
+            if(a<0 || b<0) continue;
+            endings[i].p1=a; endings[i].p2=b;
+        }
+        if(endings[i].p1==(int)id) return i;
+    }
+    return -1;
+}
+static void cine_reset(void);
+static void select_ending(int i) {
+    char *lines=strdup(endings[i].lines);
+    if(!lines) return;
+    for(char *l=strtok(lines,"\n");l;l=strtok(NULL,"\n")) {
+        char *eq=strchr(l,'=');
+        if(!eq) continue;
+        *eq=0;
+#ifdef _WIN32
+        _putenv_s(l,eq+1);
+#else
+        setenv(l,eq+1,1);
+#endif
+    }
+    free(lines);
+    ending_p1=-2; ending_parse();
+    cine_reset();
+    ending_selected=i;
+    fprintf(stderr,"TTT Cinematics: %s's ending selected\n",endings[i].key);
+}
 int tekken3_cine_pending(void) { return ending_stage==1 || fight_cine || cine_in_round; }
+/* Whether a player's guest takes its ending pack (TEKKEN3_ENDING_PACKS, read
+ * by src/tekken3_ttt1_combat.c) rather than the catalogue's. P1 always: its
+ * pack is read as soon as the selector's cursor is on the guest, before any
+ * mode or pick is known, and its clips must be there when stage 10 is won,
+ * without a reload; the extra records are inert outside the script. P2 only
+ * once reloaded as the ending's partner: the CPU drawing Kazuya or Devil
+ * keeps the catalogue's (B30). */
+int tekken3_ending_pack_wanted(unsigned player) {
+    ending_parse();
+    if(ending_p1<0 && !ending_count) return 0;
+    return player==0 || (player==1 && ending_stage==1);
+}
 extern void __real_func_8004FF74(CPUState *cpu);
 void __wrap_func_8004FF74(CPUState *cpu) {
     if(cpu->pc==0 || cpu->pc==0x8004ff74) {
         ending_parse();
+        /* The table's ending of the character who finishes the Arcade. */
+        int e=ending_count && !ending_stage?ending_for(psx_mod_read_half(0x800add5c)):-1;
+        if(e>=0 && e!=ending_selected) select_ending(e);
         /* Only the Arcade's own ending, stage 10 cleared (its index, from 0,
          * already moved on to 10): nothing else that goes through state 18
          * towards 19 is touched. */
@@ -126,6 +190,18 @@ static void ending_tick(unsigned state) {
     /* The arena's dark look, True Ogre's fight's (0x800AFAA0 = 2: only the
      * floor drawn, 0x8006D7CC), or its lit one (0). */
     if(ending_stage==1) psx_mod_write_byte(0x800afaa0,(uint8_t)ending_dark);
+    /* The fill tiles the fight draws its background with (0x8009E738, four
+     * 16-byte tiles: two 368 x 480 frames and two lower bands) keep the
+     * colour of the fight that loaded them: True Ogre's black after his
+     * fight, the sky of King's stage left black in Armor King's ending. The
+     * arena's own colour (0x80097A64 + 4 * arena, 0x00BBGGRR, as a fight's
+     * loading sets it), black for a dark arena. Once the cutscene runs (its
+     * pre-roll is black): earlier, the "YOU WIN" screen of the last fight
+     * turned blue on its last frame. */
+    if(ending_stage==1 && fight_cine && ending_arena>=0 && ending_arena<14) {
+        uint32_t colour=ending_dark?0:psx_mod_read_word(0x80097a64+(uint32_t)ending_arena*4)&0x00ffffffu;
+        for(unsigned i=0;i<4;i++) psx_mod_write_word(0x8009e73cu+i*16,0x60000000u|colour);
+    }
     if(ending_stage==2 && state==19 && psx_mod_read_half(0x800ae224)<=2 && psx_mod_read_word(0x800ff2cc)==0x0c03f71eu) {
         psx_mod_write_code_word(0x800ff2cc,0);
         fprintf(stderr,"Ending: no ending movie, the credits\n");
@@ -143,6 +219,7 @@ static void ending_tick(unsigned state) {
  * natives only: P2 becomes our partner there, a guest the roster follows. */
 extern void tekken3_guest_follow(unsigned player,unsigned id,unsigned costume);
 extern void tekken3_native_moves_reload(unsigned player,unsigned id);
+extern int tekken3_native_moves_force(unsigned player,unsigned id);
 extern void __real_func_8002A40C(CPUState *cpu);
 void __wrap_func_8002A40C(CPUState *cpu) {
     if((cpu->pc==0 || cpu->pc==0x8002a40c) && ending_stage==1 && !fight_cine) {
@@ -159,6 +236,11 @@ void __wrap_func_8002A40C(CPUState *cpu) {
     if(cpu->pc==0 || cpu->pc==0x8002a40c) {
         tekken3_native_moves_reload(0,cpu->gpr[4]&0xffff);
         tekken3_native_moves_reload(1,cpu->gpr[7]&0xffff);
+        /* The ending's native partner (King beside Armor King) on its TTT1
+         * moves: the ending's clips are in its TTT1 pack, played on its own
+         * model and skeleton. */
+        if(ending_stage==1 && ending_p2>=0 && ending_p2<23 && !tekken3_native_moves_force(1,(unsigned)ending_p2))
+            fprintf(stderr,"Ending: no TTT1 moves for native %d (natives.txt, <Key>-TTT1-combat.jmv)\n",ending_p2);
     }
     __real_func_8002A40C(cpu);
 }
@@ -170,10 +252,16 @@ static void ending_resume(void) {
     fprintf(stderr,"Ending: cutscene over, on to the credits\n");
 }
 
+static int parsed_cine, cine_delay=-1, cine_count, cine_armed, cine_running;
+static int16_t cine_script[CINE_MAX][5];
+static uint32_t cine_copy;
 static void fight_cine_tick(unsigned state) {
-    static int parsed_cine, delay=-1, count, armed, running;
-    static int16_t script[CINE_MAX][5];
-    static uint32_t copy;
+#define delay cine_delay
+#define count cine_count
+#define armed cine_armed
+#define running cine_running
+#define script cine_script
+#define copy cine_copy
     if(!parsed_cine) {
         parsed_cine=1;
         const char *e=getenv("TEKKEN3_FIGHT_CINE"), *at=e?strrchr(e,'@'):NULL;
@@ -205,6 +293,11 @@ static void fight_cine_tick(unsigned state) {
          * instead, a path that never reaches our track: keep it on. */
         if(state==8 && (phase==16 || phase==17)) {
             psx_mod_write_word(0x800b4a80,0);
+            /* A white flash (the fade at 256) sets 0x800B4A88, and from then
+             * on the arena's background sprites (King's clouds, mountains,
+             * ropes) are no longer drawn: Ogre's cutscene turning to True
+             * Ogre's dark temple. Not in ours. */
+            psx_mod_write_word(0x800b4a88,0);
             int counter=(int)psx_mod_read_word(0x800b4a54);
             if(phase==17 && counter<cine_preroll) {
                 /* Black (the cutscene's own fade tile) while it rolls in; its
@@ -274,6 +367,12 @@ static void fight_cine_tick(unsigned state) {
     psx_mod_write_half(0x800ae224,16);
     running=1; fight_cine=1;
     fprintf(stderr,"Fight cinematic: started, script at %08X\n",copy);
+#undef delay
+#undef count
+#undef armed
+#undef running
+#undef script
+#undef copy
 }
 
 /* A captured ending's camera often looks where a Tekken 3 arena has nothing
@@ -284,9 +383,27 @@ static void fight_cine_tick(unsigned state) {
  * arena leaves out shows black. The game does the same in True Ogre's dark
  * arena (0x80048374: a tile linked at OT[1023]); the tile is the fade's,
  * 368 x 480 from 0,0 (0x8004E000). */
+/* The fade tile (0x8004E000: a0 the display list entry it links at, a1 its
+ * buffer, a2 the level) goes in front of everything while a cutscene of ours
+ * plays: at the entry the cutscene's tick passes, polygons right at the
+ * camera (King's mask in a close-up) were drawn over the white flash. OT[0],
+ * the list's last entry, is drawn last. */
+extern void __real_func_8004E000(CPUState *cpu);
+void __wrap_func_8004E000(CPUState *cpu) {
+    if((cpu->pc==0 || cpu->pc==0x8004e000) && (fight_cine || tekken3_cine_frame()>=0)) {
+        uint32_t ot=psx_mod_read_word(psx_mod_read_word(0x800a8c54)+4);
+        if(ot>=0x80000000u) cpu->gpr[4]=ot;
+    }
+    __real_func_8004E000(cpu);
+}
 static uint32_t cine_clear_tiles;
 extern void __real_func_8006D7CC(CPUState *cpu);
 void __wrap_func_8006D7CC(CPUState *cpu) {
+    /* Linked after the arena drew: a prim goes to the head of its bucket
+     * and the DMA walks from the head, so the arena's own background (the
+     * fill tiles above) must come after the tile to show; linked before,
+     * the tile covered it. */
+    __real_func_8006D7CC(cpu);
     if((cpu->pc==0 || cpu->pc==0x8006d7cc) && fight_cine) {
         if(!cine_clear_tiles) cine_clear_tiles=psx_mod_alloc_gpu_dma_memory(32,16);
         uint32_t ot=psx_mod_read_word(psx_mod_read_word(0x800a8c54)+4)+4092;
@@ -299,14 +416,13 @@ void __wrap_func_8006D7CC(CPUState *cpu) {
             psx_mod_write_word(ot,(psx_mod_read_word(ot)&0xff000000u)|(tile&0x00ffffffu));
         }
     }
-    __real_func_8006D7CC(cpu);
 }
 
 /* TEKKEN3_EMBU_CAMERA_TRACK: a file, first line the cutscene frame it starts
  * at, then one "ex ey ez tx ty tz" line a frame (an ending captured on the
  * PS2, retargeted on branch endings-release). */
 static int16_t (*track)[6];
-static int track_start, track_count;
+static int track_start, track_count, track_parsed;
 static void parse_track(void) {
     const char *path=getenv("TEKKEN3_EMBU_CAMERA_TRACK");
     FILE *f=path?fopen(path,"r"):NULL;
@@ -331,8 +447,7 @@ extern void __real_func_80063EEC(CPUState *cpu);
 void __wrap_func_80063EEC(CPUState *cpu) {
     int frame=(cpu->pc==0 || cpu->pc==0x80063eec)?tekken3_cine_frame():-1;
     if(frame>=0) {
-        static int parsed;
-        if(!parsed){parsed=1;parse_track();}
+        if(!track_parsed){track_parsed=1;parse_track();}
         if(track_count && frame>=track_start && frame<track_start+track_count) {
             const int16_t *c=track[frame-track_start];
             for(unsigned k=0;k<3;k++) {
@@ -353,13 +468,14 @@ void __wrap_func_80063EEC(CPUState *cpu) {
  * black, 0 the plain image, 256 white; outside the spans the switch is left
  * off. */
 typedef struct { int from,to,a,b; } Fade;
-static Fade fades[8];
+enum { FADES_MAX=64 };          /* a captured ending's fades: a few segments each */
+static Fade fades[FADES_MAX];
 static int fade_count=-1, fade_on;
 static void fade_tick(void) {
     if(fade_count<0) {
         fade_count=0;
         const char *e=getenv("TEKKEN3_EMBU_FADE");
-        while(e && *e && fade_count<8) {
+        while(e && *e && fade_count<FADES_MAX) {
             Fade f;
             if(sscanf(e,"%d-%d:%d:%d",&f.from,&f.to,&f.a,&f.b)==4) fades[fade_count++]=f;
             e=strchr(e,';'); if(e) e++;
@@ -439,9 +555,25 @@ void tekken3_embu_scenes_tick(void) {
     ending_tick(state);
 }
 
+/* Another ending selected: everything read from its TEKKEN3_* lines is
+ * read again (the script, the camera track, the fades, the music, the model
+ * steps and effect packs of the TTT1 code). */
+extern void tekken3_ttt1_embu_models_reset(void);
+extern void tekken3_ttt1_embu_effects_reset(void);
+static void cine_reset(void) {
+    parsed_cine=0; cine_count=0; cine_delay=-1; cine_armed=0;
+    track_count=0; track_parsed=0;
+    fade_count=-1;
+    free(music); music=NULL; music_frames=music_pos=0; music_from=-2;
+    tekken3_ttt1_embu_models_reset();
+    tekken3_ttt1_embu_effects_reset();
+}
+
 /* The TTT Cinematics feature: mods/ttt-cinematics/cinematics.txt (tools/ttt_cinematics.py)
  * beside the TTT1 catalogue, its KEY=VALUE lines made environment variables
- * unless set already, $DIR in a value standing for that folder. */
+ * unless set already, $DIR in a value standing for that folder; a line
+ * "[ending KEY]" opens that character's ending, whose lines are kept for
+ * its selection (the endings table above). */
 extern const char *tekken3_ttt1_asset_root(void);
 static void activate_cinematics(void) {
     static int done;
@@ -452,8 +584,20 @@ static void activate_cinematics(void) {
     FILE *f=fopen(path,"r");
     if(!f) { fprintf(stderr,"TTT Cinematics: no %s (run the setup with the TTT endings)\n",path); return; }
     done=1;
+    int in=-1;
     while(fgets(line,sizeof line,f)) {
         line[strcspn(line,"\r\n")]=0;
+        if(line[0]=='[') {
+            char key[32];
+            in=-1;
+            if(sscanf(line,"[ending %31[^]]]",key)==1 && ending_count<ENDINGS_MAX && !getenv("TEKKEN3_ENDING")) {
+                in=ending_count++;
+                snprintf(endings[in].key,sizeof endings[in].key,"%s",key);
+                snprintf(endings[in].lines,sizeof endings[in].lines,"\n");
+                endings[in].p1=endings[in].p2=-2;
+            }
+            continue;
+        }
         char *eq=strchr(line,'='), value[8192];
         if(!eq || line[0]=='#') continue;
         *eq=0;
@@ -463,6 +607,11 @@ static void activate_cinematics(void) {
             else value[n++]=*v++;
         }
         value[n]=0;
+        if(in>=0) {
+            size_t have=strlen(endings[in].lines);
+            snprintf(endings[in].lines+have,sizeof endings[in].lines-have,"%s=%s\n",line,value);
+            continue;
+        }
         if(getenv(line)) continue;
 #ifdef _WIN32
         _putenv_s(line,value);
@@ -471,7 +620,7 @@ static void activate_cinematics(void) {
 #endif
     }
     fclose(f);
-    fprintf(stderr,"TTT Cinematics: %s\n",path);
+    fprintf(stderr,"TTT Cinematics: %s, %d endings\n",path,ending_count);
 }
 PSX_MOD_CONSTRUCTOR(register_ttt_cinematics) {
     (void)psx_mod_register_activation_plugin("tekken3.ttt-cinematics",activate_cinematics);

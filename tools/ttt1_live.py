@@ -76,7 +76,8 @@ class Session:
         # Players pick their guests on the Tag page (R2) in cabinet().
         extra = {k: v for k, v in (env or {}).items() if k != 'TEKKEN3_GUEST_P2'}
         env = {k: v for k, v in os.environ.items() if not k.startswith('TEKKEN3_') or k.endswith('_LOG')}
-        env.update(extra, SDL_AUDIO_DRIVER='dummy')
+        env.update(extra)
+        if not visible: env['SDL_AUDIO_DRIVER'] = 'dummy'     # a window someone watches keeps its sound
         log = WORK / f'session-{os.getpid()}.log'
         with log.open('w') as out:
             self.process = subprocess.Popen(args, cwd=ROOT, stdout=out, stderr=out, env=env)
