@@ -92,6 +92,43 @@ def t3_pack(vram_bytes, player=0, count=T3_FRAMES):
     return b''.join(tim(f, first if k == 0 else rest) for k, f in enumerate(frames(idx, pal, count)))
 
 
+HFX_MAGIC, HFX_VERSION, HFX_SIZE = b'HFX6', 1, 64
+HFX_PALETTE_FADE = 1                             # drapeau : fondu par les palettes, pas par la couleur de sommet
+
+
+def hfx_pack(vram_bytes, player=0, count=T3_FRAMES):
+    """Paquet 64 x 64 (F12) : les images TTT1 telles quelles, que le runtime
+    met en VRAM haute (src/tekken3_ttt1_combat.c, hit_effect_64) au lieu du
+    32 x 32 du paquet T3, qui reste le repli. Little-endian :
+
+      char[4] 'HFX6', u16 version 1, u16 images n, u16 cote (64),
+      u16 palettes p (1 : commune ; n : une par image), u16 drapeaux
+      (bit 0 : fondu par les palettes, la couleur de sommet reste a 0x80),
+      u16 0 ; puis p palettes de 16 couleurs ; puis n images 4 bits, 32 octets
+      par ligne (pixel de gauche dans le quartet bas), 64 lignes.
+
+    TTT1 : une palette, le fondu des 10 dernieres par la couleur de sommet
+    comme T3. Les etincelles de TTT PS2 (F13) ont une palette par image."""
+    idx, pal = sheet(vram_bytes, player)
+    head = struct.pack('<4s6H', HFX_MAGIC, HFX_VERSION, count, HFX_SIZE, 1, 0, 0)
+    images = b''.join((im[:, 0::2] | im[:, 1::2] << 4).astype(np.uint8).tobytes()
+                      for im in (image(idx, k) for k in range(count)))
+    return head + pal.astype('<u2').tobytes() + images
+
+
+def hfx_preview(pack, scale=2):
+    """Planche de controle d'un paquet 64 x 64 (fond noir)."""
+    magic, _, n, size, p, _, _ = struct.unpack_from('<4s6H', pack)
+    pals = np.frombuffer(pack, '<u2', 16 * p, 16).reshape(p, 16)
+    o = 16 + 32 * p
+    out = Image.new('RGB', (n * (size + 2), size))
+    for k in range(n):
+        raw = np.frombuffer(pack, np.uint8, size * size // 2, o + k * size * size // 2)
+        ix = np.stack([raw & 15, raw >> 4], -1).reshape(size, size)
+        out.paste(Image.fromarray(rgb(pals[k if p > 1 else 0])[ix].astype(np.uint8)), (k * (size + 2), 0))
+    return out.resize((out.width * scale, size * scale), Image.NEAREST)
+
+
 def preview(pack, scale=4):
     """Planche de controle des images du paquet (fond noir, melange additif)."""
     out, o = [], 0

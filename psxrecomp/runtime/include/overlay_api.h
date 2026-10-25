@@ -87,7 +87,11 @@
  *      frustum half-angle constants. */
 /* v22: full-aperture terrain visibility helper; the guest halves the result
  *      before constructing its horizontal visibility rays. */
-#define PSX_OVERLAY_ABI_VERSION 22
+/* v23: gte_precision_lwc2_word forwarder — the emitter emits a direct call
+ *      after every lwc2 into SXY0-2/SXYP (ENHANCEMENTS.md G1.11); stateful
+ *      runtime code (gte.cpp), so the DLL must forward or fail to LINK.
+ *      Appended last; NULL on an older host no-ops (visual-only tracking). */
+#define PSX_OVERLAY_ABI_VERSION 23
 
 /* Process-lifetime overlay candidate capacity.  Every accepted manifest F
  * record consumes one slot, even when another DLL carries an identical
@@ -295,6 +299,11 @@ typedef struct {
     uint32_t (*ws_angle_widen)(uint32_t vanilla);
     /* Full-aperture counterpart (ABI v22); NULL preserves the vanilla angle. */
     uint32_t (*ws_full_angle_widen)(uint32_t vanilla);
+    /* Sub-pixel GTE precision reload tracker (ABI v23): the LWC2 counterpart
+     * of gte_precision_store_word. NULL no-ops (precision tracking is a
+     * visual-only enhancement, off by default). */
+    void     (*gte_precision_lwc2_word)(uint32_t addr, uint8_t reg,
+                                        uint32_t value, uint32_t pc);
 } OverlayCallbacks;
 
 #ifdef __cplusplus

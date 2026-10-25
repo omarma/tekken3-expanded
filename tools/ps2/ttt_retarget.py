@@ -5,7 +5,7 @@ reference for Tekken 3.
 
     ~/TekkenProject/venv-import/bin/python3 tools/ps2/ttt_retarget.py \\
         CAPTURE.jsonl ACTOR GUEST OUT.json [--model 3DM --idle POSES] [--calib OTHER.json [--own-origin] [--own-head]] [--calib-frame S:F] [--heads-only]
-        [--basis canonical[:YAW]] [--contacts] [--twists] [--collars] [--head-fit]
+        [--basis canonical[:YAW]] [--contacts] [--twists] [--collars] [--head-fit] [--world]
         # e.g. kazuya-cap2.jsonl 0 kazuya kazuya-ttt1.json
         #      kazuya-cap2.jsonl 1 jin jin-ttt1.json --model jin-plain/Jin-TTT1-arcade-P1.3dm
         #        --idle .../DevilJin-TTT1-idle.poses --calib kazuya-ttt1.json
@@ -13,6 +13,27 @@ reference for Tekken 3.
 The head follows the PS2 head's whole orientation (the segments leave it
 free), through a constant bone basis found on the stance like C.
 --heads-only patches an existing OUT.json's heads without solving again.
+
+--hips: the line between the hip joints (PS2 nodes 81 / 90, TTT1 rows 5 / 8)
+solved too: the pelvis's turn, else left to the thighs alone (the Embu's
+Xiaoyu, 1366-1377: her pelvis swung 12 degrees in a frame and back, the
+PS2's turning a steady 2 a frame).
+
+--frames A-B keeps the script frames A to B only: one character's stretch
+of an actor that changes character in the scene (the Embu: actor 0 is Jin,
+Paul, Hwoarang, Jun, Xiaoyu, Eddy in turn). Each stretch is its own
+retarget, on its own skeleton, all in one frame of reference (--calib on
+the first one).
+
+--view CAMERA.json takes the camera from each frame's view-projection
+({"t": 16 floats} by script frame), not from actor 0's root matrices: those
+stand still while actor 0 is hidden (the Embu's Xiaoyu alone), the camera
+with them. The Embu's capture has no "view" of its own. With --focal F,
+Tekken 3's focal in PS2 pixels (870: the GTE's H 500 over a screen 368
+wide, shown as the PS2's 640), the eye moves along its axis by the shot's
+focal (574 to 1944 px in the Embu, one a shot; every ending has one focal,
+738 to 1002) so that the framing at the actor's hips is the PS2's: the
+engine has no zoom.
 
 --calib-frame S:F calibrates on capture sequence S frame F instead of the
 last frame, for an ending that does not end in stance (Bruce: 0:328, 0.9
@@ -37,10 +58,41 @@ origin under actor 0's first root. For endings whose actors never take
 their stance (Michelle's: seated all along, 43 and 23 degrees at best).
 With --calib it is the other actor's that counts (same scene: same basis).
 
+--world keeps the PS2 world's origin (the stage's centre) instead of the
+actor's first root: the scene played on its own TTT stage (TTT Stages,
+`ttt-stage`) stands where the PS2 has it, between the same walls and
+rocks. With --calib the other actor's origin is taken as it is.
+
 --contacts: the arms keep their offsets from the legs where they are near
 them on the PS2 (contacts(): a hand on a knee, arms round the knees), not
 only the segments' directions; for seated or crouched actors whose TTT1
 proportions push the arms into the legs (Michelle's ending).
+
+--arm-contacts: likewise a wrist by the other arm (its elbow, forearm
+middle, wrist) on the PS2 keeps its offset from it: the Embu's Jin pulling
+his glove (511-590) on Tekken 3's skeleton, his hand went into the forearm.
+--arm-gap D: those offsets at least D long (same direction): the PS2's hand
+on the forearm's surface was still inside Tekken 3's thicker glove.
+--upper-arms: the shoulder-to-elbow lines solved instead of neck to elbow: with --collars the stiff collarbones put the shoulders elsewhere and
+the upper arms came out 23-25 degrees higher than the PS2's (Kunimitsu's
+ending: Yoshimitsu's sword arm opened his armpit, 530-680, her elbow
+in the close-up at 220-240).
+
+--hand-turn ROW:AXIS:DEGREES (with --twists): that hand row's basis turned
+about the PS2 hand node's own axis. The basis is calibrated on a stance
+frame, which holds no blade: Yoshimitsu's sword (in his Tekken 3 hand, row
+18) followed the PS2 hand's -y where the PS2's blade lies along its z (the
+sword stuck in the snow when he lies, 1190-1439): 18:x:-90.
+
+--avoid OTHER:D:A-B: on script frames A to B, each forearm kept at least D
+from the other actor's head (its PS2 head node through this frame): Armor
+King's arms round King's head (620-731) went into Tekken 3's bigger head.
+
+--leg-gap D: each forearm kept at least D from each shin and thigh (the
+segments' closest points); --body-gap D: each upper arm at least D from the
+spine (hips to neck): a pull that acts only under D. Michelle's
+ending (arms round her knees): her forearm on the shin went into it and her
+sleeves into her sides, the Tekken 3 models' limbs and clothes thicker.
 
 The output lists, beside the poses and the camera, each pose's script
 frame (`frames`: the capture's "t"; capture lines without one, "relink"
@@ -74,9 +126,9 @@ from fmt import load, row
 
 WORK = ROOT / 'workspace/ttt1-import'
 K = 2 * math.pi / 65536
-PS2 = [dict(hip=1, neck=5, elbowA=34, elbowB=59, wristA=38, wristB=63, kneeA=84, kneeB=93, ankleA=87, ankleB=96, shoulderA=31, shoulderB=56),
-       dict(hip=1, neck=5, elbowA=59, elbowB=34, wristA=63, wristB=38, kneeA=93, kneeB=84, ankleA=96, ankleB=87, shoulderA=56, shoulderB=31)]
-TTT1_ROW = dict(hip=0, neck=19, elbowA=13, elbowB=17, wristA=14, wristB=18, kneeA=6, kneeB=9, ankleA=7, ankleB=10, shoulderA=12, shoulderB=16)
+PS2 = [dict(hip=1, neck=5, elbowA=34, elbowB=59, wristA=38, wristB=63, kneeA=84, kneeB=93, ankleA=87, ankleB=96, shoulderA=31, shoulderB=56, hipjA=81, hipjB=90),
+       dict(hip=1, neck=5, elbowA=59, elbowB=34, wristA=63, wristB=38, kneeA=93, kneeB=84, ankleA=96, ankleB=87, shoulderA=56, shoulderB=31, hipjA=90, hipjB=81)]
+TTT1_ROW = dict(hip=0, neck=19, elbowA=13, elbowB=17, wristA=14, wristB=18, kneeA=6, kneeB=9, ankleA=7, ankleB=10, shoulderA=12, shoulderB=16, hipjA=5, hipjB=8)
 SEGMENTS = [('hip', 'neck'), ('hip', 'kneeA'), ('hip', 'kneeB'), ('kneeA', 'ankleA'), ('kneeB', 'ankleB'),
             ('neck', 'elbowA'), ('neck', 'elbowB'), ('elbowA', 'wristA'), ('elbowB', 'wristB')]
 # What the solve fits: the segments, and with --twists the shoulder line too
@@ -127,9 +179,9 @@ class Skeleton:
         for r in AM.ROW_PARENT: get(r)
         return world
 
-    def directions(self, joints):
+    def directions(self, joints, pairs=SEGMENTS):
         P = self.points(joints)
-        return [unit(P[b] - P[a]) for a, b in SEGMENTS]
+        return [unit(P[b] - P[a]) for a, b in pairs]
 
     def lengths(self, joints):
         P = self.points(joints)
@@ -138,8 +190,30 @@ class Skeleton:
 
 ARMS = ('elbowA', 'elbowB', 'wristA', 'wristB')
 LEGS = ('kneeA', 'kneeB', 'ankleA', 'ankleB', 'thighA', 'thighB', 'shinA', 'shinB')
-MIDS = dict(thighA=('hip', 'kneeA'), thighB=('hip', 'kneeB'), shinA=('kneeA', 'ankleA'), shinB=('kneeB', 'ankleB'))
+MIDS = dict(thighA=('hip', 'kneeA'), thighB=('hip', 'kneeB'), shinA=('kneeA', 'ankleA'), shinB=('kneeB', 'ankleB'),
+            forearmA=('elbowA', 'wristA'), forearmB=('elbowB', 'wristB'))
+# --arm-contacts: a wrist by the other arm (elbow, forearm middle, wrist)
+ARM_PAIRS = [(w, o + s) for w, s in (('wristA', 'B'), ('wristB', 'A')) for o in ('elbow', 'forearm', 'wrist')]
 CONTACT = 300.0                     # PS2 distance (TTT1 units) under which an arm keeps its place by a leg
+
+
+# --leg-gap / --body-gap: segments kept at least D apart (closest points),
+# a one-sided pull that acts only under D.
+LEG_GAP_PAIRS = [(('elbow' + s, 'wrist' + s), (a + l, b + l)) for s in 'AB' for l in 'AB'
+                 for a, b in (('knee', 'ankle'),)] + [(('elbow' + s, 'wrist' + s), ('hip', 'knee' + l)) for s in 'AB' for l in 'AB']
+BODY_GAP_PAIRS = [(('shoulder' + s, 'elbow' + s), ('hip', 'neck')) for s in 'AB']
+GAP_WEIGHT = 3.0
+
+
+def segment_distance(p0, p1, q0, q1):
+    """Closest distance between segments p0-p1 and q0-q1."""
+    u, v, w = p1 - p0, q1 - q0, p0 - q0
+    a, b, c, d, e = u @ u, u @ v, v @ v, u @ w, v @ w
+    den = a * c - b * b
+    sn = np.clip((b * e - c * d) / den, 0, 1) if den > 1e-9 else 0.0
+    tn = np.clip((b * sn + e) / c, 0, 1) if c > 1e-9 else 0.0
+    sn = np.clip((b * tn - d) / a, 0, 1) if a > 1e-9 else 0.0
+    return float(np.linalg.norm(w + sn * u - tn * v))
 
 
 def with_mids(P):
@@ -148,18 +222,21 @@ def with_mids(P):
     return P
 
 
-def contacts(points):
+def contacts(points, legs=True, arms=False, gap=0.0):
     """--contacts: each arm point (elbows, wrists) near a leg point (knees,
     ankles, thigh and shin middles) on the PS2 keeps its offset from it
     (TTT1 units), weighted by nearness. The segments' directions alone keep
     the limbs' angles, not where a hand is on a knee: with the TTT1 model's
     longer thighs (Michelle's: 70 more) her arms went into her legs."""
     P = with_mids(points)
+    pairs = ([(a, b) for a in ARMS for b in LEGS] if legs else []) + (ARM_PAIRS if arms else [])
     out = []
-    for a in ARMS:
-        for b in LEGS:
-            v = P[a] - P[b]; d = float(np.linalg.norm(v))
-            if d < 1.5 * CONTACT: out.append((a, b, v, math.exp(-(d / CONTACT) ** 2)))
+    for a, b in pairs:
+        v = P[a] - P[b]; d = float(np.linalg.norm(v))
+        if d >= 1.5 * CONTACT: continue
+        w = math.exp(-(d / CONTACT) ** 2)
+        if gap and (a, b) in ARM_PAIRS and 0 < d < min(gap, 0.6 * CONTACT): v = v * (gap / d)    # --arm-gap: the grip only, Tekken 3's thicker gloves
+        out.append((a, b, v, w))
     return out
 
 
@@ -172,7 +249,14 @@ PULL = np.ones(54)
 COLLAR_PULL = 20.0
 
 
-def solve(sk, target, start, prior, weight=0.05, iterations=30, near=()):
+# --smooth W: the pelvis and the chest (bones 0 and 1) held W towards the
+# previous frame's: the segments fit as well with the pelvis turned round and
+# the chest turned back (the Embu's Hwoarang on Baek's skeleton flipped 171
+# degrees in a frame at 1756, the PS2's turning 23).
+SMOOTH = 0.0
+
+
+def solve(sk, target, start, prior, weight=0.05, iterations=30, near=(), previous=None, gaps=()):
     """Levenberg-Marquardt on the segment directions (and the arms' offsets
     from the legs `near`, see contacts()), from `start`."""
     def residual(p):
@@ -181,6 +265,11 @@ def solve(sk, target, start, prior, weight=0.05, iterations=30, near=()):
         if near:
             P = with_mids(P)
             r += [w * ((P[a] - P[b]) - v) / CONTACT for a, b, v, w in near]
+        if gaps:
+            at = lambda k: P[k] if isinstance(k, str) else k      # a name, or a point of the other actor's
+            r.append(np.array([GAP_WEIGHT * max(0.0, D - segment_distance(at(a0), at(a1), at(b0), at(b1))) / CONTACT
+                               for (a0, a1), (b0, b1), D in gaps]))
+        if previous is not None and SMOOTH: r.append(SMOOTH * (p[:6] - previous[:6]) / 8192.0)
         return np.concatenate(r + [weight * PULL * (p - prior) / 8192.0])
     p, mu = start.astype(float).copy(), 1e-3
     for _ in range(iterations):
@@ -197,7 +286,7 @@ def solve(sk, target, start, prior, weight=0.05, iterations=30, near=()):
     return p
 
 
-def fresh(sk, target, prior, start=None, near=()):
+def fresh(sk, target, prior, start=None, near=(), gaps=()):
     """The least twisted solve of a frame: from the stance and from the hips
     turned a quarter, a half, three quarters (and from `start`, the previous
     frame's), the fit within twice the best one that stays nearest the
@@ -207,9 +296,9 @@ def fresh(sk, target, prior, start=None, near=()):
     tries = []
     for axis, off in [(0, 0)] + [(a, o) for a in range(3) for o in (16384, 32768, -16384)]:
         s = prior.copy(); s[axis] += off
-        tries.append(solve(sk, target, s, prior, near=near))
-    if start is not None: tries.append(solve(sk, target, start, prior, near=near))
-    fit = [float(np.sum(np.concatenate([m - t for m, t in zip(sk.directions(q), target)]) ** 2)) for q in tries]
+        tries.append(solve(sk, target, s, prior, near=near, gaps=gaps))
+    if start is not None: tries.append(solve(sk, target, start, prior, near=near, gaps=gaps))
+    fit = [float(np.sum(np.concatenate([m - t for m, t in zip(sk.directions(q, SOLVED), target)]) ** 2)) for q in tries]
     good = [q for q, f in zip(tries, fit) if f <= 2 * min(fit) + 1e-6]
     return min(good, key=lambda q: float(np.sum((q - prior) ** 2)))
 
@@ -284,6 +373,9 @@ def roll(W, r, target, a, parent):
     return parent.T @ W[r] @ (np.eye(3) + math.sin(th) * K_ + (1 - math.cos(th)) * K_ @ K_)
 
 
+HEAD_FIT_RANGE = None      # --head-fit-range A:B: the script frames the fit uses (a `swap` segment, docs/CINE-CONVERT.md)
+
+
 def head_fit(sk, frames, actor, poses, C, prior):
     """--head-fit: the head's PS2 -> TTT1 bone basis that keeps the neck,
     over the whole scene, nearest the stance's (orthogonal Procrustes on
@@ -296,7 +388,9 @@ def head_fit(sk, frames, actor, poses, C, prior):
     heads: prefer it."""
     W0 = sk.rotations(prior); N0 = W0[CHEST_ROW].T @ W0[HEAD_ROW]
     S = np.zeros((3, 3))
+    span = HEAD_FIT_RANGE or (-1, 1 << 30)
     for d, q in zip(frames, poses):
+        if not span[0] <= d.get('t', 0) <= span[1]: continue
         W = sk.rotations(np.array([s16(v) for v in q[3:]], dtype=float))
         S += (C @ ps2_rotation(d, actor, HEAD_NODE)).T @ (W[CHEST_ROW] @ N0)
     U, _, Vt = np.linalg.svd(S)
@@ -319,12 +413,23 @@ def twist_bases(sk, d, actor, pose, C, side):
 def camera(d):
     """Eye and forward of a frame: the view-projection is the root node's
     +0x40 matrix times the inverse of its world matrix (row vectors); the eye
-    is the point it sends to infinity (x = y = w = 0)."""
-    W = np.array(d['actors'][0][0]).reshape(4, 4); M = np.array(d['vp']).reshape(4, 4)
-    inv = np.eye(4); inv[:3, :3] = W[:3, :3].T; inv[3, :3] = -W[3, :3] @ W[:3, :3].T
-    VP = inv @ M
+    is the point it sends to infinity (x = y = w = 0). With --view, the
+    frame's own view-projection instead (d['view'])."""
+    if 'view' in d and '--view' in sys.argv: VP = np.array(d['view']).reshape(4, 4)
+    else:
+        W = np.array(d['actors'][0][0]).reshape(4, 4); M = np.array(d['vp']).reshape(4, 4)
+        inv = np.eye(4); inv[:3, :3] = W[:3, :3].T; inv[3, :3] = -W[3, :3] @ W[:3, :3].T
+        VP = inv @ M
     A = VP[:3][:, [0, 1, 3]].T; b = -VP[3, [0, 1, 3]]
     return np.linalg.solve(A, b), unit(VP[:3, 3])
+
+
+def focal(V):
+    """The horizontal focal, in PS2 pixels, of a view-projection (row
+    vectors): its x column is f times the view's x axis plus the screen
+    centre (2048) times its w column."""
+    w = np.linalg.norm(V[:3, 3]); u = V[:3, 3] / w
+    return float(np.linalg.norm(V[:3, 0] - (V[:3, 0] @ u / w) * V[:3, 3]) / w)
 
 
 def main():
@@ -332,6 +437,12 @@ def main():
     opt = lambda k: sys.argv[sys.argv.index(k) + 1] if k in sys.argv else None
     lines = capture.read_text().splitlines()
     frames = [d for d in map(json.loads, lines[1:]) if 'relink' not in d and not d.get('done') and d.get('actors')]
+    if opt('--frames'):
+        first, last_t = map(int, opt('--frames').split('-'))
+        frames = [d for d in frames if d.get('t') is not None and first <= d['t'] <= last_t and d['actors'][actor]]
+    if opt('--view'):
+        views = json.loads(Path(opt('--view')).read_text())
+        for d in frames: d['view'] = views[str(d['t'])]
     name = guest.capitalize()
     sk = Skeleton(Path(opt('--model')) if opt('--model') else WORK / guest / 'guest' / f'{name}-TTT1-arcade-P1.3dm')
     idle_path = Path(opt('--idle')) if opt('--idle') else WORK / guest / 'guest' / f'{name}-TTT1-idle.poses'
@@ -339,6 +450,16 @@ def main():
     prior = np.array(idle[3:], dtype=float)
     pos = lambda d, n: np.array(d['actors'][actor][n][12:15], dtype=float)
     if '--twists' in sys.argv: SOLVED.append(('shoulderA', 'shoulderB'))
+    if '--hips' in sys.argv: SOLVED.append(('hipjA', 'hipjB'))
+    if '--upper-arms' in sys.argv:           # in place of neck to elbow
+        SOLVED[SOLVED.index(('neck', 'elbowA'))] = ('shoulderA', 'elbowA')
+        SOLVED[SOLVED.index(('neck', 'elbowB'))] = ('shoulderB', 'elbowB')
+    if opt('--smooth'):
+        global SMOOTH
+        SMOOTH = float(opt('--smooth'))
+    if opt('--head-fit-range'):
+        global HEAD_FIT_RANGE
+        HEAD_FIT_RANGE = tuple(int(v) for v in opt('--head-fit-range').split(':'))
     if '--collars' in sys.argv:
         for b in (3, 7): PULL[3 * b:3 * b + 3] = COLLAR_PULL
 
@@ -389,29 +510,54 @@ def main():
     if '--heads-only' in sys.argv:
         # Patch an existing output's heads (and its calibration) only.
         r = json.loads(out.read_text())
+        if '--head-fit' in sys.argv: HB = head_fit(sk, frames, actor, r['poses'], C, prior)
         heads(sk, frames, actor, r['poses'], C, HB)
         r['calibration']['head_B'] = HB.tolist()
         out.write_text(json.dumps(r)); print(out, 'heads patched'); return
+    if '--world' in sys.argv: origin = np.zeros(3)         # the PS2 stage's centre: a TTT stage drawn around the actors
     to_t3 = lambda p: scale * (C @ (p - origin))           # TTT1 world: y down, as Tekken 3's stage
     poses, cams, fit, joints = [], [], [], prior.copy()
+    gaps = [(a, b, float(opt('--leg-gap'))) for a, b in LEG_GAP_PAIRS] if opt('--leg-gap') else []
+    gaps += [(a, b, float(opt('--body-gap'))) for a, b in BODY_GAP_PAIRS] if opt('--body-gap') else []
+    avoid = opt('--avoid')
+    if avoid: other, avoid_d, avoid_from, avoid_to = (lambda o, d, ab: (int(o), float(d), *map(int, ab.split('-'))))(*avoid.split(':'))
     for i, d in enumerate(frames):
         target = [C @ unit(pos(d, side[b]) - pos(d, side[a])) for a, b in SOLVED]
+        frame_gaps = gaps
+        if avoid and avoid_from <= d.get('t', -1) <= avoid_to and d['actors'][other]:
+            # The other actor's head, in this actor's frame (its root at the origin, as the solve's points).
+            head = scale * (C @ (np.array(d['actors'][other][HEAD_NODE][12:15], dtype=float) - pos(d, 0)))
+            frame_gaps = list(gaps) + [((e, w), (head, head), avoid_d) for e, w in (('elbowA', 'wristA'), ('elbowB', 'wristB'))]
         # A new shot (the root jumps) or the first frame: no previous pose to go on from.
         cut = i == 0 or np.linalg.norm(pos(d, 0) - pos(frames[i - 1], 0)) > 500 or d.get('s', 0) != frames[i - 1].get('s', 0)
-        near = contacts({k: scale * (C @ pos(d, side[k])) for k in TTT1_ROW}) if '--contacts' in sys.argv else ()
-        joints = fresh(sk, target, prior, None if i == 0 else joints, near) if cut else solve(sk, target, joints, prior, near=near)
-        fit.append(max(math.degrees(math.acos(max(-1.0, min(1.0, float(m @ t))))) for m, t in zip(sk.directions(joints), target)))
+        near = contacts({k: scale * (C @ pos(d, side[k])) for k in TTT1_ROW}, '--contacts' in sys.argv,
+                        '--arm-contacts' in sys.argv, float(opt('--arm-gap') or 0)) if {'--contacts', '--arm-contacts'} & set(sys.argv) else ()
+        joints = fresh(sk, target, prior, None if i == 0 else joints, near, frame_gaps) if cut else solve(sk, target, joints, prior, near=near, previous=joints, gaps=frame_gaps)
+        fit.append(max(math.degrees(math.acos(max(-1.0, min(1.0, float(m @ t))))) for m, t in zip(sk.directions(joints, SOLVED), target)))
         r = to_t3(pos(d, 0))
         heading = math.atan2(r[0], r[2]) / K                # decode_pose: x = sin(a) d, z = cos(a) d
         distance = math.hypot(r[0], r[2])
         height = -r[1]                                       # Tekken 3's y is -height
         poses.append([int(round(v)) & 0xffff for v in (heading, height, distance, *joints)])
         eye, fwd = camera(d)
+        if opt('--focal') and '--view' in sys.argv:
+            # Tekken 3's focal is fixed: a tighter shot (a longer focal) is the eye
+            # moved towards this actor's hips, the same framing at their depth.
+            V = np.array(d['view']).reshape(4, 4); f = focal(V)
+            eye = eye + fwd * float((pos(d, side['hip']) - eye) @ fwd) * (1 - float(opt('--focal')) / f)
         e = to_t3(eye); t = to_t3(eye + 2000 * fwd)
         cams.append([round(v) for v in (*e, *t)])
         if i % 100 == 0: print(f'frame {i}/{len(frames)}', flush=True)
     if '--twists' in sys.argv:
-        twists(sk, frames, actor, poses, C, twist_bases(sk, last, actor, poses[frames.index(last)], C, PS2.index(side)), PS2.index(side))
+        bases = twist_bases(sk, last, actor, poses[frames.index(last)], C, PS2.index(side))
+        if opt('--hand-turn'):
+            # ROW:AXIS:DEGREES: that hand's basis turned about the PS2 hand's own axis.
+            r, axis, deg = opt('--hand-turn').split(':'); r, a = int(r), math.radians(float(deg))
+            i = 'xyz'.index(axis); j, k = (i + 1) % 3, (i + 2) % 3
+            Q = np.eye(3); Q[j, j] = Q[k, k] = math.cos(a); Q[k, j] = math.sin(a); Q[j, k] = -math.sin(a)
+            key = next(key for key in bases if key[0] == r)
+            bases[key] = Q @ bases[key]
+        twists(sk, frames, actor, poses, C, bases, PS2.index(side))
         # The fit as played (the rolls must keep every segment).
         played = lambda d, q: [math.degrees(math.acos(max(-1.0, min(1.0, float(m @ (C @ unit(pos(d, side[b]) - pos(d, side[a]))))))))
                                for m, (a, b) in zip(sk.directions(np.array([s16(v) for v in q[3:]], dtype=float)), SEGMENTS)]

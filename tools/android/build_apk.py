@@ -227,8 +227,10 @@ def runs(command: list) -> bool:
 
 
 def find_glslc(ndk: Path) -> Path:
-    """The Vulkan shader compiler. Android draws with Vulkan only, so without
-    it the game would have no renderer: stop rather than build a stub."""
+    """The Vulkan shader compiler. Android draws with the OpenGL renderer on
+    OpenGL ES 3 (game.toml's renderer = "opengl", as on PC, since 47f416c);
+    the Vulkan backend is still compiled into libmain.so, and its shaders
+    need glslc. The APK build stops without it rather than ship a stub."""
     bundled = ndk / "shader-tools" / ndk_host_tag() / ("glslc.exe" if os.name == "nt" else "glslc")
     for candidate in (bundled, shutil.which("glslc")):
         if candidate and runs([candidate, "--version"]):

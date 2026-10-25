@@ -126,6 +126,7 @@ CueSheet parse_cue_sheet(const fs::path& cue_path) {
     bool     cur_track_audio = false;
     uint32_t cur_index00     = 0;
     bool     cur_has_index00 = false;
+    uint32_t cur_pregap      = 0;
 
     while (std::getline(cue, line)) {
         // Strip a trailing CR so cues with CRLF endings parse on POSIX.
@@ -159,10 +160,19 @@ CueSheet parse_cue_sheet(const fs::path& cue_path) {
             cur_track_audio = (std::string(type_buf).find("AUDIO") != std::string::npos);
             cur_index00     = 0;
             cur_has_index00 = false;
+            cur_pregap      = 0;
             continue;
         }
 
         int idx = 0, mm = 0, ss = 0, ff = 0;
+        // PREGAP: silence the disc has before this track's INDEX 01 and the
+        // file does not store (redump's audio tracks: PREGAP 00:02:00).
+        if (std::sscanf(upper.c_str(), " PREGAP %d:%d:%d", &mm, &ss, &ff) == 3 &&
+            cur_track_num >= 1) {
+            if (mm >= 0 && mm <= 99 && ss >= 0 && ss <= 59 && ff >= 0 && ff <= 74)
+                cur_pregap = (uint32_t)(((mm * 60 + ss) * 75) + ff);
+            continue;
+        }
         if (std::sscanf(upper.c_str(), " INDEX %d %d:%d:%d", &idx, &mm, &ss, &ff) == 4 &&
             cur_track_num >= 1 && !sheet.files.empty()) {
             // A time no disc has (and whose frame count would overflow).
@@ -181,6 +191,7 @@ CueSheet parse_cue_sheet(const fs::path& cue_path) {
             t.index01     = index_lba;
             t.index00     = cur_index00;
             t.has_index00 = cur_has_index00;
+            t.pregap      = cur_pregap;
             sheet.tracks.push_back(t);
             cur_track_num = -1;
         }

@@ -153,6 +153,11 @@ void debug_server_log_call_entry_fn(uint32_t func_addr);
  * attribute the writing instruction without needing a full call-stack
  * walk.  Stale across non-store instructions but every store updates it. */
 extern uint32_t g_debug_last_store_pc;
+/* What g_debug_last_store_pc holds while a host-native mod stores through
+ * psx_mod_write_* (mod_runtime.cpp): no guest instruction made that store,
+ * so traces attribute it to this sentinel rather than to the last guest
+ * store before it (ENHANCEMENTS.md G1.13, packet-builder census). */
+#define PSX_MOD_NATIVE_STORE_PC 0xFFFFFFF0u
 
 /* SIO write PC tracer ring — records (pc, addr, value, byte_seq) for every
  * write to SIO_DATA / SIO_CTRL / SIO_STAT.  Always-on; pulled via TCP cmd

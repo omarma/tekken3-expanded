@@ -507,6 +507,16 @@ static int toolchain_bin_has_cmake(const char* bin, char* out, size_t cap) {
     return 0;
 }
 
+/* True when a directory name or path ends in ".broken": a pack that
+ * discard_unhealthy_active_toolchain() quarantined. Resolve must skip it,
+ * or the next check picks it again and stacks another suffix. */
+static int path_is_broken_quarantine(const char* path) {
+    size_t n = path ? strlen(path) : 0;
+    while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\'))
+        --n;
+    return n >= 7 && strncmp(path + n - 7, ".broken", 7) == 0;
+}
+
 static int resolve_toolchain_bin_under(const char* wrap, char* out, size_t cap) {
     char cand[1100], cmake[1200], root[1400];
     if (!wrap || !wrap[0])
@@ -530,6 +540,8 @@ static int resolve_toolchain_bin_under(const char* wrap, char* out, size_t cap) 
             continue;
         if (fd.cFileName[0] == '.')
             continue;
+        if (path_is_broken_quarantine(fd.cFileName))
+            continue;
         char nested[1100], nbin[1100];
         if (!join_path(nested, sizeof(nested), wrap, fd.cFileName))
             continue;
@@ -551,6 +563,8 @@ static int resolve_toolchain_bin_under(const char* wrap, char* out, size_t cap) 
     struct dirent* ent;
     while ((ent = readdir(dir)) != NULL) {
         if (ent->d_name[0] == '.')
+            continue;
+        if (path_is_broken_quarantine(ent->d_name))
             continue;
         char nested[1100], nbin[1100];
         if (!join_path(nested, sizeof(nested), wrap, ent->d_name))
@@ -2743,12 +2757,34 @@ static int cmake_path_runs(const char* cmake_path) {
     return run_cmd_exit_zero(cmd);
 }
 
+#if defined(__APPLE__)
+/* macOS packs ("kind": "cmake-ninja-system-clang") ship cmake, ninja and
+ * ccache only: builds use the Xcode Command Line Tools clang and Apple ld.
+ * Probe the compiler a build uses: the pack clang if a pack bundles one,
+ * else an absolute $CC, else /usr/bin/clang (what the pack env.sh sets). */
+static int toolchain_bin_c_compiler(const char* bin, char* out, size_t cap) {
+    const char* cc = getenv("CC");
+    if (join_path(out, cap, bin, "clang") && path_is_file(out))
+        return 1;
+    if (cc && cc[0] == '/' && path_is_file(cc)) {
+        snprintf(out, cap, "%s", cc);
+        return 1;
+    }
+    snprintf(out, cap, "%s", "/usr/bin/clang");
+    return path_is_file(out);
+}
+#endif
+
 /* True when pack bin/ can compile+link a tiny C program (catches broken
- * ld.lld / missing libicuuc.so.* etc. that cmake --version still passes). */
+ * ld.lld / missing libicuuc.so.* etc. that cmake --version still passes).
+ * On macOS the compiler and linker are the system ones (see above). */
 static int toolchain_bin_compiler_works(const char* bin) {
     char clang[1200], lld[1200], src[1400], exe[1400], cmd[4096];
     FILE* f;
     int ok;
+#if !defined(_WIN32)
+    int use_lld = 1;
+#endif
     if (!bin || !bin[0])
         return 0;
 #if defined(_WIN32)
@@ -2759,6 +2795,10 @@ static int toolchain_bin_compiler_works(const char* bin) {
         if (!join_path(lld, sizeof(lld), bin, "lld.exe") || !path_is_file(lld))
             return 0;
     }
+#elif defined(__APPLE__)
+    if (!toolchain_bin_c_compiler(bin, clang, sizeof(clang)))
+        return 0;
+    use_lld = join_path(lld, sizeof(lld), bin, "ld.lld") && path_is_file(lld);
 #else
     if (!join_path(clang, sizeof(clang), bin, "clang") || !path_is_file(clang))
         return 0;
@@ -2800,9 +2840,9 @@ static int toolchain_bin_compiler_works(const char* bin) {
     /* Prefer the pack linker explicitly so PATH cannot hide a broken lld. */
     (void)lld; /* used via -fuse-ld when present; path already validated */
     snprintf(cmd, sizeof(cmd),
-             "env PATH=\"%s:$PATH\" \"%s\" -fuse-ld=lld \"%s\" -o \"%s\" "
+             "env PATH=\"%s:$PATH\" \"%s\"%s \"%s\" -o \"%s\" "
              ">/dev/null 2>&1",
-             bin, clang, src, exe);
+             bin, clang, use_lld ? " -fuse-ld=lld" : "", src, exe);
 #endif
     ok = run_cmd_exit_zero(cmd);
 #if defined(_WIN32)
@@ -2815,7 +2855,32 @@ static int toolchain_bin_compiler_works(const char* bin) {
     return ok;
 }
 
+/* What the pack itself must provide. Failing this means the pack is damaged,
+ * so heal/discard may drop or quarantine it. Elsewhere the compiler is in the
+ * pack; on macOS it is the system one, and a failing system compiler says
+ * nothing about the pack (reinstalling it would not help). */
+static int toolchain_bin_pack_is_sound(const char* bin) {
+#if defined(__APPLE__)
+    char tool[1200];
+    if (!bin || !bin[0])
+        return 0;
+    if (!join_path(tool, sizeof(tool), bin, "cmake") || !cmake_path_runs(tool))
+        return 0;
+    if (!join_path(tool, sizeof(tool), bin, "ninja") || !cmake_path_runs(tool))
+        return 0;
+    if (join_path(tool, sizeof(tool), bin, "clang") && path_is_file(tool) &&
+        !cmake_path_runs(tool))
+        return 0;
+    return 1;
+#else
+    return toolchain_bin_is_healthy(bin);
+#endif
+}
+
 static int toolchain_bin_is_healthy(const char* bin) {
+#if defined(__APPLE__)
+    return toolchain_bin_pack_is_sound(bin) && toolchain_bin_compiler_works(bin);
+#else
     char cmake[1200];
     if (!bin || !bin[0])
         return 0;
@@ -2828,6 +2893,7 @@ static int toolchain_bin_is_healthy(const char* bin) {
         return 0;
 #endif
     return toolchain_bin_compiler_works(bin);
+#endif
 }
 
 static void clear_project_toolchain_stamp(void) {
@@ -2903,7 +2969,7 @@ static void heal_broken_toolchain_pointers(void) {
             continue;
         if (unwrap_toolchain_pack_root(latest, root, sizeof(root)) &&
             join_path(bin, sizeof(bin), root, "bin") &&
-            toolchain_bin_is_healthy(bin))
+            toolchain_bin_pack_is_sound(bin))
             continue;
         rmtree_path(latest);
 #if !defined(_WIN32)
@@ -2923,13 +2989,24 @@ static void heal_broken_toolchain_pointers(void) {
 }
 
 /* If the active resolution points at an unhealthy pack, drop stamp / latest
- * (or quarantine a versioned <tag>/ so resolve cannot keep re-selecting it). */
-static void discard_unhealthy_active_toolchain(void) {
+ * (or quarantine a versioned <tag>/ so resolve cannot keep re-selecting it).
+ * Returns 1 when the pack was dropped, 0 when it stays (healthy, or sound
+ * with only the macOS system compiler failing): retrying cannot change it. */
+static int discard_unhealthy_active_toolchain(void) {
     char pack[1400];
     if (!g_toolchain_bin[0])
-        return;
+        return 0;
     if (toolchain_bin_is_healthy(g_toolchain_bin))
-        return;
+        return 0;
+#if defined(__APPLE__)
+    if (toolchain_bin_pack_is_sound(g_toolchain_bin)) {
+        snprintf(g_tc_repair_note, sizeof(g_tc_repair_note),
+                 "The toolchain pack is fine, but the system clang cannot "
+                 "link a test program. Install the Xcode Command Line Tools "
+                 "(xcode-select --install), then reopen setup.");
+        return 0;
+    }
+#endif
     if (pack_root_from_bin(g_toolchain_bin, pack, sizeof(pack))) {
         if (path_is_toolchain_latest_leaf(pack) ||
             path_is_toolchain_latest_leaf(g_toolchain_bin)) {
@@ -2937,7 +3014,7 @@ static void discard_unhealthy_active_toolchain(void) {
 #if !defined(_WIN32)
             unlink(pack);
 #endif
-        } else if (path_is_dir(pack)) {
+        } else if (path_is_dir(pack) && !path_is_broken_quarantine(pack)) {
             char quarantine[1500];
             snprintf(quarantine, sizeof(quarantine), "%s.broken", pack);
             rmtree_path(quarantine);
@@ -2959,6 +3036,7 @@ static void discard_unhealthy_active_toolchain(void) {
                  "Portable toolchain is installed but cannot compile/link "
                  "(path or library error). Redownload the latest pack.");
     }
+    return 1;
 }
 
 static int active_toolchain_meets_min(void) {
@@ -3002,7 +3080,8 @@ static int host_toolchain_is_ready(void) {
             return 1;
         if (!g_toolchain_bin[0])
             break;
-        discard_unhealthy_active_toolchain();
+        if (!discard_unhealthy_active_toolchain())
+            break;
     }
 #if defined(_WIN32)
     /* Reuse a Store-Python LocalCache install without copying. */

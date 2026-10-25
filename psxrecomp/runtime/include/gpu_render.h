@@ -94,6 +94,13 @@ int gr_render_display(uint32_t *out_pixels, int out_pitch,
                       int disp_x, int disp_y, int disp_w, int disp_h);
 int gr_render_display_hires(uint32_t *out_pixels, int out_pitch,
                             int disp_x, int disp_y, int disp_w, int disp_h);
+/* Debug readback of the supersampled display rectangle, the surface the 4:3
+ * window presents (screenshot_hires, capture_plan shot "hires"). A backend
+ * whose hi-res surface lives on the GPU reads it back (read_display_hires);
+ * the others answer from render_display_hires. Never a present path: it waits
+ * for the GPU. Returns 0 when there is no hi-res surface. */
+int gr_read_display_hires(uint32_t *out_pixels, int out_pitch,
+                          int disp_x, int disp_y, int disp_w, int disp_h);
 
 /* VRAM transfers */
 void gr_vram_write(int x, int y, uint16_t pixel);
@@ -248,6 +255,10 @@ typedef struct GpuRenderBackend {
      * gr_set_high_vram). set_high_vram returns 0 when it cannot sample it. */
     int  (*set_high_vram)(const uint16_t *high, int tex_high, int clut_high);
     void (*high_vram_written)(int x, int y, int w, int h);
+    /* Debug readback of the supersampled display (optional; NULL = use
+     * render_display_hires, see gr_read_display_hires). */
+    int  (*read_display_hires)(uint32_t *out, int pitch,
+                               int dx, int dy, int dw, int dh);
 } GpuRenderBackend;
 
 #ifdef __cplusplus

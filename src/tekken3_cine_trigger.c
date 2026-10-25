@@ -10,8 +10,10 @@
  *
  * Played today: arcade-end (player 1 = that character, any costume, wins
  * the Arcade's last stage: the cinematic in place of the ending movie, then
- * the credits). The others are read and kept, not played yet (a message):
- * boss (before a boss fight), mode-start / mode-end, attract, theater.
+ * the credits) and attract (the attract's Embu, state 6, at its turn of the
+ * Embus' rotation: the cinematic in its place, then the title as after the
+ * Embu). The others are read and kept, not played yet (a message): boss
+ * (before a boss fight), mode-start / mode-end, theater.
  *
  * The engine loads the scene itself (src/tekken3_cine_scene.c,
  * tekken3_cine_play_scene: arena and actors from the .cine, then it puts
@@ -19,6 +21,7 @@
  * cinematic and what comes after it. */
 #include "mod_plugins.h"
 #include "psx_runtime.h"
+#include "tekken3_arcade_stages.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +35,9 @@ typedef struct {
     char p1[32];            /* character key or ID, "" any */
     int p1_id;              /* resolved, -2 not yet, -1 any */
     char mode[16];          /* reserved events: arcade, survival… */
-    int stage, slot;        /* reserved events: boss stage, attract / theater slot */
+    int stage, slot;        /* reserved events: boss stage, attract / theater slot (-1 any) */
+    int every, seen;        /* attract: one Embu in `every`, from the first; Embus seen so far */
+    int rotation;           /* attract: its place in the Embus' rotation (2..4, 0 none; see state_leave_to) */
     char cine[1024];        /* full path */
     Then then;
 } Trigger;
@@ -71,6 +76,7 @@ int tekken3_cine_triggers_load(const char *dir) {
         Trigger *t=&triggers[trigger_count];
         memset(t,0,sizeof *t);
         t->event=(Event)e; t->p1_id=-2; t->then=e==EV_ARCADE_END?THEN_CREDITS:THEN_ATTRACT;
+        t->slot=-1; t->every=1;
         int ok=1;
         for(int k=1;k<n;k++) {
             char *eq=strchr(w[k],'=');
@@ -86,11 +92,13 @@ int tekken3_cine_triggers_load(const char *dir) {
             else if(!strcmp(w[k],"mode")) snprintf(t->mode,sizeof t->mode,"%s",v);
             else if(!strcmp(w[k],"stage")) t->stage=atoi(v);
             else if(!strcmp(w[k],"slot")) t->slot=atoi(v);
+            else if(!strcmp(w[k],"every")) t->every=atoi(v)>0?atoi(v):1;
+            else if(!strcmp(w[k],"rotation")) { t->rotation=atoi(v); if(t->rotation<2 || t->rotation>4) ok=0; }
             else fprintf(stderr,"Cine triggers: %s line %d: \"%s\" ignored\n",path,lineno,w[k]);
         }
         if(!ok || !t->cine[0]) { fprintf(stderr,"Cine triggers: %s line %d: bad trigger\n",path,lineno); continue; }
         if(!t->p1[0]) t->p1_id=-1;
-        if(t->event!=EV_ARCADE_END)
+        if(t->event!=EV_ARCADE_END && t->event!=EV_ATTRACT)
             fprintf(stderr,"Cine triggers: line %d, \"%s\": not played yet\n",lineno,event_names[t->event]);
         trigger_count++;
     }
@@ -143,11 +151,27 @@ static void credits_tick(unsigned state) {
         fprintf(stderr,"Cine trigger: credits, all back to normal\n");
     }
 }
-/* The attract, as a demo fight ends (what the scene does without on_done). */
+/* The attract, as a demo fight ends: what the scene does without on_done
+ * (src/tekken3_cine_scene.c, finished), +2 cleared too; straight to the
+ * title, as T3's Embu ends on it (its phases 6-7). The attract's cycle
+ * 0x80097F3E (after the title: 0 the intro video, 1 the Embu, 2 a shorter
+ * video, 3 the title alone) chooses what state 3 shows: the Embu took it at
+ * 1, which played the whole intro ("Namco presents") again. At 3, state 2
+ * (0x8004FA60, phase 0) goes the short way, the title without a video; once
+ * it is over (state 3 left), the cycle is put at 2, where T3's Embu leaves
+ * it, for the attract to go on as after T3's own Embu. */
+enum { CYCLE=0x80097f3e, CYCLE_TITLE=3, CYCLE_AFTER_EMBU=2 };
+static int titled;                  /* 1: the title after a cinematic, the cycle to put back */
 static void to_attract(void) {
     active=NULL;
-    psx_mod_write_byte(0x80097f38,3); psx_mod_write_byte(0x80097f39,8);
+    psx_mod_write_byte(0x80097f38,3); psx_mod_write_byte(0x80097f39,8); psx_mod_write_byte(0x80097f3a,0);
+    psx_mod_write_byte(CYCLE,CYCLE_TITLE); titled=1;
     psx_mod_write_half(0x800ae224,0); psx_mod_write_half(0x800ae204,2);
+}
+static void title_tick(unsigned state) {
+    static unsigned before;
+    if(titled && before==3 && state!=3) { psx_mod_write_byte(CYCLE,CYCLE_AFTER_EMBU); titled=0; }
+    before=state;
 }
 
 /* The wrapper of 0x8004FF74 (state 18, its target at 0x80097F38) asks: the
@@ -171,4 +195,154 @@ int tekken3_cine_trigger_arcade_end(void) {
     return 1;
 }
 
-void tekken3_cine_trigger_tick(unsigned state) { credits_tick(state); }
+/* The attract's Embu (state 6, TIPS § 28): its variant is the byte
+ * 0x80097F20 (the save's, unlock_chars +0x30), the file 0x45 + variant its
+ * script. 0x8004F8F8(3), the way back to the title, turns it: when the
+ * attract's cycle (0x80097F3E) makes this return the Embu, variant + 1, back
+ * to 0 past the save's tier (+0x2F: 0 under 15 characters, 1 from 15, 2 with
+ * Dr. B), so 0 / 0-1 / 0-1-2. L1, R1, L1 + R1 held (pad 0x800ADD68: 4, 8,
+ * 12, alone) with a tier above 0: variant 1, 0, 2 if the tier allows it,
+ * and the Embu at once.
+ * A trigger with rotation=N is one more Embu in that rotation, the Nth: it
+ * comes after variant N - 2 (rotation=2: 0, TTT, 1, 2), the variant put
+ * back at N - 2 so the next return goes on with N - 1. The byte never holds
+ * anything the game does not know: the turn is ours, ttt_next ("variant
+ * N - 2 was the last Embu"), in a file beside the card that follows it as
+ * the save does (<card>-embu-rotation.txt: read when the card is read,
+ * written when it is written, with the variant it goes with). L2 alone held
+ * on the way back: this Embu at once, any tier, then the rotation on from
+ * N + 1. Its stage unavailable (TTT Stages off): its turn is skipped, the
+ * game's own Embu. Mod off (no table): nothing changes.
+ * Other triggers (slot= that variant, or none: any; every=N: one Embu in N,
+ * the first one included) take the Embu as it comes. The cinematic plays
+ * from the Embu's first frame (nothing of it drawn yet: the scene goes to
+ * state 7 at once, the image black while it loads); the title follows as
+ * after the Embu (to_attract: the title through state 2). */
+enum { TARGET=0x80097f38, TIER=0x80097f1f, VARIANT=0x80097f20, PAD_HELD=0x800add68, PAD_L2=0x0001 };
+extern int tekken3_cine_ttt_stage(void);
+extern int tekken3_card_file(char *out,size_t size,const char *suffix,int shared);
+static int ttt_next=-1;             /* 1: the rotation's cinematic next; -1 unknown */
+static const Trigger *planned;      /* chosen by the way back, played as state 6 starts */
+
+static const Trigger *rotation_trigger(void) {
+    for(int i=0;i<trigger_count;i++)
+        if(triggers[i].event==EV_ATTRACT && triggers[i].rotation) return &triggers[i];
+    return NULL;
+}
+/* Prepared and its TTT stage there (asked, then let go: forced as it plays). */
+static int playable(const Trigger *t) {
+    if(!tekken3_cine_prepare(t->cine)) { fprintf(stderr,"Cine trigger: %s cannot be played, the Embu\n",t->cine); return 0; }
+    int stage=tekken3_cine_ttt_stage();
+    if(stage<0) return 1;
+    if(!tekken3_ttt_stage_force(stage)) { fprintf(stderr,"Cine trigger: TTT stage %d unavailable, the game's own Embu\n",stage); return 0; }
+    tekken3_ttt_stage_force(-1);
+    return 1;
+}
+
+/* Called as 0x8004F8F8 is (on each dispatch: the call resumes inside it
+ * after display_freeze, and ends in pieces of its own); a0 = the state it
+ * leaves to, read on entry. Its choice (target 0x80097F38, variant) is read
+ * as state 2 (0x8004FA60), which it always enters, starts: before state 2
+ * loads the Embu's files (embu_loader_files, file 0x45 + variant). */
+static int leave_seen, leave_pending, leave_l2;
+extern void __real_func_8004F8F8(CPUState *cpu);
+void __wrap_func_8004F8F8(CPUState *cpu) {
+    const Trigger *t;
+    if((cpu->pc==0 || cpu->pc==0x8004f8f8) && cpu->gpr[4]==3 && !active && (t=rotation_trigger())) {
+        unsigned tier=psx_mod_read_byte(TIER),variant=psx_mod_read_byte(VARIANT),pad=psx_mod_read_half(PAD_HELD);
+        int after=t->rotation-2;
+        if(ttt_next<0) ttt_next=tier>0 && (int)variant==after;
+        /* L1 / R1 / L1 + R1 taken by the game (its variant within the tier): kept. */
+        int forced=tier && ((pad==4 && tier>=1) || pad==8 || (pad==12 && tier>=2));
+        leave_l2=pad==PAD_L2;
+        /* Only a return the Embu takes (the cycle at 1, or L2) reads the .cine (1.4 MB). */
+        leave_pending=(leave_l2 || (!forced && ttt_next && (int)tier>=after && psx_mod_read_byte(CYCLE)==1)) &&
+                      playable(t);
+        if(leave_pending && leave_l2) psx_mod_write_byte(CYCLE,1);   /* the Embu now, as L1 / R1 do */
+        leave_seen=1;
+    }
+    __real_func_8004F8F8(cpu);
+}
+extern void __real_func_8004FA60(CPUState *cpu);
+void __wrap_func_8004FA60(CPUState *cpu) {
+    const Trigger *t;
+    if(leave_seen && (cpu->pc==0 || cpu->pc==0x8004fa60)) {
+        leave_seen=0;
+        if((t=rotation_trigger()) && psx_mod_read_byte(TARGET)==6) {
+            unsigned variant=psx_mod_read_byte(VARIANT);
+            if(leave_pending) {
+                psx_mod_write_byte(VARIANT,(uint8_t)(t->rotation-2));
+                ttt_next=0; planned=t;
+                fprintf(stderr,"Cine trigger: Embu rotation, %s%s (variant %u put back at %d)\n",
+                        t->cine,leave_l2?" (L2)":"",variant,t->rotation-2);
+            } else {
+                ttt_next=(int)variant==t->rotation-2;
+                fprintf(stderr,"Cine trigger: Embu rotation, the game's variant %u\n",variant);
+            }
+        }
+        leave_pending=0;
+    }
+    __real_func_8004FA60(cpu);
+}
+
+/* The card's file: the boot's read starts from nothing (the EXE's variant
+ * 0), a read takes the file if it goes with the card's variant, a write
+ * writes it (src/tekken3_ttt1_records.c calls these). */
+void tekken3_embu_rotation_forget(void) { ttt_next=-1; }
+void tekken3_embu_rotation_load(void) {
+    char path[1024]; int next; unsigned with;
+    ttt_next=-1;
+    if(!tekken3_card_file(path,sizeof path,"embu-rotation.txt",0)) return;
+    FILE *f=fopen(path,"r");
+    if(!f) return;
+    if(fscanf(f,"ttt-next %d variant %u",&next,&with)==2 && with==psx_mod_read_byte(VARIANT)) ttt_next=next!=0;
+    fclose(f);
+    fprintf(stderr,"Cine trigger: Embu rotation from %s: %s\n",path,ttt_next<0?"not this card's":ttt_next?"the cinematic next":"the game's next");
+}
+void tekken3_embu_rotation_save(void) {
+    char path[1024];
+    if(ttt_next<0 || !tekken3_card_file(path,sizeof path,"embu-rotation.txt",0)) return;
+    FILE *f=fopen(path,"w");
+    if(!f) { fprintf(stderr,"Cine trigger: cannot write %s\n",path); return; }
+    fprintf(f,"ttt-next %d variant %u\n",ttt_next,psx_mod_read_byte(VARIANT));
+    fclose(f);
+}
+
+static void play(const Trigger *t,unsigned variant) {
+    /* A cinematic on a TTT arcade stage (`ttt-stage`) without it (TTT
+     * Stages off, no pack, no upper VRAM): the game's own Embu. */
+    int stage=tekken3_cine_ttt_stage();
+    if(stage>=0 && !tekken3_ttt_stage_force(stage)) {
+        fprintf(stderr,"Cine trigger: TTT stage %d unavailable, the game's own Embu\n",stage); return;
+    }
+    active=t;
+    if(!tekken3_cine_play_scene(NULL,CINE_SCENE_BLACK,t->then==THEN_CREDITS?to_credits:to_attract)) {
+        fprintf(stderr,"Cine trigger: %s could not load its scene, the Embu\n",t->cine);
+        if(stage>=0) tekken3_ttt_stage_force(-1);
+        active=NULL; return;
+    }
+    fprintf(stderr,"Cine trigger: attract, Embu variant %u: %s\n",variant,t->cine);
+}
+static void attract_tick(unsigned state) {
+    static unsigned before;
+    int entered=state==6 && before!=6;
+    before=state;
+    if(!entered || !trigger_count || active) return;
+    unsigned variant=psx_mod_read_byte(VARIANT);
+    if(planned) {
+        const Trigger *t=planned; planned=NULL;
+        play(t,variant);
+        if(!active) ttt_next=1;     /* not played: its turn again next time */
+        return;
+    }
+    for(int i=0;i<trigger_count;i++) {
+        Trigger *t=&triggers[i];
+        if(t->event!=EV_ATTRACT || t->rotation || (t->slot>=0 && t->slot!=(int)variant)) continue;
+        if(t->seen++%t->every) { fprintf(stderr,"Cine trigger: attract, the game's own Embu this time\n"); return; }
+        if(!tekken3_cine_prepare(t->cine)) { fprintf(stderr,"Cine trigger: %s cannot be played, the Embu\n",t->cine); return; }
+        play(t,variant);
+        return;
+    }
+}
+
+void tekken3_cine_trigger_tick(unsigned state) { credits_tick(state); title_tick(state); attract_tick(state); }

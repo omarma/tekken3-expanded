@@ -1,12 +1,17 @@
 #include "gte.h"
 #include "cpu_state.h"
 #include "nd_intro_ot.h"
+#include "gte_precision_diag.h"
+#include "gte_precision_interp.h"
+#include "debug_server.h"
+#include "mod_memory.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 
 extern "C" uint32_t psx_read_word(uint32_t addr);
+extern "C" uint32_t g_debug_last_store_pc;   /* debug_server.c: PC of the last store */
 
 namespace PSXRecomp {
 namespace GTE {
@@ -217,6 +222,10 @@ struct GeomVertex {
 static GeomVertex *s_geom_cache = nullptr;
 static uint32_t s_geom_generation = 1;
 static int s_geom_enabled = 0;
+/* Since G1.11 the cache only serves the position fallback of
+ * prepare_precise_triangle, which is off by default: exact provenance is the
+ * primary path. Recording and lookup run only while both are on. */
+static int s_geom_position_fallback = 0;
 static uint32_t s_geom_hits = 0;
 /* Lookup outcome census — this is what says whether coverage is limited by the
  * cache or by projections never reaching the packet in a matchable form. */
@@ -233,6 +242,20 @@ struct PreciseProjection {
     int32_t x16, y16;
     uint16_t z;
     uint8_t valid;
+    /* Computed by CPU arithmetic on packed words (G1.12): the game rounds
+     * before it adds, so its integer may differ from the precise one by a
+     * pixel per half-word. Exact copies of a projection keep 0. */
+    uint8_t derived;
+    /* Census only (G1.12): the ideal position, the GTE's 16.16 result carried
+     * through the same arithmetic without the game's truncation (a weld's true
+     * mean). Never drawn; the triangle record reports drawn minus ideal. */
+    int32_t ix16, iy16;
+    /* Register shadows only (G1.15): 1 when the register holds ONE coordinate
+     * of a vertex (read by LH / LHU, X or Y alike), in x16 / ix16 / z;
+     * `shift` 16 while the game holds it in the upper half (SLL 16, before
+     * the SRA 16 that sign-extends it). 0: a packed SXY word, as before. */
+    uint8_t comp;
+    uint8_t shift;
 };
 static PreciseProjection s_precise_sxy[4] = {};
 
@@ -241,8 +264,72 @@ struct PrecisionStoreEntry {
     uint32_t addr;
     PreciseProjection projection;
     uint32_t generation;
+    uint32_t writer_pc;    /* census only: the store that wrote it */
 };
 static PrecisionStoreEntry s_precision_store[PRECISION_STORE_SIZE];
+/* The mods' GPU-DMA aperture (G1.13): one entry per word, allocated on first
+ * use (calloc: pages no packet word reaches cost nothing, and a title with
+ * no mod packets allocates nothing). The RAM table's hash keeps a contiguous
+ * run of words collision-free (its low bits follow the word index), which is
+ * why a title's packet buffers never evict each other; aperture words keyed
+ * into it evicted RAM words 2 MiB away (about 170 a frame on Tekken 3), and
+ * a hashed table of their own still mixed two mods' packets (38 a frame). */
+static PrecisionStoreEntry *s_precision_aperture = nullptr;
+static PrecisionStoreEntry s_precision_aperture_fallback;   /* allocation failed */
+
+/* Scratchpad provenance (ENHANCEMENTS.md G1.11). Renderers commonly project
+ * with RTPT, park SXY in the 1 KiB data cache with SWC2, and reload it with
+ * LWC2 while building packets. The scratchpad is small enough for a table with
+ * one entry per word, so nothing is hashed or evicted. Each entry also says
+ * what wrote the word last, for the LWC2 miss census below. */
+#define SCRATCH_WORDS 256u                       /* 1 KiB data cache */
+enum : uint8_t {
+    SCRATCH_SRC_SWC2 = 1,          /* SWC2 of a valid projection           */
+    SCRATCH_SRC_SWC2_UNPROJECTED,  /* SWC2 of an SXY register without one  */
+    SCRATCH_SRC_CPU_STORE,         /* SB/SH/SW/SWL/SWR or an unknown store */
+    SCRATCH_SRC_CPU_SHADOW,        /* SW of a GPR carrying a value shadow
+                                      (precision_funcs, G1.12)             */
+};
+struct ScratchProvenance {
+    PreciseProjection projection;
+    uint32_t generation;
+    uint32_t writer_pc;
+    uint8_t source;
+};
+static ScratchProvenance s_precision_scratch[SCRATCH_WORDS];
+
+/* Half-word provenance (ENHANCEMENTS.md G1.15). Code that builds packet
+ * words one coordinate at a time (LH, arithmetic on X and Y apart, SH)
+ * leaves each half here; when both halves of a word carry one, SH rebuilds
+ * the word's entry. Keyed like the word tables plus the half (scratchpad
+ * words above 0x01000000), hashed: a collision loses a half, and a stale half
+ * can only give an entry whose packed value the GPU then refuses. */
+#define HALF_STORE_SIZE 4096u
+struct HalfProvenance {
+    uint32_t key;
+    uint32_t generation;
+    int32_t v16, i16;
+    uint16_t value;
+    uint16_t z;
+    uint8_t derived;
+};
+static HalfProvenance s_precision_half[HALF_STORE_SIZE];
+/* Guest stores still to look the table up: set by each SH that leaves a
+ * half, counted down by every store. At zero the table is cleared once (no
+ * entry can then outlive a store that skipped it) and stores cost nothing
+ * more: code that builds no vertex from halves (every fight on Tekken 3)
+ * pays no lookup per store. */
+#define HALF_STORE_WINDOW (1u << 20)
+static uint32_t s_precision_half_window = 0;
+
+/* Value shadows of the CPU registers (ENHANCEMENTS.md G1.12), written only by
+ * the hooks the recompiler emits in [recompiler] precision_funcs. `packed` is
+ * the register value the shadow describes; every read compares it with the
+ * register's current value (the Validate() of G1.2), which is what lets the
+ * other instructions of those functions, and the functions they call, go
+ * uninstrumented: whatever they write, a changed value drops the shadow. */
+static PreciseProjection s_precise_gpr[32];
+
 static uint32_t s_precision_generation = 1;
 static int s_precision_tracking = 0;
 static PreciseProjection s_speculative_saved_sxy[4];
@@ -250,8 +337,14 @@ static uint32_t s_speculative_depth = 0;
 static int s_speculative_timeline_invalidated = 0;
 
 static void gte_precision_generation_advance(void) {
+    for (int i = 0; i < 32; ++i) s_precise_gpr[i].valid = 0;
     if (++s_precision_generation == 0) {
         std::memset(s_precision_store, 0, sizeof(s_precision_store));
+        if (s_precision_aperture)
+            std::memset(s_precision_aperture, 0,
+                        (PSX_MOD_GPU_DMA_APERTURE_SIZE / 4u) * sizeof(PrecisionStoreEntry));
+        std::memset(s_precision_scratch, 0, sizeof(s_precision_scratch));
+        std::memset(s_precision_half, 0, sizeof(s_precision_half));
         s_precision_generation = 1;
     }
 }
@@ -305,16 +398,187 @@ static inline uint32_t precision_hash(uint32_t addr) {
     return (addr * 2654435761u) & (PRECISION_STORE_SIZE - 1u);
 }
 
+/* Store table entry of a key from precision_ram_address. */
+static inline PrecisionStoreEntry &precision_slot(uint32_t physical) {
+    if (physical < 0x00200000u) return s_precision_store[precision_hash(physical)];
+    if (!s_precision_aperture) {
+        s_precision_aperture = static_cast<PrecisionStoreEntry *>(
+            std::calloc(PSX_MOD_GPU_DMA_APERTURE_SIZE / 4u, sizeof(PrecisionStoreEntry)));
+        if (!s_precision_aperture) return s_precision_aperture_fallback;
+    }
+    return s_precision_aperture[((physical - 0x00200000u) >> 2) &
+                                (PSX_MOD_GPU_DMA_APERTURE_SIZE / 4u - 1u)];
+}
+
+/* Key of a tracked word outside the scratchpad: RAM, mirrors folded to
+ * 2 MiB, and the mods' GPU-DMA aperture (mod_memory.h), keyed above RAM so
+ * that its words never alias RAM words. GP0 packets live in both: a game's
+ * renderer may fill packets a mod placed in the aperture (Tekken 3's TTT1
+ * guests), and native mods build theirs there (G1.13). */
 static inline int precision_ram_address(uint32_t addr, uint32_t *physical) {
     uint32_t mapped = addr & 0x1FFFFFFFu;
-    if (mapped >= 0x00800000u) return 0;
-    *physical = mapped & 0x1FFFFCu;
+    if (mapped < 0x00800000u) {
+        *physical = mapped & 0x1FFFFCu;
+        return 1;
+    }
+    if (mapped >= PSX_MOD_GPU_DMA_APERTURE_BASE &&
+        mapped - PSX_MOD_GPU_DMA_APERTURE_BASE < PSX_MOD_GPU_DMA_APERTURE_SIZE) {
+        *physical = 0x00200000u + ((mapped - PSX_MOD_GPU_DMA_APERTURE_BASE) & ~3u);
+        return 1;
+    }
+    return 0;
+}
+
+/* Provenance census (diagnostic only, never read by the render path). It
+ * answers "where do projections go, and does the tracking lose them?":
+ * SWC2 of a projection register split by outcome, LWC2 reads split by
+ * whether the word they read carries a tracked projection, and the LWC2
+ * reloads into SXY that carry none, by PC and cause. Counted only while
+ * provenance tracking is on, free-running like the geometry counters;
+ * sample twice and diff. */
+static uint32_t s_diag[GTE_PRECISION_DIAG_COUNT];
+#define DIAG_SITE_MAX 32
+struct DiagSite { uint32_t pc, count; uint8_t scratch; };
+static DiagSite s_diag_sites[DIAG_SITE_MAX];
+static int s_diag_site_count = 0;
+#define DIAG_MISS_MAX 64
+struct DiagMiss { uint32_t pc, writer_pc, count; uint8_t cause; };
+static DiagMiss s_diag_misses[DIAG_MISS_MAX];
+static int s_diag_miss_count = 0;
+
+static inline int precision_scratch_index(uint32_t addr, uint32_t *index) {
+    uint32_t mapped = addr & 0x1FFFFFFFu;
+    if (mapped < 0x1F800000u || mapped >= 0x1F800400u) return 0;
+    *index = (mapped & 0x3FCu) >> 2;
     return 1;
 }
 
-extern "C" void gte_precision_tracking_set(int enabled) {
-    s_precision_tracking = enabled ? 1 : 0;
+/* SWC2 sites that stored a valid projection, by PC (generated code and the
+ * dirty-RAM interpreter set g_debug_last_store_pc right before each SWC2).
+ * The table saturates at DIAG_SITE_MAX; later sites only bump a counter. */
+static void diag_note_site(int scratch) {
+    const uint32_t pc = g_debug_last_store_pc;
+    for (int i = 0; i < s_diag_site_count; ++i) {
+        if (s_diag_sites[i].pc == pc && s_diag_sites[i].scratch == scratch) {
+            s_diag_sites[i].count++;
+            return;
+        }
+    }
+    if (s_diag_site_count < DIAG_SITE_MAX) {
+        s_diag_sites[s_diag_site_count].pc = pc;
+        s_diag_sites[s_diag_site_count].count = 1;
+        s_diag_sites[s_diag_site_count].scratch = (uint8_t)scratch;
+        s_diag_site_count++;
+    } else {
+        s_diag[GTE_DIAG_SITES_DROPPED]++;
+    }
+}
+
+extern "C" void gte_precision_diag_stats(uint32_t out[GTE_PRECISION_DIAG_COUNT]) {
+    std::memcpy(out, s_diag, sizeof(s_diag));
+}
+
+extern "C" int gte_precision_diag_sites(uint32_t *pc, uint32_t *count,
+                                        uint8_t *scratch, int max) {
+    int n = s_diag_site_count < max ? s_diag_site_count : max;
+    for (int i = 0; i < n; ++i) {
+        pc[i] = s_diag_sites[i].pc;
+        count[i] = s_diag_sites[i].count;
+        scratch[i] = s_diag_sites[i].scratch;
+    }
+    return n;
+}
+
+/* LWC2 reloads into SXY0-2/SXYP that restored no projection, by (LWC2 PC,
+ * cause, PC of the store that wrote the word last when known). The table
+ * saturates at DIAG_MISS_MAX; later keys only bump GTE_DIAG_MISSES_DROPPED. */
+static void diag_note_miss(uint32_t pc, uint8_t cause, uint32_t writer_pc) {
+    s_diag[GTE_DIAG_LWC2_SXY_MISS_UNWRITTEN + cause]++;
+    for (int i = 0; i < s_diag_miss_count; ++i) {
+        DiagMiss &m = s_diag_misses[i];
+        if (m.pc == pc && m.cause == cause && m.writer_pc == writer_pc) {
+            m.count++;
+            return;
+        }
+    }
+    if (s_diag_miss_count < DIAG_MISS_MAX) {
+        s_diag_misses[s_diag_miss_count++] = DiagMiss{pc, writer_pc, 1, cause};
+    } else {
+        s_diag[GTE_DIAG_MISSES_DROPPED]++;
+    }
+}
+
+extern "C" int gte_precision_diag_misses(uint32_t *pc, uint32_t *writer_pc,
+                                         uint32_t *count, uint8_t *cause,
+                                         int max) {
+    int n = s_diag_miss_count < max ? s_diag_miss_count : max;
+    for (int i = 0; i < n; ++i) {
+        pc[i] = s_diag_misses[i].pc;
+        writer_pc[i] = s_diag_misses[i].writer_pc;
+        count[i] = s_diag_misses[i].count;
+        cause[i] = s_diag_misses[i].cause;
+    }
+    return n;
+}
+
+static inline const ScratchProvenance *scratch_live(uint32_t index) {
+    const ScratchProvenance &entry = s_precision_scratch[index];
+    return entry.generation == s_precision_generation ? &entry : nullptr;
+}
+
+/* Called by psx_cyc_lwc2_read (the LWC2 path of generated code, the dirty-RAM
+ * interpreter and overlays) with the word it read. Counts only; the GTE
+ * register write that follows is untouched. */
+extern "C" void gte_precision_diag_lwc2(uint32_t addr, uint32_t value) {
+    if (s_speculative_depth != 0 || s_gte_replay_sandbox || !s_precision_tracking)
+        return;
+    s_diag[GTE_DIAG_LWC2]++;
+    uint32_t index, physical;
+    if (precision_scratch_index(addr, &index)) {
+        s_diag[GTE_DIAG_LWC2_SCRATCH]++;
+        const ScratchProvenance *entry = scratch_live(index);
+        if (entry && entry->source == SCRATCH_SRC_SWC2 &&
+            entry->projection.packed == value)
+            s_diag[GTE_DIAG_LWC2_SCRATCH_WOULD_TRACK]++;
+        return;
+    }
+    if (!precision_ram_address(addr, &physical)) return;
+    const PrecisionStoreEntry &entry = precision_slot(physical);
+    if (entry.generation == s_precision_generation && entry.addr == physical &&
+        entry.projection.valid && entry.projection.packed == value)
+        s_diag[GTE_DIAG_LWC2_RAM_TRACKED]++;
+}
+
+extern "C" int g_gte_precision_tracking = 0;
+static int s_precision_tracking_texture = 0;
+
+/* Exact provenance serves both options: perspective texturing needs the
+ * packet word's depth, geometry correction its sub-pixel position
+ * (G1.11). Tracking runs while either is on. */
+static void precision_tracking_update(void) {
+    s_precision_tracking = (s_precision_tracking_texture || s_geom_enabled) ? 1 : 0;
+    g_gte_precision_tracking = s_precision_tracking;
     gte_precision_generation_advance();
+}
+
+extern "C" void gte_precision_tracking_set(int enabled) {
+    s_precision_tracking_texture = enabled ? 1 : 0;
+    precision_tracking_update();
+}
+
+/* RAM store table write. The table is hashed: a collision drops the older
+ * entry (never answers for it, the address is compared), counted so the
+ * loss can be measured. */
+static void precision_store_put(uint32_t physical,
+                                const PreciseProjection &projection) {
+    PrecisionStoreEntry &entry = precision_slot(physical);
+    if (entry.generation == s_precision_generation && entry.addr != physical &&
+        entry.projection.valid)
+        s_diag[GTE_DIAG_STORE_EVICTED]++;
+    entry.addr = physical;
+    entry.projection = projection;
+    entry.generation = s_precision_generation;
+    entry.writer_pc = g_debug_last_store_pc;
 }
 
 extern "C" void gte_precision_store_word(uint32_t addr, uint8_t reg) {
@@ -322,38 +586,626 @@ extern "C" void gte_precision_store_word(uint32_t addr, uint8_t reg) {
         reg < 12 || reg > 15) return;
     int index = reg == 15 ? 2 : (int)reg - 12;
     const PreciseProjection &projection = s_precise_sxy[index];
-    if (!projection.valid) return;
-    uint32_t physical;
-    if (!precision_ram_address(addr, &physical)) return;
-    PrecisionStoreEntry &entry = s_precision_store[precision_hash(physical)];
-    entry.addr = physical;
-    entry.projection = projection;
-    entry.generation = s_precision_generation;
+    s_diag[GTE_DIAG_SWC2]++;
+    uint32_t physical, scratch;
+    if (precision_scratch_index(addr, &scratch)) {
+        ScratchProvenance &entry = s_precision_scratch[scratch];
+        entry.generation = s_precision_generation;
+        entry.writer_pc = g_debug_last_store_pc;
+        if (!projection.valid) {
+            s_diag[GTE_DIAG_SWC2_INVALID]++;
+            entry.source = SCRATCH_SRC_SWC2_UNPROJECTED;
+            entry.projection.valid = 0;
+            return;
+        }
+        s_diag[GTE_DIAG_SWC2_SCRATCH]++;
+        diag_note_site(1);
+        entry.source = SCRATCH_SRC_SWC2;
+        entry.projection = projection;
+        return;
+    }
+    if (!projection.valid) { s_diag[GTE_DIAG_SWC2_INVALID]++; return; }
+    if (!precision_ram_address(addr, &physical)) {
+        s_diag[GTE_DIAG_SWC2_OTHER]++;
+        return;
+    }
+    s_diag[GTE_DIAG_SWC2_TRACKED]++;
+    diag_note_site(0);
+    precision_store_put(physical, projection);
 }
 
+/* Key of the half-word at `addr` (G1.15): the word's key plus the half,
+ * scratchpad words above every RAM and aperture key. 0: not tracked. */
+static inline uint32_t precision_half_key(uint32_t addr) {
+    uint32_t scratch, physical;
+    if (precision_scratch_index(addr, &scratch)) return 0x01000000u | (scratch << 2) | (addr & 2u);
+    if (precision_ram_address(addr, &physical)) return 0x02000000u | physical | (addr & 2u);
+    return 0;
+}
+
+static inline HalfProvenance &precision_half_slot(uint32_t key) {
+    return s_precision_half[((key >> 1) * 2654435761u) & (HALF_STORE_SIZE - 1u)];
+}
+
+static inline const HalfProvenance *precision_half_live(uint32_t key) {
+    const HalfProvenance &h = precision_half_slot(key);
+    return key && h.key == key && h.generation == s_precision_generation ? &h : nullptr;
+}
+
+static inline void precision_half_drop(uint32_t addr) {
+    const uint32_t key = precision_half_key(addr);
+    HalfProvenance &h = precision_half_slot(key);
+    if (key && h.key == key) h.generation = 0;
+}
+
+/* A guest store of `size` bytes at `addr` (memory.c, before the store): the
+ * word loses its entry, and the half-words it overwrites theirs. A half
+ * store leaves the other half of its word alone (G1.15: a vertex word built
+ * by two SH keeps the half written first). */
+extern "C" void gte_precision_invalidate_store(uint32_t addr, uint32_t size);
+
 extern "C" void gte_precision_invalidate_word(uint32_t addr) {
+    gte_precision_invalidate_store(addr, 4);
+}
+
+extern "C" void gte_precision_invalidate_store(uint32_t addr, uint32_t size) {
     if (s_speculative_depth != 0 || s_gte_replay_sandbox || !s_precision_tracking) return;
-    uint32_t physical;
+    if (s_precision_half_window != 0) {
+        if (--s_precision_half_window == 0) {
+            std::memset(s_precision_half, 0, sizeof(s_precision_half));
+        } else if (size >= 4) {
+            precision_half_drop(addr & ~3u);
+            precision_half_drop((addr & ~3u) | 2u);
+        } else {
+            precision_half_drop(addr & ~1u);
+        }
+    }
+    uint32_t physical, scratch;
+    if (precision_scratch_index(addr, &scratch)) {
+        ScratchProvenance &entry = s_precision_scratch[scratch];
+        entry.generation = s_precision_generation;
+        entry.writer_pc = g_debug_last_store_pc;
+        entry.source = SCRATCH_SRC_CPU_STORE;
+        entry.projection.valid = 0;
+        return;
+    }
     if (!precision_ram_address(addr, &physical)) return;
-    PrecisionStoreEntry &entry = s_precision_store[precision_hash(physical)];
+    PrecisionStoreEntry &entry = precision_slot(physical);
     if (entry.generation == s_precision_generation && entry.addr == physical)
         entry.generation = 0;
 }
 
+/* LWC2 into SXY0-2/SXYP (reg 12-15), called right after gte_write_data has
+ * stored `value` (which already dropped the register's projection and, for
+ * SXYP, pushed the FIFO). Restore the projection when the word read is the
+ * one a SWC2 projection store left at `addr`, value included: this is the
+ * Validate() of both reference PGXP implementations (G1.2), done here on the
+ * one path a GTE-to-GTE round trip takes. Any other word keeps it dropped. */
+extern "C" void gte_precision_lwc2_word(uint32_t addr, uint8_t reg,
+                                        uint32_t value, uint32_t pc) {
+    if (s_speculative_depth != 0 || s_gte_replay_sandbox || !s_precision_tracking ||
+        reg < 12 || reg > 15) return;
+    const int index = reg == 15 ? 2 : (int)reg - 12;
+    s_diag[GTE_DIAG_LWC2_SXY]++;
+    const PreciseProjection *found = nullptr;
+    uint32_t scratch, physical;
+    if (precision_scratch_index(addr, &scratch)) {
+        const ScratchProvenance *entry = scratch_live(scratch);
+        if (!entry) {
+            diag_note_miss(pc, GTE_LWC2_MISS_UNWRITTEN, 0);
+        } else if (entry->source == SCRATCH_SRC_CPU_STORE) {
+            diag_note_miss(pc, GTE_LWC2_MISS_CPU_STORE, entry->writer_pc);
+        } else if (entry->source == SCRATCH_SRC_SWC2_UNPROJECTED) {
+            diag_note_miss(pc, GTE_LWC2_MISS_UNPROJECTED, entry->writer_pc);
+        } else if (entry->projection.packed != value) {
+            diag_note_miss(pc, GTE_LWC2_MISS_VALUE, entry->writer_pc);
+        } else {
+            /* SCRATCH_SRC_SWC2 or SCRATCH_SRC_CPU_SHADOW, value checked. */
+            found = &entry->projection;
+        }
+    } else if (precision_ram_address(addr, &physical)) {
+        const PrecisionStoreEntry &entry = precision_slot(physical);
+        if (entry.generation == s_precision_generation && entry.addr == physical &&
+            entry.projection.valid && entry.projection.packed == value)
+            found = &entry.projection;
+        else
+            diag_note_miss(pc, GTE_LWC2_MISS_RAM, 0);
+    } else {
+        diag_note_miss(pc, GTE_LWC2_MISS_RAM, 0);
+    }
+    if (!found) return;
+    s_diag[GTE_DIAG_LWC2_SXY_RESTORED]++;
+    if (found->derived) s_diag[GTE_DIAG_LWC2_SXY_RESTORED_DERIVED]++;
+    s_precise_sxy[index] = *found;
+    if (index == 2) s_precise_sxy[3] = *found;
+}
+
 extern "C" int gte_precision_load_word(uint32_t addr, uint32_t packed,
                                         int32_t *x16, int32_t *y16,
-                                        uint16_t *z) {
+                                        uint16_t *z, uint8_t *derived) {
     if (s_speculative_depth != 0 || !s_precision_tracking) return 0;
     uint32_t physical;
     if (!precision_ram_address(addr, &physical)) return 0;
-    const PrecisionStoreEntry &entry = s_precision_store[precision_hash(physical)];
+    const PrecisionStoreEntry &entry = precision_slot(physical);
     if (entry.generation != s_precision_generation || entry.addr != physical ||
         !entry.projection.valid || entry.projection.packed != packed)
         return 0;
     if (x16) *x16 = entry.projection.x16;
     if (y16) *y16 = entry.projection.y16;
     if (z) *z = entry.projection.z;
+    if (derived) *derived = entry.projection.derived;
     return entry.projection.z != 0;
+}
+
+/* Census only: the ideal 16.16 position of the tracked word at `addr` (see
+ * PreciseProjection::ix16), 1 if known. */
+extern "C" int gte_precision_word_ideal(uint32_t addr, uint32_t packed,
+                                        int32_t *ix16, int32_t *iy16) {
+    uint32_t physical;
+    if (!s_precision_tracking || !precision_ram_address(addr, &physical)) return 0;
+    const PrecisionStoreEntry &entry = precision_slot(physical);
+    if (entry.generation != s_precision_generation || entry.addr != physical ||
+        !entry.projection.valid || entry.projection.packed != packed)
+        return 0;
+    *ix16 = entry.projection.ix16;
+    *iy16 = entry.projection.iy16;
+    return 1;
+}
+
+/* Census only: PC of the store that left the tracked word at `addr`, or 0. */
+extern "C" uint32_t gte_precision_word_writer_pc(uint32_t addr) {
+    uint32_t physical;
+    if (!precision_ram_address(addr, &physical)) return 0;
+    const PrecisionStoreEntry &entry = precision_slot(physical);
+    if (entry.generation != s_precision_generation || entry.addr != physical)
+        return 0;
+    return entry.writer_pc;
+}
+
+/* ---- Value propagation through the CPU (ENHANCEMENTS.md G1.12) -----------
+ *
+ * Emitted by the recompiler only inside [recompiler] precision_funcs, and
+ * only for the instructions a renderer uses to copy or combine packed SXY
+ * words: LW, SW, ADDU/ADD, SRA, AND/ANDI, OR. A shadow follows the X and Y
+ * half-words separately (16.16 each) plus the depth, the way the reference
+ * PGXP implementations shadow every word (G1.2); it is re-implemented here
+ * from that design, no code taken from them. ALU and LW hooks run before the
+ * instruction with its operand values; the SW hook runs after the store
+ * (which has already dropped the word's old entry). */
+
+static inline int precision_cpu_active(void) {
+    return s_precision_tracking && s_speculative_depth == 0 && !s_gte_replay_sandbox;
+}
+
+/* ---- Projections computed by host-native code (ENHANCEMENTS.md G1.13) ----
+ *
+ * A native mod that projects its own vertices (a C copy of RTPS) and writes
+ * the packet words itself leaves, after each position store, the 16.16
+ * position it rounded: the same entry a SWC2 projection store leaves, so the
+ * GPU corrects and textures the word like the game's own, and reads it back
+ * only while the word still holds `packed` (G1.2's Validate()). The store
+ * itself drops the word's old entry, hence after. `active` tells the mod
+ * whether to compute anything at all. */
+extern "C" int gte_precision_native_active(void) {
+    return precision_cpu_active();
+}
+
+extern "C" void gte_precision_native_word(uint32_t addr, uint32_t packed,
+                                          int32_t x16, int32_t y16, uint16_t z) {
+    uint32_t physical;
+    if (!precision_cpu_active() || !precision_ram_address(addr, &physical)) return;
+    PreciseProjection p = {};
+    p.packed = packed;
+    p.x16 = p.ix16 = x16;
+    p.y16 = p.iy16 = y16;
+    p.z = z ? z : 1;
+    p.valid = 1;
+    const uint32_t saved = g_debug_last_store_pc;
+    g_debug_last_store_pc = PSX_MOD_NATIVE_STORE_PC;
+    precision_store_put(physical, p);
+    g_debug_last_store_pc = saved;
+    s_diag[GTE_DIAG_NATIVE_WORDS]++;
+}
+
+/* The shadow of register `r` if it still describes `value`, else null:
+ * a packed SXY word (gpr_shadow) or one coordinate (gpr_comp, G1.15). */
+static inline const PreciseProjection *gpr_shadow(uint8_t r, uint32_t value) {
+    const PreciseProjection &s = s_precise_gpr[r & 31u];
+    return (r != 0 && s.valid && !s.comp && s.packed == value) ? &s : nullptr;
+}
+
+static inline const PreciseProjection *gpr_comp(uint8_t r, uint32_t value) {
+    const PreciseProjection &s = s_precise_gpr[r & 31u];
+    return (r != 0 && s.valid && s.comp && s.packed == value) ? &s : nullptr;
+}
+
+static inline void gpr_shadow_set(uint8_t rd, const PreciseProjection &s) {
+    if (rd == 0 || rd > 31) return;
+    s_precise_gpr[rd] = s;
+    if (s.valid) s_diag[GTE_DIAG_CPU_ALU_SHADOW]++;
+}
+
+static inline void gpr_shadow_drop(uint8_t rd) {
+    if (rd != 0 && rd < 32) s_precise_gpr[rd].valid = 0;
+}
+
+/* LW rt, (addr): the register takes the shadow of the word, when the word is
+ * a tracked projection store or a shadowed CPU store. Any store since then
+ * dropped the entry; the value itself is checked where the shadow is read. */
+/* The projection a tracked word carries: a SWC2 projection store or a
+ * shadowed CPU store, scratchpad or RAM table; null otherwise. */
+static const PreciseProjection *word_projection(uint32_t addr) {
+    uint32_t scratch, physical;
+    if (precision_scratch_index(addr, &scratch)) {
+        const ScratchProvenance *entry = scratch_live(scratch);
+        if (entry && entry->projection.valid &&
+            (entry->source == SCRATCH_SRC_SWC2 || entry->source == SCRATCH_SRC_CPU_SHADOW))
+            return &entry->projection;
+    } else if (precision_ram_address(addr, &physical)) {
+        const PrecisionStoreEntry &entry = precision_slot(physical);
+        if (entry.generation == s_precision_generation && entry.addr == physical &&
+            entry.projection.valid)
+            return &entry.projection;
+    }
+    return nullptr;
+}
+
+extern "C" void gte_precision_cpu_lw(uint8_t rt, uint32_t addr) {
+    if (!precision_cpu_active() || rt == 0 || rt > 31) return;
+    s_precise_gpr[rt].valid = 0;
+    s_diag[GTE_DIAG_CPU_LW]++;
+    const PreciseProjection *found = word_projection(addr);
+    if (!found) return;
+    s_diag[GTE_DIAG_CPU_LW_SHADOW]++;
+    s_precise_gpr[rt] = *found;
+}
+
+/* SW rt, (addr), after the store: a register whose shadow still describes
+ * the stored value leaves it on the word, for LW and LWC2 to pick up. */
+extern "C" void gte_precision_cpu_sw(uint32_t addr, uint8_t rt, uint32_t value) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *s = gpr_shadow(rt, value);
+    if (!s) return;
+    uint32_t scratch, physical;
+    if (precision_scratch_index(addr, &scratch)) {
+        ScratchProvenance &entry = s_precision_scratch[scratch];
+        entry.generation = s_precision_generation;
+        entry.writer_pc = g_debug_last_store_pc;
+        entry.source = SCRATCH_SRC_CPU_SHADOW;
+        entry.projection = *s;
+    } else if (precision_ram_address(addr, &physical)) {
+        precision_store_put(physical, *s);
+    } else {
+        return;
+    }
+    s_diag[GTE_DIAG_CPU_SW_SHADOW]++;
+}
+
+static inline uint16_t depth_clamp(int32_t z) {
+    return (uint16_t)(z < 0 ? 0 : (z > 0xFFFF ? 0xFFFF : z));
+}
+
+/* ADDU/ADD rd, rs, rt. Two shadows add half-word by half-word (the game's
+ * word may carry between halves; the GPU check catches a result that no
+ * longer matches). One shadow plus zero is a move. */
+static void comp_add(uint8_t rd, uint8_t rs, uint8_t rt, uint32_t vs, uint32_t vt,
+                     const PreciseProjection *ca, const PreciseProjection *cb);
+
+extern "C" void gte_precision_cpu_add(uint8_t rd, uint8_t rs, uint8_t rt,
+                                      uint32_t vs, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *ca = gpr_comp(rs, vs), *cb = gpr_comp(rt, vt);
+    if (ca || cb) { comp_add(rd, rs, rt, vs, vt, ca, cb); return; }
+    const PreciseProjection *a = gpr_shadow(rs, vs);
+    const PreciseProjection *b = gpr_shadow(rt, vt);
+    PreciseProjection out = {};
+    if (a && b) {
+        out.x16 = a->x16 + b->x16;
+        out.y16 = a->y16 + b->y16;
+        out.ix16 = a->ix16 + b->ix16;
+        out.iy16 = a->iy16 + b->iy16;
+        out.z = depth_clamp((int32_t)a->z + (int32_t)b->z);
+        out.valid = 1;
+        out.derived = 1;
+    } else if (a && vt == 0) {
+        out = *a;
+    } else if (b && vs == 0) {
+        out = *b;
+    }
+    out.packed = vs + vt;
+    gpr_shadow_set(rd, out);
+}
+
+/* SRA rd, rt, sa: both halves (and the depth, so that a sum of halves stays
+ * a weighted mean of the vertices) divided by 2^sa, the way the game divides
+ * them: its shift drops the low bits of the integer, so the shadow drops them
+ * too and keeps only the sub-pixel fraction, (x - (X mod 2^sa)) / 2^sa. Its
+ * integer part is then the game's own half, and a sum of such halves cannot
+ * carry: a vertex the game welds this way lands within [G, G + 1) of the
+ * game's integer G, as a projection does of its pixel. Dividing the precise
+ * value alone left welds up to 1.5 px from where the game puts them, away
+ * from the next body part, which the game places against its own rounding
+ * (Tekken 3: thin gaps between parts of a fighter, measured frame by frame). */
+static inline int32_t sra_like_game(int32_t v16, uint8_t sa) {
+    const int32_t dropped = (v16 >> 16) & ((1 << sa) - 1);
+    return (int32_t)(((int64_t)v16 - ((int64_t)dropped << 16)) >> sa);
+}
+
+static void comp_shift_right(uint8_t rd, uint8_t sa, uint32_t vt, uint32_t result,
+                             const PreciseProjection *c);
+
+extern "C" void gte_precision_cpu_sra(uint8_t rd, uint8_t rt, uint8_t sa,
+                                      uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    if (const PreciseProjection *c = gpr_comp(rt, vt)) {
+        comp_shift_right(rd, sa, vt, (uint32_t)((int32_t)vt >> (sa & 31u)), c);
+        return;
+    }
+    const PreciseProjection *a = gpr_shadow(rt, vt);
+    PreciseProjection out = {};
+    if (a && sa < 16) {
+        out = *a;
+        out.x16 = sra_like_game(a->x16, sa);
+        out.y16 = sra_like_game(a->y16, sa);
+        out.ix16 = a->ix16 >> sa;
+        out.iy16 = a->iy16 >> sa;
+        out.z = (uint16_t)(a->z >> sa);
+        out.derived = sa != 0 || a->derived;
+    }
+    out.packed = (uint32_t)((int32_t)vt >> (sa & 31u));
+    gpr_shadow_set(rd, out);
+}
+
+/* AND rd, rs, rt: the shadow survives only a mask that leaves both
+ * half-words intact up to the bit a halving shifted in from Y
+ * (0xFFFF7FFF), or no mask at all. Anything else, ANDI included (it clears
+ * Y), drops it. */
+extern "C" void gte_precision_cpu_and(uint8_t rd, uint8_t rs, uint8_t rt,
+                                      uint32_t vs, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *a = gpr_shadow(rs, vs);
+    const PreciseProjection *b = gpr_shadow(rt, vt);
+    PreciseProjection out = {};
+    if (a && !b && (vt == 0xFFFFFFFFu || vt == 0xFFFF7FFFu)) out = *a;
+    else if (b && !a && (vs == 0xFFFFFFFFu || vs == 0xFFFF7FFFu)) out = *b;
+    out.packed = vs & vt;
+    gpr_shadow_set(rd, out);
+}
+
+/* OR rd, rs, rt: a move when one operand is zero, else dropped. */
+extern "C" void gte_precision_cpu_or(uint8_t rd, uint8_t rs, uint8_t rt,
+                                     uint32_t vs, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *a = gpr_shadow(rs, vs);
+    const PreciseProjection *b = gpr_shadow(rt, vt);
+    PreciseProjection out = {};
+    if (a && vt == 0) out = *a;
+    else if (b && vs == 0) out = *b;
+    else if (const PreciseProjection *c = vt == 0 ? gpr_comp(rs, vs) : vs == 0 ? gpr_comp(rt, vt) : nullptr)
+        out = *c;                                   /* a coordinate moved (G1.15) */
+    out.packed = vs | vt;
+    gpr_shadow_set(rd, out);
+}
+
+/* Any other instrumented write of rd (ANDI). */
+extern "C" void gte_precision_cpu_drop(uint8_t rd) {
+    if (!precision_cpu_active()) return;
+    gpr_shadow_drop(rd);
+}
+
+/* ---- One coordinate at a time (ENHANCEMENTS.md G1.15) ---------------------
+ * Some renderers build a vertex word from its two halves: LH of X and of Y,
+ * arithmetic on each (Tekken 3's showcase floor splits a near tile in four:
+ * each midpoint is (a + b + (a + b < 0)) >> 1, sign-extended by SLL 16 /
+ * SRA 16), then SH of each half. A register shadow may describe one
+ * coordinate (comp): its 16.16 value in x16 / ix16 and the vertex depth,
+ * `packed` being the register value, checked on every read as before. */
+
+/* LH / LHU rt, (addr), before the load: the coordinate the half-word holds,
+ * from the tracked word it belongs to or from the half-word table. */
+extern "C" void gte_precision_cpu_lh(uint8_t rt, uint32_t addr, int sign) {
+    if (!precision_cpu_active() || rt == 0 || rt > 31) return;
+    s_precise_gpr[rt].valid = 0;
+    if (addr & 1u) return;
+    const int high = (addr & 2u) != 0;
+    PreciseProjection out = {};
+    uint16_t value;
+    if (const PreciseProjection *w = word_projection(addr & ~3u)) {
+        value = (uint16_t)(high ? w->packed >> 16 : w->packed);
+        out.x16 = high ? w->y16 : w->x16;
+        out.ix16 = high ? w->iy16 : w->ix16;
+        out.z = w->z;
+        out.derived = w->derived;
+    } else if (const HalfProvenance *h = precision_half_live(precision_half_key(addr))) {
+        value = h->value;
+        out.x16 = h->v16;
+        out.ix16 = h->i16;
+        out.z = h->z;
+        out.derived = h->derived;
+    } else {
+        return;
+    }
+    out.packed = sign ? (uint32_t)(int32_t)(int16_t)value : (uint32_t)value;
+    out.valid = 1;
+    out.comp = 1;
+    s_precise_gpr[rt] = out;
+    s_diag[GTE_DIAG_CPU_LW_SHADOW]++;
+}
+
+/* SH rt, (addr), after the store: the coordinate goes on the half-word; once
+ * both halves of the word carry one, the word gets its entry as a SWC2
+ * projection store would leave it (depth: the mean of the two halves'). */
+extern "C" void gte_precision_cpu_sh(uint32_t addr, uint8_t rt, uint32_t value) {
+    if (!precision_cpu_active() || (addr & 1u)) return;
+    const PreciseProjection *s = gpr_comp(rt, value);
+    const uint32_t key = precision_half_key(addr);
+    if (!s || s->shift || !key) return;
+    HalfProvenance &h = precision_half_slot(key);
+    s_precision_half_window = HALF_STORE_WINDOW;
+    h.key = key;
+    h.generation = s_precision_generation;
+    h.v16 = s->x16;
+    h.i16 = s->ix16;
+    h.value = (uint16_t)value;
+    h.z = s->z;
+    h.derived = s->derived;
+    const HalfProvenance *lo = precision_half_live(key & ~2u);
+    const HalfProvenance *hi = precision_half_live(key | 2u);
+    if (!lo || !hi) return;
+    PreciseProjection p = {};
+    p.packed = (uint32_t)hi->value << 16 | lo->value;
+    p.x16 = lo->v16;
+    p.y16 = hi->v16;
+    p.ix16 = lo->i16;
+    p.iy16 = hi->i16;
+    p.z = (uint16_t)(((uint32_t)lo->z + hi->z + 1u) >> 1);
+    p.valid = 1;
+    p.derived = lo->derived || hi->derived;
+    uint32_t scratch, physical;
+    if (precision_scratch_index(addr, &scratch)) {
+        ScratchProvenance &entry = s_precision_scratch[scratch];
+        entry.generation = s_precision_generation;
+        entry.writer_pc = g_debug_last_store_pc;
+        entry.source = SCRATCH_SRC_CPU_SHADOW;
+        entry.projection = p;
+    } else if (precision_ram_address(addr, &physical)) {
+        precision_store_put(physical, p);
+    } else {
+        return;
+    }
+    s_diag[GTE_DIAG_CPU_SW_SHADOW]++;
+}
+
+/* ADDU / ADD with a coordinate: two coordinates add (a sum of halves stays a
+ * mean, as for words); a coordinate plus a register without a shadow moves
+ * by that integer (the game's rounding step adds its sign bit). */
+static void comp_add(uint8_t rd, uint8_t rs, uint8_t rt, uint32_t vs, uint32_t vt,
+                     const PreciseProjection *ca, const PreciseProjection *cb) {
+    PreciseProjection out = {};
+    if (ca && cb) {
+        if (!ca->shift && !cb->shift) {
+            out = *ca;
+            out.x16 = ca->x16 + cb->x16;
+            out.ix16 = ca->ix16 + cb->ix16;
+            out.z = depth_clamp((int32_t)ca->z + (int32_t)cb->z);
+            out.derived = 1;
+        }
+    } else {
+        const PreciseProjection *c = ca ? ca : cb;
+        const uint32_t other = ca ? vt : vs;
+        const uint8_t other_reg = ca ? rt : rs;
+        const int32_t k = (int32_t)other;
+        if (!c->shift && !gpr_shadow(other_reg, other) && k > -0x4000 && k < 0x4000) {
+            out = *c;
+            out.x16 = c->x16 + k * 65536;
+            out.ix16 = c->ix16 + k * 65536;
+            out.derived = c->derived || k != 0;
+        }
+    }
+    out.packed = vs + vt;
+    gpr_shadow_set(rd, out);
+}
+
+/* SRA / SRL of a coordinate: by 16 after SLL 16, the sign extension (back to
+ * the coordinate); by 1 to 15, a division the way the game divides (its low
+ * integer bits dropped, like sra_like_game); anything else (SRL 31, the sign
+ * bit) carries no coordinate. */
+static void comp_shift_right(uint8_t rd, uint8_t sa, uint32_t vt, uint32_t result,
+                             const PreciseProjection *c) {
+    PreciseProjection out = {};
+    if (c->shift == 16 && sa == 16) {
+        out = *c;
+        out.shift = 0;
+    } else if (!c->shift && sa > 0 && sa < 16) {
+        const int64_t dropped = (int64_t)(vt & ((1u << sa) - 1u)) << 16;
+        out = *c;
+        out.x16 = (int32_t)(((int64_t)c->x16 - dropped) >> sa);
+        out.ix16 = c->ix16 >> sa;
+        out.z = (uint16_t)(c->z >> sa);
+        out.derived = 1;
+    }
+    out.packed = result;
+    gpr_shadow_set(rd, out);
+}
+
+extern "C" void gte_precision_cpu_srl(uint8_t rd, uint8_t rt, uint8_t sa, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *c = gpr_comp(rt, vt);
+    if (!c) { gpr_shadow_drop(rd); return; }
+    comp_shift_right(rd, sa, vt, vt >> (sa & 31u), c);
+}
+
+/* SLL rd, rt, 16 of a coordinate: the game moves it to the upper half to
+ * sign-extend it with SRA 16. Any other shift drops the shadow. */
+extern "C" void gte_precision_cpu_sll(uint8_t rd, uint8_t rt, uint8_t sa, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const PreciseProjection *c = gpr_comp(rt, vt);
+    PreciseProjection out = {};
+    if (c && !c->shift && sa == 16) {
+        out = *c;
+        out.shift = 16;
+    }
+    out.packed = vt << (sa & 31u);
+    gpr_shadow_set(rd, out);
+}
+
+/* ---- The same hooks in interpreted code (ENHANCEMENTS.md G1.15) ----------
+ * gte_precision_interp.h. Ranges are kept as physical addresses: the
+ * interpreters see KSEG0 and KUSEG PCs alike. */
+enum { INTERP_RANGES_MAX = 64 };
+static uint32_t s_interp_lo[INTERP_RANGES_MAX], s_interp_hi[INTERP_RANGES_MAX];
+static int s_interp_ranges;
+extern "C" uint8_t g_gte_precision_interp_pages[512] = {};
+
+extern "C" void gte_precision_interp_ranges_set(const uint32_t *lo, const uint32_t *hi, int count) {
+    s_interp_ranges = 0;
+    for (int i = 0; i < count && s_interp_ranges < INTERP_RANGES_MAX; ++i) {
+        if (hi[i] <= lo[i]) continue;          /* one address: an emitted function */
+        s_interp_lo[s_interp_ranges] = lo[i] & 0x1FFFFFFFu;
+        s_interp_hi[s_interp_ranges] = hi[i] & 0x1FFFFFFFu;
+        ++s_interp_ranges;
+    }
+    std::memset(g_gte_precision_interp_pages, 0, sizeof(g_gte_precision_interp_pages));
+    for (int i = 0; i < s_interp_ranges; ++i) {
+        if (s_interp_lo[i] >= 0x00200000u) continue;          /* RAM code only */
+        const uint32_t last = s_interp_hi[i] < 0x00200000u ? s_interp_hi[i] : 0x001FFFFFu;
+        for (uint32_t page = s_interp_lo[i] >> 12; page <= last >> 12; ++page)
+            g_gte_precision_interp_pages[page] = 1;
+    }
+}
+
+extern "C" int gte_precision_interp_pc(uint32_t pc) {
+    pc &= 0x1FFFFFFFu;
+    for (int i = 0; i < s_interp_ranges; ++i)
+        if (pc >= s_interp_lo[i] && pc <= s_interp_hi[i]) return 1;
+    return 0;
+}
+
+extern "C" void gte_precision_interp_before(uint32_t insn, uint32_t vs, uint32_t vt) {
+    if (!precision_cpu_active()) return;
+    const uint32_t op = insn >> 26;
+    const uint8_t rs = (uint8_t)((insn >> 21) & 31u), rt = (uint8_t)((insn >> 16) & 31u);
+    const uint8_t rd = (uint8_t)((insn >> 11) & 31u), sa = (uint8_t)((insn >> 6) & 31u);
+    if (op == 0x23u) {                                          /* LW */
+        gte_precision_cpu_lw(rt, vs + (uint32_t)(int32_t)(int16_t)(insn & 0xFFFFu));
+    } else if (op == 0x21u || op == 0x25u) {                    /* LH, LHU */
+        gte_precision_cpu_lh(rt, vs + (uint32_t)(int32_t)(int16_t)(insn & 0xFFFFu), op == 0x21u);
+    } else if (op == 0x0Cu) {                                   /* ANDI */
+        gte_precision_cpu_drop(rt);
+    } else if (op == 0) {
+        switch (insn & 0x3Fu) {
+        case 0x20u: case 0x21u: gte_precision_cpu_add(rd, rs, rt, vs, vt); break;  /* ADD, ADDU */
+        case 0x03u: gte_precision_cpu_sra(rd, rt, sa, vt); break;                  /* SRA */
+        case 0x02u: gte_precision_cpu_srl(rd, rt, sa, vt); break;                  /* SRL */
+        case 0x00u: if (insn) gte_precision_cpu_sll(rd, rt, sa, vt); else return; break;  /* SLL */
+        case 0x24u: gte_precision_cpu_and(rd, rs, rt, vs, vt); break;              /* AND */
+        case 0x25u: gte_precision_cpu_or(rd, rs, rt, vs, vt); break;               /* OR */
+        default: return;
+        }
+    } else {
+        return;
+    }
+    s_diag[GTE_DIAG_CPU_INTERP]++;
 }
 
 /* Exact slot for a packed SXY pair, or -1 if it is outside the representable
@@ -366,18 +1218,32 @@ static inline int64_t geom_slot(uint32_t packed) {
     return (int64_t)(y + GEOM_BIAS) * GEOM_AXIS + (x + GEOM_BIAS);
 }
 
-extern "C" void gte_geometry_correction_set(int enabled) {
-    s_geom_enabled = enabled ? 1 : 0;
+static void geom_cache_configure(void) {
     s_geom_hits = 0;
     s_geom_lookups = 0;
     s_geom_miss_unrec = 0;
     s_geom_miss_ambig = 0;
-    if (s_geom_enabled && !s_geom_cache) {
+    if (s_geom_enabled && s_geom_position_fallback && !s_geom_cache) {
         s_geom_cache = (GeomVertex *)std::calloc(GEOM_CACHE_SIZE,
                                                  sizeof(GeomVertex));
-        if (!s_geom_cache) s_geom_enabled = 0;   /* fail closed: stay faithful */
+        if (!s_geom_cache) s_geom_position_fallback = 0;   /* fail closed */
     }
     gte_geom_generation_advance();
+}
+
+extern "C" void gte_geometry_position_fallback_set(int enabled) {
+    s_geom_position_fallback = enabled ? 1 : 0;
+    geom_cache_configure();
+}
+
+extern "C" int gte_geometry_position_fallback_enabled(void) {
+    return s_geom_enabled && s_geom_position_fallback && s_geom_cache;
+}
+
+extern "C" void gte_geometry_correction_set(int enabled) {
+    s_geom_enabled = enabled ? 1 : 0;
+    geom_cache_configure();
+    precision_tracking_update();
 }
 
 /* Lookup census for the debug server: attempted, hit, and the two miss classes.
@@ -402,7 +1268,8 @@ extern "C" uint32_t gte_geometry_correction_hits(void) {
 
 extern "C" int gte_geometry_correction_lookup(uint32_t packed,
                                                 int32_t *x16, int32_t *y16) {
-    if (s_speculative_depth != 0 || !s_geom_enabled || !s_geom_cache) return 0;
+    if (s_speculative_depth != 0 || !s_geom_enabled || !s_geom_position_fallback ||
+        !s_geom_cache) return 0;
     int64_t slot = geom_slot(packed);
     if (slot < 0) return 0;
     s_geom_lookups++;
@@ -421,7 +1288,7 @@ extern "C" int gte_geometry_correction_lookup(uint32_t packed,
 
 static inline void geom_note(uint32_t packed, int64_t x16, int64_t y16) {
     if (s_speculative_depth != 0 || s_gte_replay_sandbox || !s_geom_enabled ||
-        !s_geom_cache) return;
+        !s_geom_position_fallback || !s_geom_cache) return;
     /* Saturated off-screen projections are unsuitable for subpixel recovery. */
     int32_t x = (int16_t)(packed & 0xFFFFu);
     int32_t y = (int16_t)(packed >> 16);
@@ -872,6 +1739,12 @@ extern "C" void gte_ws_set_camera_zoom(int num, int den) {
     s_ws_camera_den = den / a;
 }
 
+/* [widescreen] nclip_gpu_coords: see gte_nclip. */
+static int s_ws_nclip_gpu_coords = 0;
+extern "C" void gte_ws_set_nclip_gpu_coords(int on) {
+    s_ws_nclip_gpu_coords = on ? 1 : 0;
+}
+
 // ---------------------------------------------------------------------------
 // RTPS — Perspective Transformation (internal, operates on given vertex V)
 //
@@ -993,13 +1866,17 @@ void gte_rtps_internal(GTEState* gte, int16_t* V, bool setMac0, uint32_t instr) 
     int64_t sy = sy16 >> 16;
     gte->push_sxy(sx, sy);
     if (!s_gte_replay_sandbox) {
+        s_diag[GTE_DIAG_PROJECTED_VERTICES]++;
         s_precise_sxy[0] = s_precise_sxy[1];
         s_precise_sxy[1] = s_precise_sxy[2];
         s_precise_sxy[2].packed = (uint32_t)gte->SXY[2];
         s_precise_sxy[2].x16 = (int32_t)sx16;
+        s_precise_sxy[2].ix16 = (int32_t)sx16;
+        s_precise_sxy[2].iy16 = (int32_t)sy16;
         s_precise_sxy[2].y16 = (int32_t)sy16;
         s_precise_sxy[2].z = gte->SZ[3];
         s_precise_sxy[2].valid = gte->SZ[3] != 0;
+        s_precise_sxy[2].derived = 0;
         s_precise_sxy[3] = s_precise_sxy[2];
     }
     geom_note((uint32_t)gte->SXY[2], sx16, sy16);
@@ -1040,6 +1917,19 @@ void gte_nclip(GTEState* gte, uint32_t instr) {
     int16_t sy1 = static_cast<int16_t>(gte->SXY[1] >> 16);
     int16_t sx2 = static_cast<int16_t>(gte->SXY[2] & 0xFFFF);
     int16_t sy2 = static_cast<int16_t>(gte->SXY[2] >> 16);
+    // Native-wide only: read the coordinates as the GPU draws them (11 bits).
+    // Tekken 3's body renderer averages two packed SXY words; across X = 0 the
+    // low half becomes 0x7FFx/0x80xx, which the GPU draws in place but a
+    // 16-bit NCLIP turns into X ~ +-32760, culling a visible face past the
+    // left edge of the 4:3 frame (B71). Projected words are always in range.
+    if (s_ws_nclip_gpu_coords && ws_native_wide_active()) {
+        auto gpu11 = [](int16_t v) {
+            return static_cast<int16_t>(((v & 0x7FF) ^ 0x400) - 0x400);
+        };
+        sx0 = gpu11(sx0); sy0 = gpu11(sy0);
+        sx1 = gpu11(sx1); sy1 = gpu11(sy1);
+        sx2 = gpu11(sx2); sy2 = gpu11(sy2);
+    }
     int64_t mac0 = (int64_t)sx0 * (sy1 - sy2) +
                    (int64_t)sx1 * (sy2 - sy0) +
                    (int64_t)sx2 * (sy0 - sy1);
@@ -2106,24 +2996,35 @@ extern "C" void gte_write_data(CPUState* cpu, uint8_t reg, uint32_t val) {
                 cpu->gte_data[29] = packed;
             }
             break;
+        /* SXY writes (MTC2, LWC2) drop the written register's sub-pixel
+         * projection only; the others still describe their registers. An LWC2
+         * restores it afterwards via gte_precision_lwc2_word (G1.11). */
         case 12: case 13:
             cpu->gte_data[reg] = val;
             if (!PSXRecomp::GTE::s_gte_replay_sandbox)
-                for (int i = 0; i < 4; ++i) PSXRecomp::GTE::s_precise_sxy[i].valid = 0;
+                PSXRecomp::GTE::s_precise_sxy[reg - 12].valid = 0;
             break;
         case 14:
             cpu->gte_data[14] = val;
             cpu->gte_data[15] = val;
-            if (!PSXRecomp::GTE::s_gte_replay_sandbox)
-                for (int i = 0; i < 4; ++i) PSXRecomp::GTE::s_precise_sxy[i].valid = 0;
+            if (!PSXRecomp::GTE::s_gte_replay_sandbox) {
+                PSXRecomp::GTE::s_precise_sxy[2].valid = 0;
+                PSXRecomp::GTE::s_precise_sxy[3].valid = 0;
+            }
             break;
         case 15:
             cpu->gte_data[12] = cpu->gte_data[13];
             cpu->gte_data[13] = cpu->gte_data[14];
             cpu->gte_data[14] = val;
             cpu->gte_data[15] = val;
-            if (!PSXRecomp::GTE::s_gte_replay_sandbox)
-                for (int i = 0; i < 4; ++i) PSXRecomp::GTE::s_precise_sxy[i].valid = 0;
+            if (!PSXRecomp::GTE::s_gte_replay_sandbox) {
+                /* The shadow FIFO moves with the guest one. */
+                auto *p = PSXRecomp::GTE::s_precise_sxy;
+                p[0] = p[1];
+                p[1] = p[2];
+                p[2].valid = 0;
+                p[3].valid = 0;
+            }
             break;
         case 23:
             cpu->gte_data[23] = 0;
@@ -2221,9 +3122,12 @@ extern "C" void gte_test_seed_precise_projection(uint32_t index,
     auto &p = PSXRecomp::GTE::s_precise_sxy[index];
     p.packed = packed;
     p.x16 = x16;
+    p.ix16 = x16;
+    p.iy16 = y16;
     p.y16 = y16;
     p.z = z;
     p.valid = 1;
+    p.derived = 0;
 }
 
 extern "C" void gte_test_get_precise_projection(uint32_t index,
@@ -2239,6 +3143,10 @@ extern "C" void gte_test_get_precise_projection(uint32_t index,
     if (y16) *y16 = p.y16;
     if (z) *z = p.z;
     if (valid) *valid = p.valid;
+}
+
+extern "C" uint8_t gte_test_get_precise_derived(uint32_t index) {
+    return index < 4 ? PSXRecomp::GTE::s_precise_sxy[index].derived : 0;
 }
 
 extern "C" void gte_test_seed_geometry(uint32_t packed, int32_t x16,

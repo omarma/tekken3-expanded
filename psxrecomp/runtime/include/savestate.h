@@ -115,6 +115,11 @@ void psx_frontend_on_savestate_notify(int is_load, int slot, int ok);
  * pending, serialize with cpu->pc = resume_pc; if a load is pending, restore and
  * longjmp to the scheduler (never returns in that case). Near-free when idle. */
 void savestate_poll(CPUState* cpu, uint32_t resume_pc);
+/* Completed loads so far; *frame = s_frame_count when the last one completed
+ * (the anchor of debug_server's capture_plan). */
+uint32_t savestate_load_generation(uint64_t* frame);
+/* g_vblank_raise_count (interrupts.c) when the last load completed. */
+uint64_t savestate_last_load_vblanks(void);
 
 #ifdef __cplusplus
 }

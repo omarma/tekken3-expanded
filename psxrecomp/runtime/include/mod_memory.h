@@ -56,6 +56,14 @@ static inline uint32_t psx_mod_gpu_dma_resolve_address_for(
 uint32_t psx_mod_gpu_dma_memory_alloc(uint32_t size, uint32_t alignment);
 uint32_t psx_mod_gpu_dma_resolve_address(uint32_t address);
 
+/* Save states (boot_state.c BS_SEC_MOD_MEM / BS_SEC_MOD_GPU_DMA): the
+ * allocated part of a region (0 = guest memory, 1 = GPU-DMA aperture), and
+ * its restore. Mods allocate both at startup in a fixed order, so the same
+ * build lays them out the same way in every launch; a restore longer than the
+ * region is refused. */
+const uint8_t *psx_mod_memory_region(int which, uint32_t *used);
+int psx_mod_memory_restore(int which, const uint8_t *data, uint32_t len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -9,7 +9,7 @@ of the memory card, takes Arcade from the modes menu, opens the Tag page (R2)
 and confirms each guest; during the loading screen the costume (0x800ADD98)
 and the opponent (Jin, standing still: no CPU) are set. The guest jumps twice,
 walks forward and back (the route of tools/ttt1_tails.lua), while the local
-rotation of its accessory bones 18..21 (actor +0xF74 + 32 * bone) is read every
+rotation of its accessory bones 18..23 (actor +0xF74 + 32 * bone) is read every
 frame the debug server answers.
 
 What should swing comes from the costume's .acc file in the catalogue
@@ -35,7 +35,7 @@ GRID_COUNT, CURSOR, CURSOR_ID = 0x80118648, 0x80118650, 0x80118668
 COSTUME, OPPONENT, OPPONENT_COSTUME = 0x800add98, 0x800add5e, 0x800add9a
 LIFE, CLOCK = 0x800a961e, 0x800adbcc
 R2, UP, DOWN, LEFT, RIGHT = 0xfdff, 0xffef, 0xffbf, 0xff7f, 0xffdf
-BONES = (18, 19, 20, 21)
+BONES = (18, 19, 20, 21, 22, 23)        # 22 / 23: second meshes on their own bone (B59)
 MIN_POSES, MIN_DEGREES, STILL_DEGREES = 8, 5.0, 0.5
 # tools/ttt1_tails.lua's route: idle, two jumps, forward, back (facing right).
 ROUTE = [(120, 0xffff), (8, UP), (70, 0xffff), (8, UP), (70, 0xffff), (90, RIGHT), (40, 0xffff),
@@ -84,7 +84,7 @@ def fight(g, index, count, costume):
     time.sleep(2)
 
 
-def sample(g, every, out, name):
+def sample(g, every, out, name, world=False):
     g.q(cmd='input_route_clear')
     for n, b in ROUTE: g.q(cmd='input_route_append', frames=n, buttons=b)
     g.q(cmd='input_route_start')
@@ -95,6 +95,10 @@ def sample(g, every, out, name):
     while (frame := g.q(cmd='frame')['frame'] - start) < length:
         raw = bytes.fromhex(g.q(cmd='read_ram', addr=f'{P1 + 0xf74 + 32 * BONES[0]:08x}', len=32 * len(BONES))['hex'])
         samples.append(dict(frame=frame, bones={b: struct.unpack_from('<9h', raw, 32 * i) for i, b in enumerate(BONES)}))
+        if world:                       # bone records 0..23: world matrix +0, position +0x14 (B59)
+            raw = bytes.fromhex(g.q(cmd='read_ram', addr=f'{P1 + 0x8f4:08x}', len=68 * 24)['hex'])
+            samples[-1]['world'] = {b: struct.unpack_from('<9h', raw, 68 * b) + struct.unpack_from('<3i', raw, 68 * b + 0x14)
+                                    for b in range(24)}
         if len(samples) % 50 == 0:
             g.write(CLOCK, 0x7000, 2)
             if g.value(LIFE, 2) < full: g.write(LIFE, full, 2)
@@ -133,6 +137,7 @@ def main():
     ap.add_argument('--tag', default='after')
     ap.add_argument('--arcade', type=Path, help='folder of tools/ttt1_tails.lua captures, <guest>-c<n>.csv')
     ap.add_argument('--shots', type=int, default=0, metavar='N', help='a capture every N frames')
+    ap.add_argument('--world', action='store_true', help='also the world frames of bones 0..23 in the JSON (B59: tools/b59_collision.py)')
     ap.add_argument('--native', action='store_true', help="T3's solver on the arcade's blocks (TEKKEN3_ACCESSORIES=native)")
     a = ap.parse_args()
     build = Path(a.build)
@@ -155,7 +160,7 @@ def main():
         try:
             to_tag_page(g, len(catalogue))
             fight(g, catalogue.index(key), len(catalogue), costume)
-            samples = sample(g, a.shots, out, name)
+            samples = sample(g, a.shots, out, name, a.world)
         except Exception as e:
             print(f'{name}: {e}', flush=True); failed.append(name); continue
         finally:

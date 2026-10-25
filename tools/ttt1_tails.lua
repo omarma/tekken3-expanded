@@ -23,6 +23,7 @@ local p2 = machine.ioport.ports[":JVS_PLAYER2"]
 local UNLOCK, TIMER, LIFE, FULL = 0x2fe4fc, 0x2434e0, 0x3d0, 0x76000
 local SLOT, SLOTS = 0x1a60, 0x29eef8
 local IDLE = tonumber(os.getenv("TTT1_IDLE") or "120")
+local SHOTS = tonumber(os.getenv("TTT1_SHOTS") or "0")   -- a snapshot every N frames of the route, and no other (B59)
 local seq = {}
 for k, n in string.gmatch(os.getenv("TTT1_SEQ") or "U:8 N:70 U:8 N:70 R:90 N:40 L:60 N:40", "(%w+):(%d+)") do
     seq[#seq + 1] = {k, tonumber(n)}
@@ -64,7 +65,20 @@ local function hold(k, v)
     elseif k:match("^%d$") then port.fields["P1 Button " .. k]:set_value(v) end
 end
 local step, step_at = 0, 0
+-- TTT1_WORLD=1 : aussi world.csv, chaque image, le repere monde des os 0..23 du joueur 1
+-- (acteur +0xA54 + 80 * os : matrice +0x24, 9 demi-mots en 4096e ; position +0x38, 3 mots),
+-- ce que lit la collision des accessoires (0x801642B8, B59).
+local world = os.getenv("TTT1_WORLD") and assert(io.open("world.csv", "w"))
+if world then world:write("frame,bone,m00,m01,m02,m10,m11,m12,m20,m21,m22,x,y,z\n") end
 local function sample()
+    if world then
+        for bone = 0, 23 do
+            local r, m = P1 + 0xa54 + 80 * bone, {}
+            for i = 0, 8 do m[#m + 1] = s16(space:read_u16(r + 0x24 + 2 * i)) end
+            world:write(string.format("%d,%d,%s,%d,%d,%d\n", frame - at, bone, table.concat(m, ","),
+                s32(r + 0x38), s32(r + 0x3c), s32(r + 0x40)))
+        end
+    end
     for bone = 18, 23 do
         local a = P1 + 0xa58 + 80 * bone
         local m = {}
@@ -74,8 +88,12 @@ local function sample()
             s32(P1 + 0xb30), space:read_u32(P1 + 0x12d4 + 4 * (bone - 18))))
     end
 end
+-- TTT1_NOWIND=1 : pas de vent sur l'arene 11 (0x801632B8 « addiu v0, zero, 11 » devient 255 :
+-- le test de l'arene ne passe jamais), pour comparer au solveur du jeu, qui n'en a pas (B59).
+local NOWIND = os.getenv("TTT1_NOWIND")
 ttt1_tails = emu.add_machine_frame_notifier(function()
     frame = frame + 1
+    if NOWIND and space:read_u32(0x1632b8) == 0x2402000b then space:write_u32(0x1632b8, 0x240200ff) end
     space:write_u32(UNLOCK, 0xffffffff)
     local coin = machine.ioport.ports[":JVS_COIN1"].fields["Coin 1"]
     if frame == 1800 or frame == 1830 then coin:set_value(1) end
@@ -103,19 +121,27 @@ ttt1_tails = emu.add_machine_frame_notifier(function()
         if not (found[0] and found[1]) then return end
         P1, P2 = found[0], found[1]
         info:write(string.format("P1 block %x P2 block %x frame %d model slot %d\n", P1, P2, frame, space:read_u16(P1 + 0x1e)))
-        machine.video:snapshot()
+        if SHOTS == 0 then machine.video:snapshot() end
         phase, at = "run", frame
     end
     if phase ~= "run" then return end
+    if world and (frame - at == 0 or frame - at == 60) then       -- accessory state (+0x1200..+0x1300)
+        local h = {}
+        for a = 0x1200, 0x12fc, 4 do h[#h + 1] = string.format("%08x", space:read_u32(P1 + a)) end
+        info:write(string.format("state %d %s\n", frame - at, table.concat(h, " ")))
+        -- arene (0x802434E4) et 0x8024356A : le vent du solveur (0x80163230) souffle a 11 et 4
+        info:write(string.format("stage %d wind-mode %d\n", space:read_u16(0x2434e4), space:read_u16(0x24356a)))
+    end
     space:write_u32(P1 + LIFE, FULL); space:write_u32(P2 + LIFE, FULL)
     sample()
     local f = frame - at
+    if SHOTS > 0 and f % SHOTS == 0 then machine.video:snapshot() end
     if f < IDLE then return end
     if step == 0 or f - step_at >= seq[step][2] then
         if step > 0 then hold(seq[step][1], 0) end
         step, step_at = step + 1, f
-        if step > #seq then out:close(); info:close(); machine:exit(); phase = "done"; return end
+        if step > #seq then out:close(); info:close(); if world then world:close() end; machine:exit(); phase = "done"; return end
         hold(seq[step][1], 1)
-        if seq[step][1] == "U" then machine.video:snapshot() end
+        if seq[step][1] == "U" and SHOTS == 0 then machine.video:snapshot() end
     end
 end)

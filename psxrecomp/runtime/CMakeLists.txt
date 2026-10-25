@@ -487,6 +487,20 @@ if(BUILD_TESTING)
         endif()
     endif()
 
+    # Setup host toolchain check: a macOS pack (cmake/ninja/ccache, system
+    # clang) must stay healthy, and a broken pack is renamed <tag>.broken once,
+    # never re-suffixed. #includes host/psxrecomp_codegen_host.c, so it needs
+    # recomp_launcher.h; POSIX-only (fake packs are shell scripts).
+    if(UNIX AND EXISTS "${RECOMP_UI_ROOT}/src/recomp_launcher.h")
+        add_executable(toolchain_health_test tests/test_toolchain_health.c)
+        target_include_directories(toolchain_health_test PRIVATE
+            include ${RECOMP_UI_ROOT}/src)
+        add_test(NAME toolchain_health_test COMMAND toolchain_health_test)
+    else()
+        message(STATUS
+            "toolchain_health_test: needs POSIX and recomp-ui - skipped")
+    endif()
+
     # recomp-net is an optional submodule; the netplay input-history contract
     # cannot be compiled without it. Conditional, not skipped silently: the
     # registration guard is told about it via the same EXISTS check.

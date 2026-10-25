@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
-"""P. Jack's Megaton Punishment and its victim's mashed 1+2 (B42, GH#85), without a player.
+"""P. Jack's Megaton Punishment and its victim's inputs (B42, GH#85; B68), without a player.
 
-    python3 tools/test_b42_megaton.py [--build build-opt-dbg] [--victim 9] [--tries 4] [--visible]
+    python3 tools/test_b42_megaton.py [--build build-opt-dbg] [--victim 9|kazuya] [--ttt1] [--tries 4] [--visible]
 
 Cold start (no save), Arcade selector, player 2 joins (Start on pad 2) and takes
 the victim on its T3 moves (Jin by default, as in TTT1 under MAME), player 1
 takes P. Jack on the Tag page. Player 1 walks into contact once (savestate 1),
-then each try reloads it and plays 2+4, then d/b, d, d/f+2; on odd tries the
-victim mashes 1+2 at the end of the lift (one frame down, one up, timed on
-the game's frame counter). TTT1 (MAME tektagt, same inputs): at
+then each try reloads it and plays 2+4, then d/b, d, d/f+2; in turn the
+victim does nothing, mashes 1+2 at the end of the lift (one frame down, one
+up, timed on the game's frame counter), holds back or holds forward from the
+grab on (B68). TTT1 (MAME tektagt, same inputs): at
 the last hit the victim leaves the lift (80083380) for its dash for one
 frame, its own list then sends it on running or, 1+2 mashed, into its own
 1+2 (looked ahead at the end of the clip), so the hit launches it from the
 front (8007a960, 49 damage) or as a counter (8007aa30, 58); it falls and lies
-on the ground (mashing: it gets up, then attacks).
+on the ground (mashing: it gets up, then attacks). Holding any direction it
+leaves the lift for 0x3D (800376d8, no guard) instead, and the hit launches
+it from the front all the same (49 damage): back, down/back, down, up,
+forward and down/forward measured.
 Checks: after the last hit (P. Jack on 800833b4) the victim plays P. Jack's
-front launch with no input, his counter launch with 1+2 mashed (records of
+front launch with no input or a direction held, his counter launch with 1+2 mashed (records of
 his pack): the bugs where it ran on, on its feet (its own dash and run,
 engine aliases 0x1B / 0x1D, where mashed 1+2 started its running moves),
 was launched from behind (8007a9fc), and was never countered. One frame of
 its own run or 1+2 before the launch is TTT1's (80038064, its alias 0x43).
+Back held, it guarded the hit (P. Jack's guard reaction 0x80070cf8, then
+its own steps: left standing, turning); forward held, it was launched from
+behind (B68).
 Build: pad 2 needs the debug server's port 2 (PSX_DEBUG_TOOLS=ON).
 """
 import argparse, os, shutil, socket, struct, subprocess, sys, time
@@ -44,6 +51,8 @@ def pad(*bits):
     for b in bits: m &= ~(1 << b)
     return m
 B_R, B_D, B_L, B_TR, B_CI, B_SQ = 5, 6, 7, 12, 13, 15
+MODES = ('none', 'mash', 'back', 'forward')
+HOLD = {'back': B_R, 'forward': B_L}                 # the victim, player 2, faces left
 
 
 class Game:
@@ -122,9 +131,10 @@ def route(g, steps):
 def tag_place(k): return divmod(k, 8) if k < 16 else (k - 16, 8)
 
 
-def to_fight(g, guest_index, victim):
-    """Arcade selector: player 2 joins and takes the victim (its T3 moves),
-    player 1 takes P. Jack on the Tag page."""
+def to_fight(g, guest_index, victim, ttt1=False, victim_guest=None):
+    """Arcade selector: player 2 joins and takes the victim (a native on its
+    T3 or TTT1 moves, or a guest on its own Tag page), player 1 takes
+    P. Jack on the Tag page."""
     g.q(cmd='turbo', enabled=1)
     g.wait(lambda: g.value(STATE) == 4, 'mode menu not reached', 240, lambda: g.press(START))
     g.q(cmd='turbo', enabled=0)
@@ -133,6 +143,9 @@ def to_fight(g, guest_index, victim):
            lambda: (g.press(CROSS), time.sleep(.4)))
     time.sleep(1.5)
     g.press(START, port=2); time.sleep(2)
+    if victim_guest is not None:
+        g.press(R2, port=2); time.sleep(2.5)
+        victim = GUEST_ID + victim_guest
     for k in range(48):
         c = g.value(CURSOR_CHAR + 0x7c)
         if c == victim: break
@@ -140,11 +153,16 @@ def to_fight(g, guest_index, victim):
         if k % 12 == 11 or g.value(CURSOR_CHAR + 0x7c) == c: g.press(DOWN, port=2)
     else: raise AssertionError('player 2 did not reach the victim')
     g.press(SQUARE, port=2); time.sleep(1)
-    if 'P2 opens the MOVESET card' in g.log():          # T3 moves (the card opens on TEKKEN 3)
+    if 'P2 opens the MOVESET card' in g.log():          # the card opens on TEKKEN 3
+        if ttt1:
+            g.press(RIGHT, port=2)
+            g.wait(lambda: 'P2 highlights TTT1 moves' in g.log(), 'player 2 did not reach TTT1 moves', 5)
         g.press(CROSS, port=2)
-        g.wait(lambda: 'P2 takes T3 moves' in g.log(), 'player 2 did not take T3 moves', 5)
+        moves = 'TTT1' if ttt1 else 'T3'
+        g.wait(lambda: f'P2 takes {moves} moves' in g.log(), f'player 2 did not take {moves} moves', 5)
     time.sleep(1)
-    g.press(R2); time.sleep(2.5)
+    if g.value(CURSOR_CHAR) < GUEST_ID:                 # the Tag page is both players' (a guest victim)
+        g.press(R2); time.sleep(2.5)
     row, col = tag_place(guest_index)
     for _ in range(14):
         r, c = tag_place(g.value(CELL))
@@ -163,7 +181,7 @@ def pack_ids(build):
     return {struct.unpack_from('<4I', pack, 32 + i * 16)[1]: PACK + i for i in range(n)}
 
 
-def attempt(g, mash, ids):
+def attempt(g, mode, ids):
     """One try from savestate 1: P. Jack's (player 1, a route) and the
     victim's move numbers, in order, and the damage. With mash, the victim
     presses 1+2 on the lift's even frames from 22: the engine takes it if a
@@ -174,11 +192,13 @@ def attempt(g, mash, ids):
     life = lambda: struct.unpack('<h', g.read(ACTOR + STRIDE + 0x3f6, 2))[0]
     before = life()
     route(g, [(2, pad(B_TR, B_CI)), (40, 0xffff), (2, pad(B_D, B_L)), (2, pad(B_D)), (2, pad(B_D, B_R, B_TR)), (200, 0xffff)])
-    p1, p2, mashed = [], [], not mash
+    p1, p2, mashed, held = [], [], mode != 'mash', mode not in HOLD
     end = g.q(cmd='frame')['frame'] + 260
     while g.q(cmd='frame')['frame'] < end:
         both = g.read(ACTOR + 0x58, STRIDE + 0x4a)
         a, b = struct.unpack_from('<H', both, 0x48)[0], struct.unpack_from('<H', both, STRIDE + 0x48)[0]
+        if b == ids[GRAB] and not held:                  # from the grab on
+            held = True; g.p2(pad(HOLD[mode]))
         if b == ids[LIFT] and not mashed:
             mashed, down = True, False
             while True:                                  # the victim's own frame, read each time
@@ -190,14 +210,16 @@ def attempt(g, mash, ids):
             g.p2(0xffff)
         if not p1 or p1[-1] != a: p1.append(a)
         if not p2 or p2[-1] != b: p2.append(b)
+    g.p2(0xffff)
     return p1, p2, before - life()
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--build', default='build-opt-dbg')
-    ap.add_argument('--victim', type=int, default=9, help='victim character (stock grid), on its T3 moves')
-    ap.add_argument('--tries', type=int, default=4, help='alternately without and with 1+2 mashed (up to 3 goes)')
+    ap.add_argument('--victim', default='9', help='victim: a native (stock grid number) or a guest (its key, e.g. kazuya)')
+    ap.add_argument('--ttt1', action='store_true', help='the native victim on its TTT1 moves')
+    ap.add_argument('--tries', type=int, default=4, help='in turn: no input, 1+2 mashed (up to 3 goes), back held, forward held')
     ap.add_argument('--visible', action='store_true')
     a = ap.parse_args()
     build = (ROOT / a.build).resolve()
@@ -208,7 +230,8 @@ def main():
     g = Game(build, 'megaton', a.visible)
     ok = True
     try:
-        to_fight(g, catalogue.index('pjack'), a.victim)
+        guest = None if a.victim.isdigit() else catalogue.index(a.victim)
+        to_fight(g, catalogue.index('pjack'), int(a.victim) if guest is None else None, a.ttt1, guest)
         x = lambda p: struct.unpack('<i', g.read(ACTOR + p * STRIDE, 4))[0]
         for _ in range(6):              # one held forward press, into contact
             route(g, [(70, pad(B_R)), (30, 0xffff)])
@@ -216,12 +239,13 @@ def main():
             if x(1) - x(0) < 1300: break
         g.q(cmd='savestate', op='save', slot=1); time.sleep(1.5)
         for t in range(a.tries):
-            mash = t % 2 == 1
+            mode = MODES[t % len(MODES)]
+            mash = mode == 'mash'
             # A press through the socket misses the window now and then (the
             # engine's own counter needs it there): up to three goes mashed.
             for go in range(3 if mash else 1):
-                p1, p2, damage = attempt(g, mash, ids)
-                name = f'try {t} ({"1+2 mashed, go " + str(go + 1) if mash else "no input"})'
+                p1, p2, damage = attempt(g, mode, ids)
+                name = f'try {t} ({"1+2 mashed, go " + str(go + 1) if mash else mode + " held" if mode in HOLD else "no input"})'
                 if ids[HIT] not in p1 or ids[LIFT] not in p2:
                     print(f'{name}: the throw did not reach its last hit, P. Jack {[hex(m) for m in p1]}, victim {[hex(m) for m in p2]}')
                     good = False; continue

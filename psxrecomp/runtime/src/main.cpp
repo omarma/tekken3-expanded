@@ -6,6 +6,7 @@
  */
 
 #include "cpu_state.h"
+#include "gte_precision_interp.h"
 #include "psx_scheduler.h"   /* psx_scheduler_run — deterministic TCB scheduler */
 #include "parity_trace.h"    /* general two-process control-flow parity ring */
 #include "device_trace.h"    /* general two-process device-event cycle ring */
@@ -26,6 +27,7 @@
 #include "tekken3_sound_options.h"
 #ifdef TEKKEN3_RUNTIME
 #include "tekken3_main_menu.h"
+#include "tekken3_cine_scene.h"
 #endif
 #include "host_keymap.h"
 #include "overlay_capture.h"
@@ -1076,6 +1078,8 @@ static int           g_video_texfilter = 0; /* 0=nearest, 1=bilinear */
  * SXY readback are untouched. Default off = the faithful floor. */
 static int           g_video_geometry_correction   = 0;
 static int           g_video_perspective_texturing = 0;
+/* [video] offer_geometry_correction: the launcher draws the geometry row. */
+static int           g_video_offer_geometry_correction = 0;
 static int           g_video_renderer = PSXRecompV4::DEFAULT_VIDEO_RENDERER;
 static int           g_hide_cursor    = 3;  /* [video] hide_mouse_cursor: 0 off, 1 fullscreen, 2 always, 3 idle (default) */
 static Uint32        g_cursor_last_move_ms = 0;
@@ -5749,8 +5753,15 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
     static int load_run = 0;
     static int release_run = 0;
     int turbo_hold = 0;
+    int cine_unpaced = 0;
 #ifdef TEKKEN3_RUNTIME
     turbo_hold = tekken3_main_menu_hold_turbo();
+    /* A cinematic's black loading runs unpaced even with the mods off; the
+     * cinematic itself never does (tekken3_cine_scene.c). */
+    const int cine_turbo = tekken3_cine_scene_turbo();
+    if (cine_turbo < 0) turbo_hold = 1;
+    cine_unpaced = cine_turbo > 0 && !psx_netplay_active() &&
+                   !psx_selfcheck_resim_active();
 #endif
     if (g_turbo_loads_enabled && !turbo_hold && !psx_netplay_active() &&
         !psx_selfcheck_resim_active()) {
@@ -5780,7 +5791,7 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
      * dispatches, run unpaced so the (shell-skipped) BIOS kernel init +
      * SYSTEM.CNF + game EXE load compress to host speed. This replaces the
      * old fast_boot snapshot restore; all guest timing is authentic. */
-    if (psx_bios_hle_boot_turbo_active())
+    if (psx_bios_hle_boot_turbo_active() || cine_unpaced)
         turbo_loads_active = 1;
     probe_turbo = turbo_loads_active;
 
@@ -5895,7 +5906,7 @@ static NetplayVblankEpilogue sdl_vblank_present_body(void) {
          * legacy unpaced host-speed path. Pace every simulated guest frame at
          * the divided period; the presentation skip below remains independent
          * so rendering cost does not distort the selected multiplier. */
-        if (g_turbo_load_wall_multiplier >= 2 &&
+        if (g_turbo_load_wall_multiplier >= 2 && !cine_unpaced &&
             g_frame_period_ms > 0.0) {
             uint64_t perf_start = runtime_perf_section_begin();
             frame_pacer_wait(
@@ -9872,6 +9883,7 @@ namespace {
         gi->has_skip_fmv = skip_fmv_offered_b ? 1 : 0;
         gi->has_turbo_loads = turbo_loads_offered_b ? 1 : 0;
         gi->has_geometry_precision = 1;
+        gi->has_geometry_correction_row = g_video_offer_geometry_correction;
         gi->has_mouse_cursor = 1;
         if (language_labels && num_languages > 0) {
             gi->language_labels = language_labels;
@@ -10232,6 +10244,11 @@ int main(int argc, char** argv) {
                 psx_vsync_query_hle_add_event_horizon_site(site);
             for (uint32_t site : gc.vsync_event_horizon_extra_sites)
                 psx_vsync_query_hle_add_extra_event_horizon_site(site);
+            {   /* precision_funcs ranges for interpreted code (G1.15) */
+                std::vector<uint32_t> lo, hi;
+                for (const auto &r : gc.precision_funcs) { lo.push_back(r.first); hi.push_back(r.second); }
+                gte_precision_interp_ranges_set(lo.data(), hi.data(), (int)lo.size());
+            }
             g_video_scale      = gc.runtime.video_supersampling;
             g_video_aa         = gc.runtime.video_antialiasing;
             g_video_texfilter  = gc.runtime.video_texture_filter;
@@ -10239,6 +10256,8 @@ int main(int argc, char** argv) {
                 gc.runtime.video_geometry_correction ? 1 : 0;
             g_video_perspective_texturing =
                 gc.runtime.video_perspective_texturing ? 1 : 0;
+            g_video_offer_geometry_correction =
+                gc.runtime.video_offer_geometry_correction ? 1 : 0;
             g_video_renderer   = gc.runtime.video_renderer;
             g_video_screen     = gc.runtime.video_screen_kind;
             g_video_aspect_num = gc.runtime.video_aspect_num;
@@ -10416,6 +10435,9 @@ int main(int argc, char** argv) {
                 gc.ws_dome_min_sz);
             gte_ws_set_camera_zoom(gc.ws_camera_zoom_num,
                                    gc.ws_camera_zoom_den);
+            /* [widescreen] nclip_gpu_coords — NCLIP on the GPU's 11-bit
+             * coordinates while native-wide is active. */
+            gte_ws_set_nclip_gpu_coords(gc.ws_nclip_gpu_coords ? 1 : 0);
             /* [widescreen.cull] per-game gates + signature immediates for the
              * pattern-scanned interp widen hooks. A title that never opted in
              * must never have its live code scanned and rewritten. */
@@ -11985,13 +12007,20 @@ session_reboot:
      * the draw path is the faithful integer one, unchanged. */
     gte_geometry_correction_set(g_video_geometry_correction);
     gpu_texture_correction_set(g_video_perspective_texturing);
+    /* At scale 1 only the software backend loses the sub-pixel positions: it
+     * rounds them to its pixel grid (to the nearest pixel, where the console
+     * truncates: vertices move by a pixel, nothing gets smoother). OpenGL
+     * and Vulkan rasterise them as floats, and a pixel's coverage follows the
+     * corrected edge at scale 1 too (ENHANCEMENTS.md G1.15). */
     if (g_video_geometry_correction || g_video_perspective_texturing) {
         std::fprintf(stdout,
                      "psxrecomp: geometry correction %s, perspective texturing %s%s\n",
                      g_video_geometry_correction ? "on" : "off",
                      g_video_perspective_texturing ? "on" : "off",
-                     (g_video_geometry_correction && requested_scale < 2)
-                         ? " (needs [video] supersampling >= 2 to be visible)" : "");
+                     (g_video_geometry_correction && requested_scale < 2 &&
+                      gr_backend() == GR_BACKEND_SOFTWARE)
+                         ? " (the software renderer rounds it to whole pixels below [video] supersampling 2)"
+                         : "");
     }
     /* Display aspect. Identity at the default 4:3. The present letterbox uses
      * this aspect; native-wide fills it with a genuinely wider frame (no

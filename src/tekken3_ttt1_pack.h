@@ -12,8 +12,9 @@ static int ttt1_pack_target(unsigned id,unsigned count) {
 }
 /* Hit limb marking a TTT1 laser (virtual limb 24): see __wrap_func_8006A3BC.
  * Unknown's glowing blade: TTT1 limbs 23 (mid-blade) and 22 (near its tip),
- * points of her hand bone 10 (blade_point in tekken3_ttt1_combat.c). */
-enum { TTT1_PACK_BLADE_MID=0x3d, TTT1_PACK_BLADE_TIP=0x3e, TTT1_PACK_LASER_LIMB=0x3f };
+ * points of her hand bone 10 (blade_point in tekken3_ttt1_combat.c). The
+ * mist (virtual limb 25: Nina's, Anna's, Yoshimitsu's): T3's effect limb 25. */
+enum { TTT1_PACK_MIST_LIMB=0x3c, TTT1_PACK_BLADE_MID=0x3d, TTT1_PACK_BLADE_TIP=0x3e, TTT1_PACK_LASER_LIMB=0x3f };
 static int ttt1_pack_validate(const unsigned char *p,size_t size) {
     if(size<32 || size>16*1024*1024 || ttt1_pack_word(p)!=0x314d554a ||
        ttt1_pack_word(p+4)!=4 || ttt1_pack_word(p+8)!=size)return 0;
@@ -52,8 +53,8 @@ static int ttt1_pack_validate(const unsigned char *p,size_t size) {
         for(j=0;j<256;j++) {if(props+j*4>ro-4)return 0;if(!ttt1_pack_half(p+props+j*4))break;}
         if(j==256)return 0;
         /* Hit limbs are bone indices: 0..17 core, 18..23 guest accessory
-         * bones; above, the laser and blade markers only. */
-        for(unsigned j=0;j<4;j++)if(p[rp+40+j]>=24 && (p[rp+40+j]<TTT1_PACK_BLADE_MID || p[rp+40+j]>TTT1_PACK_LASER_LIMB))return 0;
+         * bones; above, the mist, blade and laser markers only. */
+        for(unsigned j=0;j<4;j++)if(p[rp+40+j]>=24 && (p[rp+40+j]<TTT1_PACK_MIST_LIMB || p[rp+40+j]>TTT1_PACK_LASER_LIMB))return 0;
         for(unsigned j=0;j<nc;j++) {
             const unsigned char *c=p+cp+j*12;
             unsigned cmd=ttt1_pack_half(c);

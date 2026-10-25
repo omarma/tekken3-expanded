@@ -21,6 +21,12 @@ chosen in game on 2026-10-02;
 tools/ttt1_devil_jin_wings.py).
 --wings none gives the model without wings.
 
+--eyes also writes Jin-TTT1-arcade-P1.face (the cinematics' eyes, as a guest's
+.face: tools/ttt1_import.py faces()), costume 1's expressions kept whole in the
+atlas. Over the Devil face, each expression is that face where the plain
+expression differs from the plain neutral face (the eyes), the Devil face
+elsewhere: his eyes close without losing the Devil's marks.
+
 --face replaces the Devil face with a hand-edited 32 x 64 indexed PNG that
 uses the original palette (see workspace/ttt1-import/devil-jin/).
 
@@ -98,6 +104,7 @@ def main():
     ap.add_argument('--wing-back', type=int, default=40, help='push the wings back, in model units')
     ap.add_argument('--wing-pose', type=int, default=0, help='pose of the wings, 0..36 (with --no-flap)')
     ap.add_argument('--no-flap', action='store_true', help='keep one pose of the wings (they do not flap)')
+    ap.add_argument('--eyes', action='store_true', help="write the .face of costume 1's expressions (cinematics' eyes)")
     a = ap.parse_args()
 
     import convert, texpack, check_texpack
@@ -110,6 +117,7 @@ def main():
     model, tex = bank[mo:mo + mn], bytearray(bank[to:to + tn])
 
     entries = tims(tex)
+    shown_px = bytes(tex[slice(*find(entries, SHOWN_FACE)['pixels'])])
     if a.plain:
         a.wings = 'none'
     elif a.face:
@@ -118,6 +126,17 @@ def main():
         copy_pixels(tex, entries, DEVIL_FACE, SHOWN_FACE)
     if not a.plain:
         copy_pixels(tex, entries, TATTOO, SHOWN_FOREHEAD)
+    face = None
+    if a.eyes:
+        from ttt1_import import faces
+        face = faces(ram, SLOT)
+        if not face: raise SystemExit(f'no face expressions for slot {SLOT}')
+        if not a.plain:
+            devil = tex[slice(*find(entries, SHOWN_FACE)['pixels'])]
+            for x, y in face[1]:
+                if (x, y) == DEVIL_FACE: continue
+                lo, hi = find(entries, (x, y))['pixels']
+                tex[lo:hi] = bytes(e if e != n else d for e, n, d in zip(tex[lo:hi], shown_px, devil))
     if a.wings != 'none':
         import ttt1_devil_jin_wings as wings
         ao, an = entry(109 + wings.ANGEL_SLOT)
@@ -136,12 +155,21 @@ def main():
         src_model.write_bytes(model)
         src_tex.write_bytes(tex)
         src = load(src_model)
-        report = texpack.plan(bytes(tex), src)
+        shown, sources, (blink, flag_a, flag_b) = face or ((), [], (0, 0, 0))
+        report = texpack.plan(bytes(tex), src, [shown] + [(x, y) + shown[2:] for x, y in sources] if face else ())
         ps1, relocs = convert.convert(src)
         base = a.out / 'Jin-TTT1-arcade-P1'
         base.with_suffix('.3dm').write_bytes(ps1)
         base.with_suffix('.relocs').write_bytes(struct.pack(f'<{len(relocs)}I', *relocs))
         base.with_suffix('.tim').write_bytes(texpack.repack(bytes(tex)))
+        base.with_suffix('.face').unlink(missing_ok=True)
+        if face:
+            # As tools/ttt1_import.py model(): read by tekken3_ttt1_face_tick().
+            placed = [texpack.face_at(*shown)] + [texpack.face_at(x, y, *shown[2:]) for x, y in sources]
+            if None in placed: raise SystemExit('the face expressions did not fit the atlas whole')
+            base.with_suffix('.face').write_bytes(b'FACE' + struct.pack(
+                f'<6H{2 * len(sources)}H2H', *placed[0], *shown[2:], blink, len(sources), *sum(placed[1:], ()),
+                flag_a, flag_b))
         lost = convert.unplaced(src)
         bad = check_texpack.main(src_model, src_tex, base.with_suffix('.3dm'), base.with_suffix('.tim'))
     print(f'model: {len(ps1)} bytes, {len(relocs)} relocations; textures: {report["total"]} halfwords, '

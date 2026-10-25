@@ -362,9 +362,14 @@ struct RuntimeConfig {
     // screen-bounds culls and any SXY readback see exactly what hardware would
     // produce. This is visual-only. Default off (faithful floor).
     //
-    // Only observable at [video] supersampling >= 2: at native resolution the
-    // corrected position rounds back to the same pixel it started on.
+    // Not inert at supersampling 1 under OpenGL, which rasterises the corrected
+    // positions as floats; the software renderer rounds them to its pixel grid
+    // there and smooths nothing (ENHANCEMENTS.md G1.15).
     bool                  video_geometry_correction = false;
+    // offer_geometry_correction: draw the launcher row for geometry_correction.
+    // Off by default: a title opts in only once its coverage is measured (no
+    // seam, no partial mesh), since partial coverage cracks meshes (G1.9, G1.16).
+    bool                  video_offer_geometry_correction = false;
 
     // perspective_texturing: perspective-correct UV interpolation for textured
     // world polygons (the PS1 GPU interpolates UV affinely, which warps textures
@@ -734,6 +739,15 @@ struct GameConfig {
     // on their generated C bodies (profile/host locality; no guest semantics).
     std::vector<uint32_t> hot_funcs;
 
+    // [recompiler] precision_funcs: guest code whose LW / SW / ADDU / SRA /
+    // AND / OR get value-propagation hooks for geometry precision (PGXP-style
+    // shadows, psxrecomp/ENHANCEMENTS.md G1.12). Each entry is "0xADDR" (the
+    // emitted function starting there) or "0xSTART-0xEND" (every emitted
+    // function starting in that inclusive range: one guest function the
+    // recompiler split at its block entries). Code emitted outside them is
+    // unchanged. Visual-only; the hooks return on one flag test when off.
+    std::vector<std::pair<uint32_t, uint32_t>> precision_funcs;
+
     // [recompiler] load_charge_batch: when true, emit function-local cycle
     // accumulators for load_charge_batch_funcs (or hot_funcs if that list is
     // empty). Requires regen; guest totals at IRQ/MMIO barriers unchanged.
@@ -979,6 +993,15 @@ struct GameConfig {
     // sides while preserving the canonical 4:3 surface and guest VRAM. Runtime-
     // only gate; any game-specific init hook remains regen-class. Off by default.
     bool ws_clear_reveal = false;
+
+    // [widescreen] nclip_gpu_coords — while native-wide is active, NCLIP reads
+    // each SX/SY as the GPU does (11 bits, sign of bit 10) instead of 16. A GTE
+    // projection always saturates to that range; only words the CPU built
+    // outside it change, e.g. a packed average of two vertices on both sides
+    // of X = 0 (0x7FFx/0x80xx). The console culls such a face on the sign of
+    // the 16-bit X, out of view in 4:3 but inside the wide frame. Runtime-only;
+    // off by default, 4:3 untouched.
+    bool ws_nclip_gpu_coords = false;
 
     // [widescreen] nw_flat_backdrop — in the native-wide mirror only, stretch
     // untextured flat primitives across the wider output. This is for games

@@ -437,9 +437,10 @@ int  gte_geometry_correction_lookup(uint32_t packed, int32_t *x16, int32_t *y16)
     (void)packed; (void)x16; (void)y16; return 0;
 }
 int  gte_precision_load_word(uint32_t addr, uint32_t packed, int32_t *x16, int32_t *y16,
-                             uint16_t *z) {
-    (void)addr; (void)packed; (void)x16; (void)y16; (void)z; return 0;
+                             uint16_t *z, uint8_t *derived) {
+    (void)addr; (void)packed; (void)x16; (void)y16; (void)z; (void)derived; return 0;
 }
+uint32_t gte_precision_word_writer_pc(uint32_t addr) { (void)addr; return 0; }
 void gte_precision_tracking_set(int enabled) { (void)enabled; }
 uint32_t interrupts_get_cycles_since_vblank(void) { return 0; }
 void  iso_close(void *h) { (void)h; }

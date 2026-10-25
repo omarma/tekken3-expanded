@@ -2387,6 +2387,13 @@ static void init_callbacks(void) {
             extern void gte_precision_store_word(uint32_t addr, uint8_t reg);
             s_callbacks.gte_precision_store_word = gte_precision_store_word;
         }
+        /* ABI v23: its LWC2 counterpart, emitted after every lwc2 into
+         * SXY0-2/SXYP; restores host-side projection state (gte.cpp). */
+        {
+            extern void gte_precision_lwc2_word(uint32_t addr, uint8_t reg,
+                                                uint32_t value, uint32_t pc);
+            s_callbacks.gte_precision_lwc2_word = gte_precision_lwc2_word;
+        }
         {
             extern int32_t psx_ws_depth_bound(int32_t imm);
             s_callbacks.ws_depth_bound = psx_ws_depth_bound;

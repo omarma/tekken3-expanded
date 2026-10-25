@@ -30,6 +30,20 @@ known_sha1 = [
 seeds = "seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true
+# Body renderer func_80036CAC (emitted as 11 C functions, hence the range):
+# it welds joint vertices from packed SXY words and copies the 4th vertex of
+# its quads with LW/SW, so geometry_correction needs value propagation there
+# (PGXP J2, TIPS § 122, psxrecomp/ENHANCEMENTS.md G1.12). The fighters'
+# shadows (0x80037B28), the PS1 floor (0x80048E58, emitted as 3 functions)
+# and stage scenery (0x8006CC48, 6 functions) copy SXY words projected by
+# 0x8004A364 from a table into their packets with LW/SW (PGXP J2b, TIPS § 123).
+# The attract-mode showcase draws its courtyard floor with an overlay copy of
+# the PS1 floor routine (0x800D4ADC-0x800D55B8, LW from the scratchpad SXY
+# table, SW into the packet); overlays run interpreted, and the interpreters
+# apply the hooks over these ranges at run time (PGXP J3, TIPS § 125, G1.15).
+# Visual-only, inert while both [video] precision options are off.
+precision_funcs = ["0x80036CAC-0x80037B24", "0x80037B28", "0x80048E58-0x80049848",
+                   "0x8006CC48-0x8006D00C", "0x800D4ADC-0x800D55B8"]
 
 [runtime]
 window_title = "Tekken 3 Expanded"
@@ -54,7 +68,10 @@ supersampling = 3
 antialiasing = true
 texture_filtering = "nearest"
 perspective_texturing = true
+# Sub-pixel vertices (PGXP J0-J4, psxrecomp/ENHANCEMENTS.md G1.16): off by
+# default, offered in the PC and Android launchers.
 geometry_correction = false
+offer_geometry_correction = true
 
 # Scene policy for the optional True Widescreen package.  The plugin chooses
 # 16:9 before the renderer starts; when the package is disabled the 4:3 path is
@@ -72,6 +89,11 @@ clear_reveal = true
 # vertical fit, movement, collision and stage bounds remain original.
 camera_zoom_num = 1
 camera_zoom_den = 1
+# The body renderer (0x80036CAC) welds two vertices with packed SXY arithmetic;
+# across X = 0 the X half becomes 0x7FFx/0x80xx, drawn in place by the GPU
+# (11 bits) but culled by the 16-bit NCLIP: holes in a fighter past the left
+# edge of the 4:3 frame (B71, TIPS 127). Native-wide only.
+nclip_gpu_coords = true
 # The background is revealed by the visibility-cone and clip sites below.
 # Keep the final rectangle/sprite layer untouched so menus and the HUD retain
 # their authored layout; the original stage sections supply the side coverage.

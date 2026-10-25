@@ -60,14 +60,19 @@ struct CDTrack {
  * One BINARY file backing a contiguous run of disc sectors. Single-file
  * images have exactly one segment; redump-style dumps have one per track
  * file, concatenated in cue order to form the flat disc-sector space that
- * ReadSector()/ReadRawSector() address.
+ * ReadSector()/ReadRawSector() address. A cue PREGAP (sectors the disc has
+ * and the file does not store) is a segment with no file: reading it fails,
+ * which the CD model plays as silence. A PREGAP in the middle of a file
+ * splits that file into two segments.
  */
 struct BinSegment {
-    std::string   path;          // resolved on-disk path
+    std::string   path;          // resolved on-disk path ("" for a PREGAP)
     std::ifstream file;          // opened for the reader's lifetime
-    uint32_t      start_lba;     // first disc-relative sector of this file
-    uint32_t      sector_count;  // sectors stored in this file
+    uint32_t      start_lba;     // first disc-relative sector of this segment
+    uint32_t      sector_count;  // sectors in this segment
     bool          raw;           // 2352-byte raw sectors (BIN) vs 2048 (ISO)
+    uint32_t      file_sector = 0;  // the file's sector at start_lba
+    bool          gap = false;      // a PREGAP: no data
 };
 
 class ISOReader {

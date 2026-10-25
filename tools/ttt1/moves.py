@@ -38,6 +38,9 @@ INPUT_HISTORY = 60
 NO_NATIVE_GROUP = 0xffff
 # Virtual limb 24 of TTT1 lasers -> runtime marker (src/tekken3_ttt1_pack.h TTT1_PACK_LASER_LIMB).
 LASER_LIMB = 0x3f
+# Virtual limb 25 of TTT1's mist (Nina's Evil Mist, Anna's, Yoshimitsu's
+# Poison Breath; T3 has the same limb) -> runtime marker (TTT1_PACK_MIST_LIMB).
+MIST_LIMB = 0x3c
 # Unknown (TTT1 body 33): limbs 22 and 23 are points of her glowing blade,
 # fixed in her hand bone 10 (runtime limb_position, TTT1_PACK_BLADE_*).
 BLADE_BODY, BLADE_LIMBS = 33, {22: 0x3e, 23: 0x3d}
@@ -513,6 +516,7 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
                     limbs[k]=LASER_LIMB
                     solo.SFX_INDEXES.add(solo.LASER_SOUND)   # its sound, played by the runtime
                     if k==0:limbs[1]=LASER_TYPES.get(source,1)   # second byte: beam type
+                elif limbs[k]==25:limbs[k]=MIST_LIMB          # TTT1 mist: T3's own cloud
                 elif limbs[k] in limb_map:limbs[k]=limb_map[limbs[k]]
                 elif body==BLADE_BODY and limbs[k] in BLADE_LIMBS:limbs[k]=BLADE_LIMBS[limbs[k]]
                 else:

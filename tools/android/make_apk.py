@@ -489,7 +489,7 @@ def build(*, out: Path = DEFAULT_OUT, bios_test: bool = False, defines=(), say=r
         # TTT Cinematics of an Android game set up alone (the PC game's are in
         # its mods/, below).
         cinematics = ROOT / "workspace/ttt-cinematics"
-        if (cinematics / "cinematics.txt").is_file():
+        if (cinematics / "triggers.txt").is_file():
             command += ["--data", f"{cinematics}=mods/ttt-cinematics"]
         if (PC_BUILD / "mods").is_dir():
             command += ["--data-missing", f"{PC_BUILD / 'mods'}=mods"]

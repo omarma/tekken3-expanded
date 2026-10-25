@@ -270,4 +270,11 @@ uint32_t psx_ws_full_angle_widen(uint32_t vanilla) {
 void gte_precision_store_word(uint32_t addr, uint8_t reg) {
     if (g_cbs.gte_precision_store_word) g_cbs.gte_precision_store_word(addr, reg);
 }
+/* Its LWC2 counterpart (ABI v23), emitted after every lwc2 into SXY0-2/SXYP;
+ * same forwarding rule, no-op on an older host. */
+void gte_precision_lwc2_word(uint32_t addr, uint8_t reg, uint32_t value,
+                             uint32_t pc) {
+    if (g_cbs.gte_precision_lwc2_word)
+        g_cbs.gte_precision_lwc2_word(addr, reg, value, pc);
+}
 /* ----------------------------------------------------------------------- */

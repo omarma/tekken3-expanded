@@ -13,16 +13,15 @@ first fight loads (0x800ADD5E, TIPS.md section 25; the CPU team's first
 member too). In the guest's fight:
 
 - gate: the add-on as installed (mods/ttt-cinematics). The CPU's guest must
-  take the catalogue's pack: no "<Name> combat: ending pack" in the log
-  (src/tekken3_embu_scenes.c, tekken3_ending_pack_wanted).
+  take the catalogue's pack: no "<Name> combat: ending pack" in the log. The
+  ending packs went with the old way of the cinematics (TIPS.md section 130):
+  none exists any more, the CPU must simply play.
 - loader: the run's catalogue pack is replaced, before the fight, by the
   same pack plus eight copies of the stance record, sharing its cancel list,
-  as tools/ttt_cinematics.py's packs do. Player 2's records are moved by
-  4096 once (src/tekken3_ttt1_combat.c, load_combat): moved once per record,
-  the stance's destinations went past 0x8000 and the CPU looped one record.
-
-- p1: player 1 picks the guest himself (Tag page), Arcade: its pack must be
-  the ending's from the first fight, or the cutscene leaves it in guard.
+  as the old way's ending packs did (tools/ttt1/pack_edit.py). Player 2's
+  records are moved by 4096 once (src/tekken3_ttt1_combat.c, load_combat):
+  moved once per record, the stance's destinations went past 0x8000 and the
+  CPU looped one record.
 
 gate and loader check, in guest memory, that player 2's stance cancel list holds
 the pack's destinations moved exactly once, and that the CPU plays: over 25 s
@@ -46,35 +45,10 @@ P2, P1_LIFE = 0x800AAAB4, 0x800A961E
 SLOT_BASE, SLOT_STRIDE = 8192, 4096
 
 
-def player_one(a, build, name):
-    """p1: player 1 picks the guest on the Tag page (R2) in Arcade; its pack,
-    read while the cursor is on it, must be the ending's (the cutscene plays
-    its clips, B30 validation: Kazuya stood in guard)."""
-    want = len(Pack((build / f'mods/ttt-cinematics/{a.guest.capitalize()}-TTT1-combat.jmv').read_bytes()).records)
-    s = L.Session(guest=a.guest, build=build, env={'TEKKEN3_NATIVE_MOVES': '0'})
-    try:
-        s.wait(lambda: s.value(STATE) == 9 and s.value(0x80118648) == 21, 'no stock selector grid', 20)
-        s.press(L.PAD_R2); time.sleep(2)
-        row, col = L.tag_place(s.index, s.catalogue_size)
-        for _ in range(12):
-            r, c = L.tag_place(s.value(0x80118650), s.catalogue_size)
-            if (r, c) == (row, col): break
-            s.press(0xffbf if r < row else 0xffef if r > row else 0xffdf if c < col else 0xff7f)
-        s.wait(lambda: s.value(0x80118668) == s.cid, 'cursor on the guest', 10)
-        s.press(0x7fff)
-        s.wait(lambda: s.value(STATE) == 8 and s.value(PHASE, 2) >= 6, 'first fight', 120)
-        log = s.log()
-    finally:
-        s.stop()
-    loaded = [int(n) for n in re.findall(rf'{name} combat: loaded (\d+) source records', log)]
-    ok = f'{name} combat: ending pack' in log and loaded and loaded[0] == want
-    print(f'p1 arcade {name}: loaded {loaded[:3]}, ending pack {want} records', '\nOK' if ok else '\nECHEC P1 lacks the ending clips')
-    return 0 if ok else 1
-
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--case', choices=('gate', 'loader', 'p1'), required=True)
+    ap.add_argument('--case', choices=('gate', 'loader'), required=True)
     ap.add_argument('--mode', choices=tuple(MODES), default='arcade')
     ap.add_argument('--guest', default='kazuya', help='a guest key, or king: the native on his TTT1 moves')
     ap.add_argument('--build', default='build-rel-lite')
@@ -82,10 +56,9 @@ def main():
     build = L.ROOT / a.build
     # The game's own name in its log ("Armor King combat: ..."); the pack file keeps the key's form.
     name = {'armorking': 'Armor King', 'pjack': 'P. Jack'}.get(a.guest, a.guest.capitalize())
-    # Prepared: the engine's trigger table (no ending packs at all) or the old way's sections.
-    if a.case != 'loader' and not any((build / f'mods/ttt-cinematics/{n}').is_file() for n in ('triggers.txt', 'cinematics.txt')):
+    # Prepared: the engine's trigger table (no ending packs at all).
+    if a.case == 'gate' and not (build / 'mods/ttt-cinematics/triggers.txt').is_file():
         sys.exit(f'{build}/mods/ttt-cinematics is not prepared (tools/ttt_cinematics.py)')
-    if a.case == 'p1': sys.exit(player_one(a, build, name))
     # King: a Tekken 3 native (id 3) the CPU plays on his TTT1 moveset
     # (TEKKEN3_NATIVE_MOVES=1, every native on TTT1); his pack is King-TTT1.
     native = a.guest == 'king'

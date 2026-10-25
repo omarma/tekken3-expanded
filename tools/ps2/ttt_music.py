@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The music of Tekken Tag Tournament's (PS2) in-engine endings, from the
-disc, as raw PCM Tekken 3 can play in the Embu (TEKKEN3_EMBU_MUSIC).
+disc, as raw PCM Tekken 3 can play in a cinematic (a .cine's `music`).
 
     ~/TekkenProject/venv-import/bin/python3 tools/ps2/ttt_music.py OUT.pcm [DISC.bin]
 

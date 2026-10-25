@@ -2961,6 +2961,35 @@ static void glb_draw_shaded_line(int x0,int y0,uint16_t c0,int x1,int y1,uint16_
 }
 static int  glb_render_display(uint32_t *o,int p,int dx,int dy,int dw,int dh){ ensure_cpu(); return sw_render_display(o,p,dx,dy,dw,dh); }
 static int  glb_render_display_hires(uint32_t *o,int p,int dx,int dy,int dw,int dh){ ensure_cpu(); return sw_render_display_hires(o,p,dx,dy,dw,dh); }
+/* Debug readback (gr_read_display_hires): the display rectangle of the hr
+ * FBO at s_scale, the surface gl_renderer_present_vram shows in 4:3. The
+ * render_display_hires above answers from the CPU mirror, which has no
+ * supersampled copy under OpenGL. Same order as the present: pending batches
+ * and uploads first, then glFinish. The hr FBO keeps VRAM row 0 at GL row 0
+ * and glReadPixels reads bottom-up, so out row 0 is the display's top line
+ * (as in glb_render_wide_display). Alpha forced to 0xFF like the SW path. */
+static int glb_read_display_hires(uint32_t *o, int p, int dx, int dy, int dw, int dh) {
+    if (!s_ctx || !s_raster_ok || !s_hr_fbo || dw <= 0 || dh <= 0) return 0;
+    if (dx < 0 || dy < 0 || dx + dw > VRAM_W || dy + dh > VRAM_H) return 0;
+    flush_flat_batch();
+    flush_tex_batch();
+    flush_cpu_upload();
+    glFinish();
+    int S = s_scale > 0 ? s_scale : 1, W = dw * S, H = dh * S;
+    uint32_t *tmp = (uint32_t *)malloc((size_t)W * H * sizeof(uint32_t));
+    if (!tmp) return 0;
+    p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_hr_fbo);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    read_bgra(dx * S, dy * S, W, H, tmp);
+    p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
+    for (int row = 0; row < H; row++) {
+        const uint32_t *src = tmp + (size_t)row * W;
+        uint32_t *dst = (uint32_t *)((uint8_t *)o + (size_t)row * p);
+        for (int col = 0; col < W; col++) dst[col] = src[col] | 0xFF000000u;
+    }
+    free(tmp);
+    return W * H;
+}
 /* While GP1 depth24 is on, packed RGB888 lives in the CPU mirror and is
  * presented via gl_renderer_present — never as 1555 FBO texels. Queuing those
  * MDEC A0 rects hits UP_RECTS_MAX (16) and force-flushes mid-movie (MotK intro
@@ -5313,6 +5342,7 @@ static const GpuRenderBackend GL_BACKEND = {
     .wide_dump_full = glb_wide_dump_full,
     .set_high_vram = glb_set_high_vram,
     .high_vram_written = glb_high_vram_written,
+    .read_display_hires = glb_read_display_hires,
 };
 
 const GpuRenderBackend *gl_backend_get(void) { return &GL_BACKEND; }

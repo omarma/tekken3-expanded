@@ -205,6 +205,7 @@ SLOTMAP = {}        # ligne TTT1 lectrice -> {ancien emplacement: nouveau} apres
 CUR_T = [0]         # temps de la ligne en cours de conversion
 LEG_ROWS = range(3, 11)   # lignes PS1 du bassin et des deux jambes (parties 2..8) : faces doubles, voir double_sided
 WELDS = {}          # ligne TTT1 lectrice -> anciens emplacements dont la soudure (poids 12/4, ...) devient 8/8
+COPIED = []         # soudures devenues copies : (ligne TTT1 lectrice, groupe, rang dans le groupe, poids)
 def natural_prev(t):
     """Ligne TTT1 dont la liste occupait le tampon avant t dans l'ordre TTT1."""
     return max((x for x in TORDER if x < t), default=None)
@@ -393,6 +394,7 @@ def convert_positions(a, reader=None, prev_reader=None, half=None, track=False):
             elif gi == 1 and j in drops: fate[v] = ('drop',)
             elif gi in (0, 1) and not hc.get(low, False): fate[v] = ('g2', 2 * ps1_entry(low, 'r', 1))
             elif gi == 2 and not hs.get(low, False): fate[v] = ('g1', remap_slot_byte(low, pm))
+            if track and v in fate and fate[v][0] != 'drop': COPIED.append((reader, gi, j, w))
             if gi == 0: new_c[low] = False                 # reecriture G1 (ou copie) : valeur entiere
             elif gi == 3 and not dead: new_c[low] = w < 16
             elif gi == 4: copies[low] = w < 16
@@ -533,15 +535,294 @@ def unplaced(T):
     troisieme maillage de tete de Michelle, ligne 23) : perdues, a signaler."""
     return [t for t in range(nrows(T)) if row(T, t)[10] and row(T, t)[1] > 2 and t not in S2T.values()]
 
+# Soudures sur un sommet entier. TTT1 soude un sommet propre V a la valeur lue (case du tampon,
+# groupe 3, ou entree du cache, groupe 2) avec les poids 16 (valeur entiere) et w :
+# (16 P + w V) / (16 + w). Le PS1 ne sait que propre/2 + valeur stockee, juste si la valeur est une
+# moitie : convert_positions en fait une copie de P, le sommet suit l'autre os en entier (haut des
+# cuisses de Michelle costume 3 : l'ourlet du short reste sur le bassin). Ici, avant la conversion,
+# la ligne qui a ecrit P recoit un sommet auxiliaire (memes coordonnees) qui en depose la moitie
+# (groupe 4, poids 8) dans une entree libre du cache, et le lecteur lit cette moitie (groupe 2 ; un
+# lecteur du tampon y passe) : soudure 8/8. Par le cache seulement : le tampon n'a que 110 cases
+# (0x80036CAC : SXY en 0x1F800000 + 4 k, SZ en 0x1F8001B8 + 2 k ; au-dela, la case 110 ecrase les
+# profondeurs, d'ou des pointes en jeu) et les hanches les occupent deja. Seulement si
+# w >= HALF_WELD_MIN : la part de P est 16/(16+w), 76 % pour w = 5, a mi-chemin de la copie (100 %)
+# et de la moitie ; la moitie seule fait plier le short (entrejambe et ourlet : poids 5). En dessous,
+# la copie est plus juste.
+HALF_WELDS = True
+BUFFER_TOP = 109    # derniere case du tampon (110 cases), aussi la plus haute des modeles TTT1
+HALF_WELD_MIN = 5
+HALF_DONE = []      # soudures rendues : (ligne ecrivain, ligne lectrice, groupe, poids)
+HALF_SKIPPED = []   # soudures w >= HALF_WELD_MIN restees copies : (raison, ligne lectrice, poids)
+
+def list_bytes(a):
+    """Liste de positions TTT1 (parse_a + tails) -> octets, l'inverse de SM.variants."""
+    out = struct.pack('<I', 2 * (1 + len(a['g1']) + len(a['g2'])))
+    for g in (a['g1'], a['g2']):
+        out += struct.pack('<I', len(g)) + pad4(bytes(g))
+    out += struct.pack('<I', len(a['verts'])) + b''.join(struct.pack('<4h', *v) for v in a['verts'])
+    for gi, g in enumerate(a['tails']):
+        bits, per = (16, 2) if gi < 5 else (8, 4)
+        out += struct.pack('<I', len(g))
+        for i in range(0, len(g), per):
+            w = 0
+            for k, v in enumerate(g[i:i + per]): w |= v << (bits * k)
+            out += struct.pack('<I', w)
+    return out
+
+def rebuild(T, new, added=None, words=None):
+    """Modele TTT1 avec des blocs remplaces ({decalage: octets}) ou ajoutes ({(ligne, mot): octets}),
+    et des mots de ligne poses ({(ligne, mot): valeur, ou ('bloc', ancien decalage)}), decalages des
+    lignes recalcules. Les blocs a variantes (tables de poses, mot 13) ne sont jamais remplaces par un
+    bloc d'une autre taille : leurs pointeurs internes restent justes avec le decalage du bloc."""
+    so = offsets(T); out = bytearray(T[:so[0]]); at = {}
+    for o in so[:-1]:
+        at[o] = len(out); out += pad4(new.get(o, block(T, o)))
+    extra = {}
+    for key, b in (added or {}).items():
+        extra[key] = len(out); out += pad4(b)
+    for r in range(nrows(T)):
+        w = list(row(T, r))
+        for k in (0, 1, 2, 12, 13):
+            if w[k] > 2: w[k] = at[w[k]]
+        for (rr, k), v in (words or {}).items():
+            if rr == r: w[k] = at[v[1]] if isinstance(v, tuple) else v
+        for (rr, k), o in extra.items():
+            if rr == r: w[k] = o
+        struct.pack_into('<14i', out, 24 + r * 56, *w)
+        if w[13] > 2:
+            p = w[13]; old = row(T, r)[13]; n = len(block(T, old)) // 4
+            for i in range(n):
+                e = struct.unpack_from('<I', out, p + 4 * i)[0]
+                o = max(x for x in so[:-1] if x <= e); struct.pack_into('<I', out, p + 4 * i, at[o] + e - o)
+    return bytes(out)
+
+def half_welds(T, order):
+    """Modele TTT1 ou les soudures que convert_positions vient de changer en copies (COPIED, passe
+    a blanc sur T) lisent une moitie deposee dans le cache par un sommet auxiliaire. `order` : ordre
+    de dessin PS1 (TORDER) ; une case deplacee doit survivre dans cet ordre et dans l'ordre TTT1."""
+    lists = {r: SM.variants(block(T, row(T, r - 1)[12]), True) for r in range(1, nrows(T)) if row(T, r - 1)[12] > 2}
+    lists = {r: [dict(a, tails=[list(g) for g in a['tails']], g1=list(a['g1'])) for a in vs] for r, vs in lists.items()}
+    def bounds(a):                              # debuts des groupes 1..5 puis des sommets sans groupe
+        b = [0]
+        for g in a['tails'][:5]: b.append(b[-1] + len(g))
+        return b
+    def group_of(a, i):
+        b = bounds(a); g = next((k for k in range(5) if b[k] <= i < b[k + 1]), 5)
+        return g, (a['tails'][g][i - b[g]] if g < 5 else None)
+    def simulate(order):
+        """Lectures (temps, lecteur, variante, 'g1'|groupe, rang, case, ecrivain) et vies des valeurs du
+        tampon. Ecrivain : (ligne, sommet propre) pour une case de sa liste, (ligne, sommet, poids) pour
+        un depot (groupe 5 au tampon, groupe 4 au cache), None pour un emprunt ou une reecriture."""
+        cur, ccur, reads, life = {}, {}, [], {}
+        for tm, r in enumerate(order):
+            for vi, a in enumerate(lists[r]):
+                for j, b in enumerate(a['g1']):
+                    reads.append((tm, r, vi, 'g1', j, b // 2 - 1, cur.get(b // 2 - 1)))
+                for j, f in enumerate(a['tails'][2]):
+                    reads.append((tm, r, vi, 2, j, (f & 0xff) // 2 - 1, cur.get((f & 0xff) // 2 - 1)))
+                for j, f in enumerate(a['tails'][1]):
+                    reads.append((tm, r, vi, 1, j, f & 0xff, ccur.get(f & 0xff)))
+            for s in {x[5] for x in reads if x[0] == tm and x[3] != 1}:
+                if s in life: life[s][-1][1] = tm
+            a = lists[r][0]; s0 = len(a['g1']) + len(a['g2']); b = bounds(a)
+            for p in range(max(len(v['g1']) + len(v['g2']) + len(v['verts']) for v in lists[r])):
+                cur[p] = (r, p - s0) if p >= s0 else None; life.setdefault(p, []).append([tm, tm])
+            for j, f in enumerate(a['tails'][3]): ccur[f & 0xff] = (r, b[3] + j, (f >> 8) & 0x1f)
+            for f in a['tails'][0]: ccur[f & 0xff] = None
+            for j, f in enumerate(a['tails'][4]):
+                t = (f & 0xff) // 2 - 1; cur[t] = (r, b[4] + j, (f >> 8) & 0x1f); life.setdefault(t, []).append([tm, tm])
+        return reads, life
+    orders = [sorted(lists), [r for r in order if r in lists]]
+    sims = [simulate(o) for o in orders]
+    times = [{r: i for i, r in enumerate(o)} for o in orders]
+    used = {f & 0xff for vs in lists.values() for a in vs for gi in (0, 1, 3) for f in a['tails'][gi]}
+    used |= {b for vs in lists.values() for a in vs for b in a['g2']}
+    free_entries = [e for e in range(255, 0, -1) if e not in used]
+    want = {}                                   # (ecrivain, sommet propre) -> [(lecteur, groupe, rang, poids)]
+    for r, gi, j, w in COPIED:
+        if w < HALF_WELD_MIN: continue
+        skip = lambda why: HALF_SKIPPED.append((why, r, w))
+        if gi not in (1, 2) or r not in lists or len(lists[r]) > 1: skip('groupe 1 ou poses'); continue
+        wr = next(x for x in sims[0][0] if x[1] == r and x[3] == gi and x[4] == j)[6]
+        if not wr or wr[0] == r or len(lists[wr[0]]) > 1: skip('valeur empruntee'); continue
+        x, i = wr[0], wr[1]
+        g, f = group_of(lists[x][0], i)
+        if gi == 1 and (len(wr) < 3 or wr[2] != 16): skip('valeur reecrite'); continue   # depot entier du groupe 4 seulement
+        if gi == 2 and (g in (0, 1, 2) or (g in (3, 4) and (f >> 8) & 0x1f != 16)): skip('valeur soudee'); continue
+        if any(t.get(x, 1e9) >= t.get(r, -1) for t in times): skip('ordre'); continue
+        want.setdefault((x, i), []).append((r, gi, j, w))
+    for key in list(want)[len(free_entries):]:
+        HALF_SKIPPED.extend(('cache plein', r, w) for r, gi, j, w in want.pop(key))
+    ents = {key: free_entries[n] for n, key in enumerate(want)}
+
+    def live_across(s, t0, t1, k):              # une valeur du tampon ecrite avant t1 et lue apres t0
+        return any(b0 < t1 and b1 > t0 for b0, b1 in sims[k][1].get(s, []) + taken[k].get(s, []))
+    def plan(q, helpers, conv):
+        """Places des sommets de la ligne q : auxiliaires (sommets propres `helpers`) en fin de groupe 4,
+        sommets du groupe 3 de rangs `conv` en fin de groupe 2 ; les autres restent ou ils sont autant que
+        possible (un decalage d'ensemble enverrait des sommets lus plus tard dans des cases deja ecrasees).
+        Rend (blocs dans le nouvel ordre, {case: nouvelle case}, {rang du groupe 5: nouvelle case}) ou la
+        raison de l'echec."""
+        a = lists[q][0]; s0 = len(a['g1']) + len(a['g2']); b = bounds(a); V = len(a['verts'])
+        n3 = b[3] - b[2]
+        blocks = [[('v', i) for i in range(b[0], b[1])],
+                  [('v', i) for i in range(b[1], b[2])] + [('v', b[2] + j) for j in sorted(conv)],
+                  [('v', b[2] + j) for j in range(n3) if j not in conv],
+                  [('v', i) for i in range(b[3], b[4])] + [('h', i) for i in helpers],
+                  [('v', i) for i in range(b[4], b[5])],
+                  [('v', i) for i in range(b[5], V)]]
+        place, start, ordered = {}, 0, []
+        for blk in blocks:
+            rng = range(start, start + len(blk)); kept = set(); rest = []
+            for it in blk:
+                if it[0] == 'v' and it[1] in rng: place[it] = it[1]; kept.add(it[1])
+                else: rest.append(it)
+            for it, p in zip(rest, [p for p in rng if p not in kept]): place[it] = p
+            ordered.append(sorted(blk, key=lambda it: place[it])); start += len(blk)
+        L0, L1 = s0 + V, s0 + start
+        mp = {s0 + it[1]: s0 + p for it, p in place.items() if it[0] == 'v' and it[1] != p}
+        if any(live_across(s, times[k][q], times[k][q], k) for s in range(L0, L1) for k in (0, 1)):
+            return 'liste agrandie'             # la liste agrandie ecraserait une valeur encore lue
+        # Le moteur range tous les sommets de la liste avant les soudures : une lecture du groupe 3 de q
+        # dans la partie ajoutee relirait un sommet de q (sonde, Bruce costume 1 : bassin 62 -> 70,
+        # lectures 63..69, pointes). TTT1 les tient toujours au-dela de la liste.
+        if any(L0 <= (f & 0xff) // 2 - 1 < L1 for v in lists[q] for f in v['tails'][2]):
+            return 'liste agrandie'
+        moved, keep = {}, {(f & 0xff) // 2 - 1 for f in a['tails'][4]}
+        for j5, f in enumerate(a['tails'][4]):  # depots du groupe 5 que la liste agrandie recouvrirait
+            t = (f & 0xff) // 2 - 1
+            if t >= L1: continue
+            wrt = (q, b[4] + j5, (f >> 8) & 0x1f)
+            last = [max([x[0] for x in sims[k][0] if x[6] == wrt and x[5] == t], default=times[k][q]) for k in (0, 1)]
+            s = next((s for s in range(BUFFER_TOP, L1 - 1, -1) if s not in keep and s not in moved.values()
+                      and not any(live_across(s, times[k][q], last[k], k) for k in (0, 1))), None)
+            if s is None: return 'pas de case libre'
+            moved[j5] = s
+            for k in (0, 1): taken[k].setdefault(s, []).append((times[k][q], last[k]))
+        def overwritten(s, r, k):               # case s ecrite entre q et le lecteur r ?
+            if r not in times[k]: return False
+            tq, tr = times[k][q], times[k][r]
+            return any(tq < b0 < tr for b0, _ in sims[k][1].get(s, [])) or any(b0 < tr and b1 > tq for b0, b1 in taken[k].get(s, []))
+        if any(overwritten(mp[x[5]], x[1], k) for x in sims[0][0] if x[6] and len(x[6]) == 2 and x[6][0] == q
+               and x[5] in mp and x[3] != 1 for k in (0, 1)):
+            return 'sommet deplace ecrase'
+        return ordered, mp, moved
+
+    def spare_row(q):
+        """Ligne TTT1 du second maillage de la partie dont q est le maillage principal, si elle est
+        vide et dessinee juste apres q (bassin : ligne 6, poitrine : ligne 2) : elle peut porter les
+        auxiliaires de q dans une liste a elle, sans toucher a celle de q."""
+        s = next((s for s, t in S2T.items() if t == q and s in P2R), None)
+        s2 = SECOND.get(P2R.index(s)) if s is not None else None
+        if s2 is None: return None
+        t2 = S2T[s2]
+        if (row(T, t2)[10] and row(T, t2)[1] > 2) or row(T, t2 - 1)[12] > 2 or t2 in lists: return None
+        if template(q) is None: return None
+        return t2 if t2 in order and order.index(t2) == order.index(q) + 1 else None
+    def template(q):
+        """Un triangle de q et sa texture : (famille, enregistrement, materiau, UV), ou None."""
+        w = row(T, q)
+        if w[1] <= 2 or w[2] <= 2: return None
+        fams, prims = parse_b(block(T, w[1])), parse_c_ttt1(block(T, w[2]))
+        for k in (0, 2):
+            tex = [x for x in prims if x[0] == k]
+            if fams[k] and tex and len(tex) == len(fams[k]): return k, fams[k][0], tex[0][1], tex[0][2]
+        return None
+    while True:                                 # retire les soudures d'une ligne qui ne se replace pas
+        helpers, conv = {}, {}
+        for (x, i), rds in want.items():
+            helpers.setdefault(x, []).append(i)
+            for r, gi, j, w in rds:
+                if gi == 2: conv.setdefault(r, set()).add(j)
+        taken = ({}, {}); plans = {}; spares = {}; bad = None
+        for q, hs in helpers.items():           # liste du second maillage : cases 0..h-1 ecrasees
+            t2 = spare_row(q)
+            if t2 and not any(live_across(s, times[k][q] + .5, times[k][q] + .5, k) for s in range(len(hs)) for k in (0, 1)):
+                spares[q] = t2
+        for q in sorted(set(helpers) | set(conv)):
+            p = plan(q, [] if q in spares else helpers.get(q, []), conv.get(q, set()))
+            if isinstance(p, str): bad = (q, p); break
+            plans[q] = p
+        if not bad: break
+        q, why = bad
+        for key in [k for k, rds in want.items() if k[0] == q or any(r == q for r, *_ in rds)]:
+            HALF_SKIPPED.extend((why, r, w) for r, gi, j, w in want.pop(key))
+        if not want: return T
+    # 1. lectures des sommets et depots deplaces, puis soudures dirigees vers le cache, sur les listes
+    #    d'origine (rangs des champs inchanges a ce stade)
+    for q, (ordered, mp, moved) in plans.items():
+        b4 = bounds(lists[q][0])[4]
+        for tm, r, vi, grp, j, s, wr in sims[0][0]:
+            if not wr or wr[0] != q or grp == 1: continue
+            if len(wr) == 2 and s in mp: ns = mp[s]
+            elif len(wr) == 3 and wr[1] - b4 in moved and s == (lists[q][0]['tails'][4][wr[1] - b4] & 0xff) // 2 - 1:
+                ns = moved[wr[1] - b4]
+            else: continue
+            if grp == 'g1': lists[r][vi]['g1'][j] = 2 * (ns + 1)
+            else: f = lists[r][vi]['tails'][2][j]; lists[r][vi]['tails'][2][j] = (f & ~0xff) | 2 * (ns + 1)
+    for (x, i), rds in want.items():
+        for r, gi, j, w in rds:
+            f = lists[r][0]['tails'][gi][j]; lists[r][0]['tails'][gi][j] = (f & ~0xff) | ents[(x, i)]
+            HALF_DONE.append((x, r, gi, w))
+    # 2. listes des seconds maillages (auxiliaires seuls : sommets du maillage principal, depots
+    #    moitie dans le cache), puis chaque ligne replacee : sommets et champs (deja recables) dans
+    #    le nouvel ordre
+    added, words = {}, {}
+    for q, t2 in spares.items():
+        hs = helpers[q]
+        added[(t2 - 1, 12)] = list_bytes(dict(g1=[], g2=[], verts=[lists[q][0]['verts'][i] for i in hs],
+                                              tails=[[], [], [], [ents[(q, i)] | 8 << 8 for i in hs], [], []]))
+        # Le runtime n'arme un second maillage d'invite qu'avec des polygones et le drapeau de maillage
+        # (mot 10) : un triangle de surface nulle (trois fois le sommet 0, ecarte par NCLIP), materiau,
+        # UV et normales repris d'un triangle de q.
+        w = row(T, q); k, rec, mat, uv = template(q)
+        polys = b''.join(struct.pack('<I', n) for n in ([1] if k == 0 else [0, 0, 1]))
+        polys = polys + struct.pack('<II', 0, struct.unpack_from('<I', rec, 4)[0])
+        polys += b''.join(struct.pack('<I', 0) for _ in range(3 - k))
+        tex = struct.pack('<II', 8, mat) + struct.pack('<4H', 8, *[u | v << 8 for u, v in uv])
+        tex += bytes([0] * k + [1, 0, 0, 1, 2] + [0] * (3 - k))
+        added[(t2, 1)] = polys; added[(t2, 2)] = tex
+        words[(t2, 10)] = 1
+        if w[0] > 2: words[(t2, 0)] = ('bloc', w[0])
+    new = {}
+    for q, (ordered, mp, moved) in plans.items():
+        a = lists[q][0]; b = bounds(a)
+        for j5, s in moved.items(): a['tails'][4][j5] = (a['tails'][4][j5] & ~0xff) | 2 * (s + 1)
+        def field(it):
+            if it[0] == 'h': return ents[(q, it[1])] | 8 << 8   # depot moitie dans le cache
+            return group_of(a, it[1])[1]
+        verts = [a['verts'][it[1]] for blk in ordered for it in blk]
+        tails = [[field(it) for it in blk] for blk in ordered[:5]] + [list(a['tails'][5])]
+        lists[q] = [dict(a, verts=verts, tails=tails)]
+        if mp and row(T, q)[1] > 2: new[row(T, q)[1]] = remap_prims(block(T, row(T, q)[1]), mp)
+    for r in lists:
+        o = row(T, r - 1)[12]; bts = b''.join(list_bytes(a) for a in lists[r])
+        if bts != block(T, o)[:len(bts)]: new[o] = bts
+    return rebuild(T, new, added, words) if new or added else T
+
 def convert(src):
-    """Essaie les placements candidats dans l'ordre ; le premier qui se convertit gagne."""
-    errors = []
+    """Essaie les placements candidats dans l'ordre ; le premier qui se convertit gagne. Avec
+    HALF_WELDS, le placement est converti deux fois : a blanc (soudures perdues, COPIED), puis sur
+    le modele aux soudures moitie (half_welds) ; la conversion a blanc reste si la seconde echoue."""
+    errors = []; HALF_DONE.clear(); HALF_SKIPPED.clear()
     for s2t, second, hosts in layouts(src):
         set_layout(s2t, second, hosts)
         try:
-            return convert_layout(src)
+            out = convert_layout(src)
         except ValueError as e:
-            errors.append(f'{sorted(s2t.items())[21:]} : {e}')
+            errors.append(f'{sorted(s2t.items())[21:]} : {e}'); continue
+        if HALF_WELDS:
+            dropped = len(DROPPED); T2 = half_welds(src, TORDER)
+            if T2 is not src:
+                try:
+                    out2 = convert_layout(T2)
+                    if len(DROPPED) <= dropped: return out2
+                    e = 'cache plein, soudures de lissage retirees'
+                except ValueError as err: e = err
+                print(f'soudures moitie abandonnees ({e})')
+                HALF_SKIPPED.extend(('conversion', r, w) for _, r, _, w in HALF_DONE)
+                HALF_DONE.clear(); out = convert_layout(src)
+        return out
     raise ValueError('aucun placement ne se convertit :\n' + '\n'.join(errors))
 
 HAND_ROWS = (13, 17)      # PS1 rows of the two hands (the engine's 0x80034844 callers)
@@ -565,7 +846,7 @@ def hand_steps(ents, n):
 
 def convert_layout(src):
     T = src; ALLOC.clear(); G2_READS.clear(); DROPPED.clear(); SLOTMAP.clear()
-    HALF['c'].clear(); HALF['s'].clear(); HALF['moved'] = 0; WELDS.clear()
+    HALF['c'].clear(); HALF['s'].clear(); HALF['moved'] = 0; WELDS.clear(); COPIED.clear()
     times = plan_cache(T, TORDER)
     blocks = bytearray(); rows = {}; relocs = [16]
     def put(b):

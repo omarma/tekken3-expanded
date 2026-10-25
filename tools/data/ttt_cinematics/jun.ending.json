@@ -1,0 +1,25 @@
+{
+ "about": "Jun's Tekken Tag Tournament (PS2) ending (scene 13): Devil Jin lies on the ground, Jun touches him, a white flash (449-569) and Jin is human again (Devil off at 510, under the flash); after the cut at 861 Jun is gone (the capture moves her 16 000 units away). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "jun",
+ "arena": 6,
+ "dark": 2,
+ "trigger": "arcade-end p1=jun",
+ "ttt_stage": {"stage": 14,
+               "why": "the PS2 script's stage 14 (scene table 0x51B388), TTT arcade's stage 14 (Unknown's: a black background, a small floor), as Angel's: every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, Ogre's temple dark above"},
+ "actors": [
+  {"cast": "jun", "costume": 0, "skeleton": "jun",
+   "retarget": ["--basis", "canonical", "--twists", "--collars", "--world"],
+   "why": "TTT costume -1 (the player's): T3 costume 0"},
+  {"cast": "devil", "costume": 0, "skeleton": "devil", "cast_of": "jin",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--head-fit", "--head-fit-range", "1240:1379", "--avoid", "1:320:1130-1265"],
+   "retarget_why": "--avoid on his own head (actor 1): sitting up, his right hand holds his head (1130-1265, wrist 177 from the PS2 head node); on the T3 drawing of Jin's head the fingers went through the skull (seen by the user). 260 still let them through, 320 keeps the hand at his face",
+   "nudge": [{"from": 261, "to": 861, "offset": [0, 0, 60],
+              "why": "Jun's hand rests just above his forehead on the PS2 (wrist-head distance as the PS2's within 10 units), but the T3 drawing of Jin's head is bigger: the palm went over his eyes. Moved 60 units away along his body (his head points to the hand), as Kazuya in Angel's ending (the same motion), over the shots of the contact (camera cuts at 261 and 861)"}],
+   "models": [["../ttt-cinematics/DevilJinEnd-TTT1", 0], ["../ttt-cinematics/JinPlain-TTT1", 511]],
+   "why": "the script's Jin (TTT costume 2) on the Devil guest's skeleton (Jin's TTT1 model), as in Kazuya's ending: Devil Jin from the script's Devil on (cmd 12 at 0), plain Jin from its Devil off (cmd 12 at 510, under the white flash); head basis fitted where he sits up and looks ahead (1240-1379, neck neutral), as Kazuya's in Angel's ending (the same motion)"}
+ ],
+ "ignore": [
+  {"cmd": 12, "t": 0, "why": "Devil on: played as actor 1's first `model` step (DevilJinEnd at 0)"},
+  {"cmd": 12, "t": 510, "why": "Devil off: played as actor 1's `model` step to JinPlain at 511, under the white flash"}
+ ]
+}

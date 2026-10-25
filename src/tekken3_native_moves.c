@@ -17,6 +17,7 @@
 #include "gpu.h"
 #include "memcard.h"
 #include "tekken3_moveset_draw.h"
+#include "tekken3_game_options.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,7 @@ extern unsigned tekken3_native_moves_id(unsigned player);
 extern int tekken3_devil_jin_requested(unsigned player);
 
 enum { SCREEN=0x800ae204, PHASE=0x800ae224, MODE=0x800afa88, TEAM_BATTLE=2,
-       PRACTICE=5, FIGHT=8, SELECT=9, LOADING=11, MENU=4, ABSENT=22, CHOOSING=1,
+       PRACTICE=5, FIGHT=8, SELECT=9, LOADING=11, MENU=4, EMBU=6, ABSENT=22, CHOOSING=1,
        CHOOSING_CPU=3, NATIVES=21 };
 /* Pad bits, active low. */
 enum { PAD_SELECT=0x0001, PAD_START=0x0008, PAD_RIGHT=0x0020, PAD_LEFT=0x0080,
@@ -84,11 +85,16 @@ int tekken3_native_moves_available(unsigned id) {
 
 /* Arcade, VS, Team Battle (a card for each member picked), Time Attack,
  * Survival, Practice, Tekken Ball, Tekken Force (the Arcade grid; its
- * enemies and bosses keep the game's moves: no draw, cpu_slot()). */
-enum { TEKKEN_BALL=7, TEKKEN_FORCE=8 };
+ * enemies and bosses keep the game's moves: no draw, cpu_slot()), and the
+ * attract's demo fight (B75, GH#130), two CPUs that draw as in Arcade. A
+ * cinematic's scene loads in the demo's mode too: it forces its natives'
+ * moves itself (tekken3_native_moves_force), nothing is drawn for it. */
+enum { DEMO=6, TEKKEN_BALL=7, TEKKEN_FORCE=8 };
+extern int tekken3_cine_pending(void);
+static int demo(void){return psx_mod_read_word(MODE)==DEMO && !tekken3_cine_pending();}
 static int active(void) {
     unsigned mode=psx_mod_read_word(MODE);
-    return mode<=PRACTICE || mode==TEKKEN_BALL || mode==TEKKEN_FORCE;
+    return mode<=PRACTICE || mode==TEKKEN_BALL || mode==TEKKEN_FORCE || demo();
 }
 /* Test benches pick natives at the grid without a card:
  * TEKKEN3_NATIVE_MOVES=0 keeps them on T3 moves, =1 puts every native in
@@ -130,14 +136,16 @@ enum { VS_BLOCKS=0x800b8d70, VS_STRIDE=172, VS_CHOOSING=3, TEAM_SIZE=1, TEAM_MEM
 extern unsigned tekken3_ttt1_grid_character(unsigned cell);
             /* Hwoarang Dr.B Bryan Gon Gun-Jack Anna Eddy */
 /* TEKKEN BALL SELECT has the same layout: a human player chooses in state
- * 3, then the ball in 15; the CPU's block stays at 8. */
+ * 3, then the ball in 15; the CPU's block stays at 8. With QUICK SELECT
+ * (GAME OPTION, 0x80097F10), the modes of the Arcade grid choose on this
+ * grid too, mode unchanged: the player who joined in state 3, the other
+ * block at 8. Square used to pick there with no card (B58, GH#7). */
 static int vs_grid_open(void) {
     unsigned s=psx_mod_read_word(VS_BLOCKS),mode=psx_mod_read_word(MODE);
     if(psx_mod_read_word(SCREEN)!=10)return 0;
-    if(mode==TEKKEN_BALL) {
-        unsigned s2=psx_mod_read_word(VS_BLOCKS+VS_STRIDE);
-        return s==3 || s==15 || s2==3 || s2==15;
-    }
+    unsigned s2=psx_mod_read_word(VS_BLOCKS+VS_STRIDE);
+    if(mode==TEKKEN_BALL)return s==3 || s==15 || s2==3 || s2==15;
+    if(mode!=1 && mode!=TEAM_BATTLE)return s==3 || s==4 || s2==3 || s2==4;
     return mode==1 && (s==3 || s==4 || s==12);
 }
 /* TEAM BATTLE SELECT: the same screen and grid; each player sets the team
@@ -260,18 +268,17 @@ int tekken3_native_moves_assign(unsigned slot,unsigned id,int ttt1) {
 }
 
 /* The CPU's moves. In the modes where the CPU has no card (Arcade, Time
- * Attack, Survival, Team Battle, Tekken Ball; Practice lets the player pick the CPU's, VS
- * has none), a native with other movesets imported draws the ones it fights
- * on, once per fight, each choice with the same chance (its own Tekken 3
- * moves are one): the Options menu's CPU MOVESET row sets ORIGINAL, one
- * source, or RANDOM. TEKKEN3_CPU_MOVESET (original, random or a source)
- * overrides the menu, TEKKEN3_CPU_MOVESET_SEED fixes the draw (benches). */
-enum { OPTIONS=5, DESCRIPTOR=0x800ead78, ROWS=0x800b908c, ROW_COUNT=9, ROW_SIZE=20,
-       MENU_ITEMS=10, CPU_MODES=0x9d };
+ * Attack, Survival, Team Battle, Tekken Ball, the attract's demo; Practice
+ * lets the player pick the CPU's, VS has none), a native with other
+ * movesets imported draws the ones it fights on, once per fight, each
+ * choice with the same chance (its own Tekken 3 moves are one): the Options
+ * menu's CPU MOVESET row sets ORIGINAL, one source, or RANDOM.
+ * TEKKEN3_CPU_MOVESET (original, random or a source) overrides the menu,
+ * TEKKEN3_CPU_MOVESET_SEED fixes the draw (benches). */
+enum { OPTIONS=5, CPU_MODES=0x9d };
 static uint64_t draw_state;
 static int cpu_setting=-2;                 /* -1 original, 0.. a source, -2 not read, RANDOM below */
 enum { RANDOM=99 };
-static uint32_t menu_byte,menu_rows;
 static void setting_path(char *out,size_t size) {
     const char *card=NULL;out[0]=0;
     if(memcard_debug_info(0,&card,NULL,NULL,NULL) || !card || !*card)return;
@@ -289,8 +296,9 @@ static int parse_setting(const char *word) {
 static const char *setting_word(int value) {
     return value==-1?"original":value==RANDOM?"random":sources[value];
 }
+static int menu_row=-1;               /* the CPU MOVESET row of GAME OPTION */
 static int menu_value(void) {                  /* the menu's byte: 0 original, 1.. sources, then random */
-    unsigned v=psx_mod_read_byte(menu_byte);
+    unsigned v=(unsigned)tekken3_game_options_value(menu_row);
     return v==0?-1:v<=source_count?(int)v-1:RANDOM;
 }
 static void saved_setting(int store,int *value) {
@@ -327,81 +335,38 @@ static int draw_alternative(unsigned id) {
     }
     return (int)tekken3_moveset_draw(n+1,&draw_state)-1;
 }
+/* The demo's two sides are the CPU's whatever 0x800AE1F8 holds (the menus
+ * leave player 2's at 1 there). */
 static int cpu_slot(unsigned p) {
     unsigned mode=psx_mod_read_word(MODE);
-    return !psx_mod_read_half(0x800ae1f8+p*2) && (mode<PRACTICE || mode==TEKKEN_BALL);
+    return demo() || (!psx_mod_read_half(0x800ae1f8+p*2) && (mode<PRACTICE || mode==TEKKEN_BALL));
 }
 
-/* The CPU MOVESET row: the game's GAME OPTION page is a table of ten
- * 20-byte entries (nine rows, then EXIT) named by a page descriptor
- * (DESCRIPTOR: entries, title, item count); the table is followed by other
- * data, so a copy with one row more, before EXIT, is made in guest memory and
- * the descriptor pointed at it. Rows are
- * copied again every frame (the difficulty mod edits its row in the original). */
-static uint32_t labels_for_menu(void) {
-    char label[MAX_SOURCES+2][32];unsigned n=0;
-    snprintf(label[n++],sizeof label[0],"ORIGINAL");
-    for(unsigned i=0;i<source_count;i++) {
-        if(!strcmp(sources[i],"ttt1"))snprintf(label[n],sizeof label[0],"TEKKEN TAG TOURNAMENT");
-        else {
-            snprintf(label[n],sizeof label[0],"%s",sources[i]);
-            for(char *c=label[n];*c;c++){if(*c>='a' && *c<='z')*c=(char)(*c-'a'+'A');if(*c=='_')*c=' ';}
-        }
-        n++;
-    }
-    snprintf(label[n++],sizeof label[0],"RANDOM");
-    uint32_t size=n*4+16;
-    for(unsigned i=0;i<n;i++)size+=(uint32_t)strlen(label[i])+1;
-    uint32_t list=psx_mod_alloc_guest_memory(size,4);
-    if(!list)return 0;
-    uint32_t text=list+n*4;
-    for(unsigned i=0;i<n;i++) {
-        psx_mod_write_word(list+i*4,text);
-        for(const char *c=label[i];;c++){psx_mod_write_byte(text++,(uint8_t)*c);if(!*c)break;}
-    }
-    return list;
-}
+/* The CPU MOVESET row of GAME OPTION (src/tekken3_game_options.c), RANDOM
+ * by default. */
 static void options_row(void) {
     read_natives();
     if(!source_count)return;
-    uint32_t rows=psx_mod_read_word(DESCRIPTOR);
-    if(rows!=ROWS && rows!=menu_rows)return;
-    if(rows==ROWS && psx_mod_read_word(DESCRIPTOR+8)!=MENU_ITEMS)return;
-    /* The table of the game's overlay: first row the difficulty, last the
-     * speaker (value bytes 0x80097F06 and 0x80097F04). */
-    if(psx_mod_read_word(ROWS)!=0x80097f06 || psx_mod_read_word(ROWS+(ROW_COUNT-1)*ROW_SIZE)!=0x80097f04)return;
-    if(!menu_rows) {
-        uint32_t list=labels_for_menu();
-        menu_rows=psx_mod_alloc_guest_memory((ROW_COUNT+2)*ROW_SIZE,4);
-        menu_byte=psx_mod_alloc_guest_memory(4,4);
-        uint32_t name=psx_mod_alloc_guest_memory(16,4);
-        if(!list || !menu_rows || !menu_byte || !name){menu_rows=0;return;}
-        const char *title="CPU MOVESET";
-        for(unsigned i=0;i<=strlen(title);i++)psx_mod_write_byte(name+i,(uint8_t)title[i]);
+    if(menu_row<0) {
+        static int tried;
+        if(tried)return;
+        tried=1;
+        char label[MAX_SOURCES+2][32];const char *list[MAX_SOURCES+2];unsigned n=0;
+        snprintf(label[n++],sizeof label[0],"ORIGINAL");
+        for(unsigned i=0;i<source_count;i++) {
+            if(!strcmp(sources[i],"ttt1"))snprintf(label[n],sizeof label[0],"TEKKEN TAG TOURNAMENT");
+            else {
+                snprintf(label[n],sizeof label[0],"%s",sources[i]);
+                for(char *c=label[n];*c;c++){if(*c>='a' && *c<='z')*c=(char)(*c-'a'+'A');if(*c=='_')*c=' ';}
+            }
+            n++;
+        }
+        snprintf(label[n++],sizeof label[0],"RANDOM");
+        for(unsigned i=0;i<n;i++)list[i]=label[i];
         int saved=cpu_choice_setting();
         unsigned value=saved==-1?0:saved==RANDOM?source_count+1:(unsigned)saved+1;
-        psx_mod_write_word(menu_byte,value);
-        uint32_t row=menu_rows+ROW_COUNT*ROW_SIZE;
-        psx_mod_write_word(row,menu_byte);
-        psx_mod_write_word(row+4,name);
-        psx_mod_write_word(row+8,list);
-        psx_mod_write_word(row+12,1u|(source_count+2)<<8);       /* as BGM SELECT: one byte, its values */
-        psx_mod_write_word(row+16,((uint32_t)CPU_MODES<<16)|2u);  /* modes lit in the box on the right */
-        fprintf(stderr,"Native moves: CPU MOVESET row added to GAME OPTION (%u values)\n",source_count+2);
-    }
-    /* Entry 9 of the game's table is EXIT: it goes after our row. */
-    for(unsigned i=0;i<ROW_COUNT*ROW_SIZE/4;i++) {
-        uint32_t w=psx_mod_read_word(ROWS+i*4);
-        if(psx_mod_read_word(menu_rows+i*4)!=w)psx_mod_write_word(menu_rows+i*4,w);
-    }
-    for(unsigned i=0;i<ROW_SIZE/4;i++) {
-        uint32_t w=psx_mod_read_word(ROWS+ROW_COUNT*ROW_SIZE+i*4);
-        uint32_t at=menu_rows+(ROW_COUNT+1)*ROW_SIZE+i*4;
-        if(psx_mod_read_word(at)!=w)psx_mod_write_word(at,w);
-    }
-    if(rows!=menu_rows) {
-        psx_mod_write_word(DESCRIPTOR,menu_rows);
-        psx_mod_write_word(DESCRIPTOR+8,MENU_ITEMS+1);
+        menu_row=tekken3_game_options_add("CPU MOVESET",list,n,value,source_count+1,CPU_MODES);
+        if(menu_row<0)return;
     }
     /* The player's choice, kept beside the memory card. */
     int shown=menu_value();
@@ -437,11 +402,11 @@ static void choose(unsigned p,unsigned id) {
     chosen_id[p]=(int)id;
 }
 /* A fighter reloaded in the fight, without a loading screen (0x8002A40C:
- * True Ogre after Ogre's cutscene, our endings' partner): the choice made
- * for the one it replaces is made again for it, before its moves load. */
-/* A cutscene's partner (a TTT ending: King beside Armor King) plays its
- * TTT1 clips as a native on its TTT1 moves (mode 4), whatever the fight
- * chose for it: forced as the fight reloads it. */
+ * True Ogre after Ogre's cutscene): the choice made for the one it replaces
+ * is made again for it, before its moves load (TIPS.md section 58). */
+/* A cinematic's native (a TTT ending: King beside Armor King) plays its
+ * poses through the TTT1 decoder, on its TTT1 moves (mode 4), whatever the
+ * fight chose for it: forced as its scene loads (src/tekken3_cine_scene.c). */
 int tekken3_native_moves_force(unsigned p,unsigned id) {
     read_natives();
     if(p>1 || !tekken3_native_moves_available(id))return 0;
@@ -452,6 +417,22 @@ void tekken3_native_moves_reload(unsigned p,unsigned id) {
     if(p>1 || (int)id==chosen_id[p])return;
     drawn_id[p]=-1;
     choose(p,id);
+}
+/* Phase 20's reload (0x8002A40C: P1 in a0, P1's costume in a2, P2 in a3,
+ * P2's costume at sp+20): the moves each fighter fights on, chosen again
+ * for a new one (the TTT1 moveset the CPU drew for Ogre would stay on True
+ * Ogre: Ogre's model with its textures). The player Ogre's cutscene made
+ * the stage 9 boss (a guest) is followed as the fighter it reloads
+ * (src/tekken3_ttt1_roster.c). */
+extern void tekken3_ogre_lift_reload(unsigned p1,unsigned c1,unsigned p2,unsigned c2);
+extern void __real_func_8002A40C(CPUState *cpu);
+void __wrap_func_8002A40C(CPUState *cpu) {
+    if(cpu->pc==0 || cpu->pc==0x8002a40c) {
+        tekken3_ogre_lift_reload(cpu->gpr[4]&0xffff,cpu->gpr[6]&3,cpu->gpr[7]&0xffff,psx_mod_read_word(cpu->gpr[29]+20)&3);
+        tekken3_native_moves_reload(0,cpu->gpr[4]&0xffff);
+        tekken3_native_moves_reload(1,cpu->gpr[7]&0xffff);
+    }
+    __real_func_8002A40C(cpu);
 }
 
 /* The loading screen names the fighters (0x800ADD5C + 2 * player). */
@@ -490,6 +471,12 @@ void tekken3_native_moves_tick(void) {
         close_cards();
         return;
     }
+    /* The Embu (state 6) after the attract's demo fight grafts its cast's
+     * guests on its own models: a native the demo put on its TTT1 moves
+     * stayed that player's identity there, its name and files in place of
+     * the cast guest's (B75). */
+    if(screen==EMBU)
+        for(unsigned p=0;p<2;p++){tekken3_native_moves_set(p,0,NULL,0);chosen_id[p]=-1;}
     if(screen!=LOADING)return;
     for(unsigned p=0;p<2;p++)choose(p,psx_mod_read_half(0x800add5c+p*2));
 }
@@ -696,14 +683,16 @@ static uint32_t list_tail(uint32_t at) {
 }
 void __wrap_func_8007E0B8(CPUState *cpu) {
     static unsigned flip,frame,linked;
-    int state[2]={card_state(0),card_state(1)},page=page_state();
-    int open=state[0]>=0 || state[1]>=0 || page>=0;
+    int state[2]={card_state(0),card_state(1)},page=page_state(),options=tekken3_game_options_scrolls();
+    int open=state[0]>=0 || state[1]>=0 || page>=0 || options;
     if((cpu->pc==0 || cpu->pc==0x8007e0b8) && (open || linked)) {
         if(!buffers[0])
             for(unsigned b=0;b<2;b++)buffers[b]=psx_mod_alloc_gpu_dma_memory(BUFFER_BYTES,16);
         uint32_t tail=buffers[0] && buffers[1]?list_tail(cpu->gpr[4]|0x80000000):0;
         if(tail) {
             uint32_t link=0xffffff,base=buffers[flip^=1];
+            if(options)                                /* GAME OPTION's arrows */
+                link=tekken3_game_options_arrows(base+2*CARD_BYTES,CARD_BYTES,link,frame);
             if(page>=0) {                              /* drawn last */
                 uint32_t pkt=base+2*CARD_BYTES;
                 Packet k;begin(&k,pkt,CARD_BYTES);

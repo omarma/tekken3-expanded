@@ -25,6 +25,7 @@
 
 #include "dirty_ram_interp.h"
 #include "cpu_state.h"
+#include "gte_precision_interp.h"  /* precision_funcs ranges in interpreted code (G1.15) */
 #ifdef TEKKEN3_RUNTIME
 #include "tekken3_main_menu.h"
 #endif
@@ -1500,6 +1501,12 @@ static int exec_one_fetched_inner(CPUState *cpu, uint32_t pc, uint32_t insn,
         }
     }
 
+    /* Value propagation for geometry precision in listed ranges (G1.15): the
+     * hooks the recompiler emits in [recompiler] precision_funcs, run here for
+     * code that executes interpreted. One flag test while tracking is off. */
+    if (GTE_PRECISION_INTERP(pc))
+        gte_precision_interp_before(insn, cpu->gpr[rs], cpu->gpr[rt]);
+
     switch (opc) {
     case 0x00: /* SPECIAL */
         switch (fnt) {
@@ -2134,6 +2141,9 @@ static int exec_one_fetched_inner(CPUState *cpu, uint32_t pc, uint32_t insn,
             val = (uint16_t)psx_ws_backdrop_x((int16_t)val);
         g_debug_last_store_pc = pc;
         cpu->write_half(addr, val);
+        /* Half-word vertex building (G1.15); not a value the squash rewrote. */
+        if (val == (uint16_t)cpu->gpr[rt] && GTE_PRECISION_INTERP(pc))
+            gte_precision_cpu_sh(addr, (uint8_t)rt, cpu->gpr[rt]);
         return 0;
     }
     case 0x2A: { /* SWL */
@@ -2147,6 +2157,8 @@ static int exec_one_fetched_inner(CPUState *cpu, uint32_t pc, uint32_t insn,
         if (addr & 3) return interp_exception(cpu, 5, addr, pc);  /* StoreAddressError */
         g_debug_last_store_pc = pc;
         cpu->write_word(addr, cpu->gpr[rt]);
+        if (GTE_PRECISION_INTERP(pc))
+            gte_precision_cpu_sw(addr, (uint8_t)rt, cpu->gpr[rt]);
         return 0;
     }
     case 0x2E: { /* SWR */
@@ -2161,6 +2173,8 @@ static int exec_one_fetched_inner(CPUState *cpu, uint32_t pc, uint32_t insn,
         psx_gte_stall(cpu);   /* COP2 reg write stalls to GTE completion */
 #endif
         gte_write_data(cpu, (uint8_t)rt, psx_cyc_lwc2_read(cpu, addr));
+        if (rt >= 12 && rt <= 15)   /* SXY: precision tracker (G1.11) */
+            gte_precision_lwc2_word(addr, (uint8_t)rt, cpu->gte_data[rt], pc);
         return 0;
     }
     case 0x3A: { /* SWC2 */

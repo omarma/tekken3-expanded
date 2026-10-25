@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compare two recordings of a cinematic (TEKKEN3_CINE_RECORD, src/tekken3_cine.c):
-the old way's (Ogre's cutscene, clips in the packs) and the engine's.
+two builds' (a reference before a change, then after it), or two runs.
 
     python tools/cine_compare.py OLD.bin NEW.bin [--from F] [--to F] [--every N]
 

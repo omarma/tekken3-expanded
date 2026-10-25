@@ -34,7 +34,7 @@ tools/ttt1_stage_roster.py range dans le catalogue du jeu ; seul, lancer avec
 TEKKEN3_GUEST=<personnage> TEKKEN3_TTT1_ASSETS=<dossier>.
 Donnees du jeu : tout reste sous workspace/ (ignore par git).
 """
-import argparse, json, os, shutil, struct, sys
+import argparse, contextlib, errno, json, os, shutil, struct, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +80,24 @@ def sources(args):
         for k, data in regions.items(): (TTT1 / (k.replace(':', '_') + '.bin')).write_bytes(data)
 
 
+@contextlib.contextmanager
+def file_lock(path):
+    """Exclusive lock on path (created if needed) between processes, released
+    on exit from the block or with the process."""
+    with open(path, 'a+b') as f:
+        if os.name == 'nt':
+            import msvcrt
+            f.seek(0)
+            while True:
+                try: msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1); break
+                except OSError as e:             # LK_LOCK gives up after 10 s: wait again
+                    if e.errno != errno.EDEADLOCK: raise
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+        yield                                    # closing the file releases the lock
+
+
 def capture_select(key, entry):
     """RAM de l'ecran de selection, curseur sur le personnage : refaite depuis la
     ROM (tools/ttt1/rom_ram.py, identique aux captures MAME pour ce que lit
@@ -88,11 +106,16 @@ def capture_select(key, entry):
     ram = CAPTURES / f'{key}-select-ram.bin'
     if ram.exists(): return ram
     CAPTURES.mkdir(parents=True, exist_ok=True)
-    # Imports run in parallel (tools/ttt1_setup.py) and Devil / Angel read the
-    # Jacks' capture (capture_aliases): never let one see a half-written file.
-    temp = ram.with_name(f'{ram.name}.{os.getpid()}.tmp')
-    temp.write_bytes(R.select(R.boot(TTT1), *R.character(key, entry), entry.get('force_moveset')))
-    os.replace(temp, ram)
+    # Imports run in parallel (tools/ttt1_setup.py) and Devil / Angel both make
+    # the Jacks' capture (capture_aliases). One process makes it, the others
+    # wait for it: on Windows, replacing a file another import has open, or
+    # opening one being replaced, fails (B96). The temporary file keeps readers
+    # that do not lock from seeing a half-written capture.
+    with file_lock(ram.with_name(ram.name + '.lock')):
+        if ram.exists(): return ram
+        temp = ram.with_name(f'{ram.name}.{os.getpid()}.tmp')
+        temp.write_bytes(R.select(R.boot(TTT1), *R.character(key, entry), entry.get('force_moveset')))
+        os.replace(temp, ram)
     print(f'RAM de selection (ROM) -> {ram.name}')
     return ram
 
@@ -118,8 +141,9 @@ def check_keys(ram, key, entry):
 EXTRA = {109: (227, 250), 110: (230, 253), 115: (236, 259), 116: (237, 260),
          117: (238, 261), 118: (239, 262),
          # Unknown (index 33, force_index) : modeles retrouves au survol (0x354108),
-         # releve du 2026-09-25 ; 114 (variante 7) est le loup, pas un costume.
-         112: (233, 256), 113: (234, 257)}
+         # releve du 2026-09-25 ; 114 (variante 7) est le loup, pas un costume :
+         # 26/012 + 27/012 (indice 12 de 0x8019E3B4), monte par 0x801694A8 (F08).
+         112: (233, 256), 113: (234, 257), 114: (235, 258)}
 
 
 def entries(slot):
@@ -158,7 +182,9 @@ def faces(d, slot):
     return (*pos(e[0]), w, h), sources, (d[FACE_BLINK + slot], d[FACE_FLAG_A + slot], d[FACE_FLAG_B + slot])
 
 
-def model(ram, slot, out, name, work, costume=1):
+def model(ram, slot, out, name, work, costume=1, stem=None):
+    """stem : nom des fichiers apres le nom (le loup d'Unknown : 'TTT1-wolf'),
+    sinon le costume 'TTT1-arcade-P<costume>'."""
     import convert, texpack, check_texpack
     from fmt import load
     bank = (TTT1 / 'bankedroms.bin').read_bytes(); d = ram.read_bytes()
@@ -177,7 +203,7 @@ def model(ram, slot, out, name, work, costume=1):
         print(f'ATTENTION : {e} ; costume sans expressions du visage')
         face = None; report = texpack.plan(tex, src)
     ps1, relocs = convert.convert(src)
-    base = out / f'{name}-TTT1-arcade-P{costume}'
+    base = out / f'{name}-{stem or f"TTT1-arcade-P{costume}"}'
     base.with_suffix('.3dm').write_bytes(ps1)
     base.with_suffix('.relocs').write_bytes(struct.pack(f'<{len(relocs)}I', *relocs))
     base.with_suffix('.tim').write_bytes(texpack.repack(tex))
@@ -209,6 +235,20 @@ def model(ram, slot, out, name, work, costume=1):
     bad = check_texpack.main(work / 'ttt1.3dm', work / 'ttt1.tex', base.with_suffix('.3dm'), base.with_suffix('.tim'))
     return dict(bytes=len(ps1), relocations=len(relocs), layout=layout, second=convert.SECOND, limbs=convert.limb_map(src), unplaced_rows=lost,
                 textures=report, texture_mismatches=bad, accessories=springs)
+
+
+def spirit(ram, slot, out, name, work):
+    """Le loup d'Unknown (F08, GH#42) : son modele (variante 7, meme squelette
+    qu'elle) en <Name>-TTT1-wolf.3dm / .relocs / .tim, et la lueur de ses effets
+    (archive 06, tools/ttt1/spirit.py) en <Name>-TTT1-wolf.glow."""
+    import spirit as S, rom_ram as R
+    report = model(ram, slot, out, name, work / 'wolf', stem='TTT1-wolf')
+    for e in ('face', 'acc'): (out / f'{name}-TTT1-wolf.{e}').unlink(missing_ok=True)
+    files = [R.file(TTT1, 6, n) for n in range(10)]
+    pack, glow = S.build(R.load(TTT1)[2], files, (out / f'{name}-TTT1-wolf.tim').read_bytes(), S.BONES)
+    (out / f'{name}-TTT1-wolf.glow').write_bytes(pack)
+    print(f'loup : lueur {len(pack)} o, {glow}')
+    return dict(model=report, glow=glow)
 
 
 def motion(ram, witness, out, name, work):
@@ -340,11 +380,32 @@ def hit_effect(key, entry, out, name, work):
     converti en paquet d'effet Tekken 3."""
     import hit_effect as H, rom_ram as R
     # Longueur de l'effet dans TTT1 (hit_frames : 22 pour les Mishima, 30 sinon)
-    pack = H.t3_pack(R.effect_vram(TTT1, *R.character(key, entry)), 0, entry.get('hit_frames', H.T3_FRAMES))
+    vram, frames = R.effect_vram(TTT1, *R.character(key, entry)), entry.get('hit_frames', H.T3_FRAMES)
+    pack = H.t3_pack(vram, 0, frames)
     (out / f'{name}-TTT1-hiteffect.tim').write_bytes(pack)
     H.preview(pack).save(work / 'coup-fort.png')
     print(f'effet de coup fort : {len(pack) // 576} images 32 x 32 (apercu {(work / "coup-fort.png").relative_to(ROOT)})')
-    return dict(frames=len(pack) // 576, bytes=len(pack))
+    return dict(frames=len(pack) // 576, bytes=len(pack), **hit_effect_64(vram, frames, out, name, work))
+
+
+def hit_effect_64(vram, frames, out, name, work):
+    """Le meme effet en 64 x 64, la taille de TTT1 (F12, GH#112) : le runtime
+    le dessine depuis la VRAM haute, le 32 x 32 restant le repli."""
+    import hit_effect as H
+    pack = H.hfx_pack(vram, 0, frames)
+    (out / f'{name}-TTT1-hiteffect64.hfx').write_bytes(pack)
+    H.hfx_preview(pack).save(work / 'coup-fort-64.png')
+    print(f'effet de coup fort 64 x 64 : {frames} images ({len(pack)} octets)')
+    return dict(bytes_64=len(pack))
+
+
+def hit_effect_64_update(key, entry):
+    """Etape de mise a jour hit-effect-64 (tools/ttt1_setup.py) : le paquet 64 x 64
+    d'un invite deja importe, depuis les regions ROM (sans MAME)."""
+    import rom_ram as R
+    work = WORK / key
+    return hit_effect_64(R.effect_vram(TTT1, *R.character(key, entry)), entry.get('hit_frames', 30),
+                         work / 'guest', key.capitalize(), work)
 
 
 def ui_ttt1(key, entry, out, name, work):
@@ -487,6 +548,8 @@ def main():
                          '(repetable ; all = tous les donneurs de la table)')
     ap.add_argument('--convert', action='store_true',
                     help='avec --moveset : convertir meme un donneur deja importe comme invite')
+    ap.add_argument('--spirit', action='store_true',
+                    help="seulement l'esprit du personnage (le loup d'Unknown, cle spirit de la table)")
     a = ap.parse_args()
     data = json.loads(TABLE.read_text())
     table, key = data['characters'], a.character.lower()
@@ -525,6 +588,10 @@ def main():
         return
 
     ram = capture_select(key, entry)
+    if a.spirit:
+        if 'spirit' not in entry: raise SystemExit(f'{key} n a pas d esprit (cle spirit de la table)')
+        spirit(ram, entry['spirit'], out, name, work)
+        return
     witness = capture_select('xiaoyu', dict(path=''))
     keys = check_keys(ram, key, entry)
     print(f'{entry["label"]} : {keys}')
@@ -536,6 +603,7 @@ def main():
     records = report['motion'].pop('manifest')['records']
     report['moves'] = moves(ram, keys, records, report['model']['limbs'], out, name)
     report['costumes'] = costumes(ram, keys, entry, records, report['model']['limbs'], out, name, work)
+    if 'spirit' in entry: report['spirit'] = spirit(ram, entry['spirit'], out, name, work)
     report['voices'] = voices(ram, keys, out, name)
     report['sounds'] = sounds(ram, report['moves']['sound_indexes'], keys['sound'], out, name)
     report['name'] = name_bitmap(entry['label'], out, name)

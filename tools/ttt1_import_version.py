@@ -14,7 +14,7 @@ Kept free of other imports: launcher/setup_backend.py reads it at every start.
 """
 from pathlib import Path
 
-TTT1_IMPORT_VERSION = 6
+TTT1_IMPORT_VERSION = 10
 STAMP = 'import-version.txt'
 
 # Update steps (implemented in tools/ttt1_setup.py, update_step): name ->
@@ -31,6 +31,10 @@ STEPS = {
     'tarzan-crash': ('workspace', "Event scripts: the Jacks' Tarzan crash, Heihachi's"),
     'jin-omen': ('workspace', "Jin's Omen (moves and Devil mark)"),
     'hand-fists': ('roster', "Guests' fists (Baek, Lee, Armor King, Ganryu)"),
+    'mist': ('roster', "The poison mist of Nina's, Anna's and Yoshimitsu's TTT1 moves"),
+    'half-welds': ('workspace', "Guests' joints (welds on whole vertices)"),
+    'unknown-wolf': ('workspace', "Unknown's wolf spirit and its glow"),
+    'hit-effect-64': ('workspace', "Strong-hit effects in 64 x 64 (TTT Hitspark)"),
 }
 
 # What brings a roster from version n - 1 to n: its update steps, in order, or
@@ -62,6 +66,22 @@ UPDATES = {
     # have an 18th, Armor King an 18th and a 19th, an open hand after the
     # progression, and fought with flat hands (convert.hand_steps).
     6: ['hand-fists'],
+    # 7: the mist's virtual limb 25 (Nina's Evil Mist, Yoshimitsu's Poison
+    # Breath, a shared record of Nina's and Anna's) kept as a marker for T3's
+    # own effect limb 25, instead of limb 0 (B65).
+    7: ['mist'],
+    # 8: a weld on a whole vertex (TTT1 weights 16 and w) became a copy of it in
+    # the converter: the joint followed one bone only (Michelle's third costume:
+    # her shorts' hem stayed on her hips, B70). The writing row now drops a half
+    # of it for the reader, a PS1 8/8 weld, when w >= 5 (convert.half_welds).
+    8: ['half-welds'],
+    # 9: Unknown's wolf spirit (TTT1 model 114) and its light effects
+    # (archive 06), drawn behind her in every fight (F08, GH#42).
+    9: ['unknown-wolf'],
+    # 10: the strong-hit effect also in TTT1's 64 x 64 (<Name>-TTT1-hiteffect64.hfx),
+    # the guests' and Tekken 3's own cast's, drawn from the upper VRAM half by the TTT
+    # Hitspark mod; the 32 x 32 pack stays the fallback (F12, GH#112).
+    10: ['hit-effect-64'],
 }
 
 

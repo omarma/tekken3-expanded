@@ -146,6 +146,10 @@ uint32_t psx_ws_xclip_bound(uint32_t vanilla) { return vanilla; }
 void gte_precision_store_word(uint32_t addr, uint8_t reg) {
     (void)addr; (void)reg;
 }
+void gte_precision_lwc2_word(uint32_t addr, uint8_t reg, uint32_t value,
+                             uint32_t pc) {
+    (void)addr; (void)reg; (void)value; (void)pc;
+}
 void gte_precision_speculative_begin(void) {}
 void gte_precision_speculative_end(void) {}
 int gte_replay_side_effects_begin(void) { return 1; }

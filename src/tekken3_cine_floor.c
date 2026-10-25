@@ -60,8 +60,9 @@ static uint32_t gte_divide(uint32_t h, uint32_t sz3) {
 
 /* RTPS, sf 1: screen x, y (clamped as the GTE does) and SZ; raw: x, y
  * before the clamp (a corner far off the screen), then the depth before
- * its clamp (behind the camera: negative). */
-static void rtps(const Gte *g, int x, int y, int z, int *sx, int *sy, int *sz, int64_t raw[3]) {
+ * its clamp (behind the camera: negative), then x, y in 16.16 before the
+ * shift (sub-pixel precision, psxrecomp/ENHANCEMENTS.md G1.13). */
+static void rtps(const Gte *g, int x, int y, int z, int *sx, int *sy, int *sz, int64_t raw[5]) {
     int64_t mac[3];
     for(int i=0;i<3;i++)
         mac[i]=(((int64_t)g->t[i]<<12)+(int64_t)g->r[i][0]*x+(int64_t)g->r[i][1]*y+(int64_t)g->r[i][2]*z)>>12;
@@ -70,7 +71,7 @@ static void rtps(const Gte *g, int x, int y, int z, int *sx, int *sy, int *sz, i
     uint32_t sz3=(uint32_t)(mac[2]<0?0:mac[2]>0xFFFF?0xFFFF:mac[2]);
     int64_t q=gte_divide(g->h,sz3);
     int64_t vx=(q*ir0+g->ofx)>>16, vy=(q*ir1+g->ofy)>>16;
-    if(raw) { raw[0]=vx; raw[1]=vy; raw[2]=mac[2]; }
+    if(raw) { raw[0]=vx; raw[1]=vy; raw[2]=mac[2]; raw[3]=q*ir0+g->ofx; raw[4]=q*ir1+g->ofy; }
     *sx=(int)(vx<-0x400?-0x400:vx>0x3FF?0x3FF:vx);
     *sy=(int)(vy<-0x400?-0x400:vy>0x3FF?0x3FF:vy);
     *sz=(int)sz3;
@@ -120,7 +121,14 @@ static int shade(int vx, int vz, int sz) {
 }
 
 typedef struct { int x, z, u, v, c; } Corner;   /* grid units, texel, the tile's own grey */
-typedef struct { int sx, sy, sz; int64_t raw[3]; } Shot;
+typedef struct { int sx, sy, sz; int64_t raw[5]; } Shot;
+
+/* A piece's corner moved by `grow` pixels, in 16.16 and inside the pixel of
+ * the word written (G1.13: the integer part must be the word's). */
+static int32_t grown16(int64_t v16, int grow, int word) {
+    int64_t v = v16 + ((int64_t)grow << 16), lo = (int64_t)word << 16;
+    return (int32_t)(v < lo ? lo : v > lo + 0xFFFF ? lo + 0xFFFF : v);
+}
 
 static Corner mix(const Corner *c, int s, int t, int n) {   /* bilinear at (s, t) / n */
     int64_t w[4]={(int64_t)(n-s)*(n-t),(int64_t)s*(n-t),(int64_t)(n-s)*t,(int64_t)s*t},nn=(int64_t)n*n;
@@ -136,13 +144,25 @@ static void emit(const Corner q[4], const Shot p[4], uint8_t code, uint32_t clut
     /* One pixel bigger on every side: the pieces meet the game's tiles and
      * each other at T-junctions, which leave hairline cracks otherwise. */
     int cx=(p[0].sx+p[1].sx+p[2].sx+p[3].sx)/4, cy=(p[0].sy+p[1].sy+p[2].sy+p[3].sy)/4;
+    /* TEKKEN3_CINE_FLOOR_INTEGER: the pieces without precision (the
+     * before of tools/pgxp_cine.py). */
+    static int integer=-1;
+    if(integer<0) integer=getenv("TEKKEN3_CINE_FLOOR_INTEGER")!=NULL;
+    int precise=!integer && psx_mod_precision_wanted();
     for(int k=0;k<4;k++) {
-        int x=p[k].sx+(p[k].sx>cx)-(p[k].sx<cx), y=p[k].sy+(p[k].sy>cy)-(p[k].sy<cy);
+        int gx=(p[k].sx>cx)-(p[k].sx<cx), gy=(p[k].sy>cy)-(p[k].sy<cy);
+        int x=p[k].sx+gx, y=p[k].sy+gy;
         int u=q[k].u<0?0:q[k].u>255?255:q[k].u, v=q[k].v<0?0:q[k].v>255?255:q[k].v;
         int s=shade(q[k].x,q[k].z,p[k].sz); if(s<0) s=q[k].c;
         uint32_t g=(uint32_t)s&0xFF;
         psx_mod_write_word(a+4+12*k,g|g<<8|g<<16|(k?0:(uint32_t)code<<24));
-        psx_mod_write_word(a+8+12*k,(uint32_t)(y&0xFFFF)<<16|(uint32_t)(x&0xFFFF));
+        uint32_t w=(uint32_t)(y&0xFFFF)<<16|(uint32_t)(x&0xFFFF);
+        psx_mod_write_word(a+8+12*k,w);
+        /* Sub-pixel precision: the corner's own 16.16 point, grown by the
+         * same pixel (emitted pieces are never clamped). */
+        if(precise)
+            psx_mod_precise_word(a+8+12*k,w,grown16(p[k].raw[3],gx,x),grown16(p[k].raw[4],gy,y),
+                                 (uint32_t)(p[k].sz<1?1:p[k].sz));
         psx_mod_write_word(a+12+12*k,(uint32_t)(v<<8|u)|(k==0?clut:k==1?tpage:0));
     }
     uint32_t o=psx_mod_read_word(at);
@@ -195,6 +215,10 @@ void tekken3_cine_floor_after(CPUState *cpu, uint32_t p1, uint32_t p2) {
         static int told;                                             /* never silent (the 1.3.0 black floor) */
         if(!told++) fprintf(stderr,"Cine floor: no GPU-DMA memory left for %u bytes, the close shots' floor stays as the game draws it\n",2*PRIMS_MAX*PRIM);
         return;
+    }
+    if(log_on()) {
+        static int told;
+        if(!told++) fprintf(stderr,"Cine floor: pieces at 0x%08X, %u bytes\n",memory,2*PRIMS_MAX*PRIM);
     }
     const int size=(int)psx_mod_read_word(TILE), nx=(int)psx_mod_read_word(NX), nz=(int)psx_mod_read_word(NZ);
     const int nv=(int)psx_mod_read_word(NVERT);
@@ -252,7 +276,7 @@ void tekken3_cine_floor_after(CPUState *cpu, uint32_t p1, uint32_t p2) {
             uint32_t slot=slots+(uint32_t)(PRIM*(r*nx+cc));
             Corner q[4];
             int drawn=1, sy_in=0, sx_in=0, bent=0;
-            int64_t raw[3], lo[2]={INT64_MAX,INT64_MAX}, hi[2]={INT64_MIN,INT64_MIN};
+            int64_t raw[5], lo[2]={INT64_MAX,INT64_MAX}, hi[2]={INT64_MIN,INT64_MIN};
             for(int k=0;k<4;k++) {
                 uint32_t idx=w>>(8*k)&0xFF, vw=psx_mod_read_word(verts+4*idx);
                 q[k].x=(int16_t)(vw>>16); q[k].z=(int16_t)(vw&0xFFFF);

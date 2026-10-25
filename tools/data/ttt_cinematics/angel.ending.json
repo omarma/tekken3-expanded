@@ -1,0 +1,25 @@
+{
+ "about": "Angel's Tekken Tag Tournament (PS2) ending (scene 14): Devil lies on the ground, Angel touches him, a white flash (449-569) and Kazuya is human again (Devil becomes Kazuya at 511, under the flash). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "angel",
+ "arena": 6,
+ "dark": 2,
+ "trigger": "arcade-end p1=angel",
+ "ttt_stage": {"stage": 14,
+               "why": "the PS2 script's stage 14 (scene table 0x51B388), TTT arcade's stage 14 (Unknown's: a black background, a small floor): every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, Ogre's temple dark above"},
+ "actors": [
+  {"cast": "angel", "costume": 0, "skeleton": "angel", "cast_of": "devil",
+   "retarget": ["--basis", "canonical", "--twists", "--collars", "--world"],
+   "why": "the script's Devil in costume 4 is Angel (Devil's Start costume in TTT1: the guest Angel); Unknown's stage as Ogre's temple, dark (tools/ps2/ttt_endings.json)"},
+  {"cast": "devil", "costume": 0, "skeleton": "devil",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--head-fit", "--head-fit-range", "1240:1379"],
+   "why": "TTT costume 0: T3 costume 0; head basis fitted where Kazuya sits up and looks ahead (1240-1379, neck neutral: the fit's assumption), the same rig as Kazuya's; with the identity the face turned to the floor, fitted on the lying frames it looked to the wrong side (compared with the PS2 at 299-569)",
+   "nudge": [{"from": 261, "to": 861, "offset": [0, 0, 60],
+              "why": "Angel's hand rests just above his forehead on the PS2 (wrist-neck distance as the PS2's within 15 units), but the T3 model's head is bigger: the hand went into the skull. Moved 60 units away along his body (his head points to the hand), over the two shots of the contact (camera cuts at 261 and 861)"}],
+   "swaps": [
+    {"cast": "kazuya", "costume": 0, "skeleton": "kazuya",
+     "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--head-fit", "--head-fit-range", "1240:1379"],
+     "why": "head basis fitted at 1240-1379, where he sits up, neck neutral; the script's cmd 1 at 510 (Devil back to Kazuya), the capture's new skeleton from 511; TTT costume 0: T3 costume 0"}
+   ]}
+ ],
+ "ignore": []
+}

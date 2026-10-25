@@ -57,6 +57,8 @@ static void test_defaults_and_legacy_pair() {
           "native-wide 2D edge fill defaults disabled");
     check(empty.ws_camera_zoom_num == 1 && empty.ws_camera_zoom_den == 1,
           "native-wide camera zoom defaults to identity");
+    check(!empty.ws_nclip_gpu_coords,
+          "native-wide 11-bit NCLIP defaults disabled");
     fs::remove(defaults);
 
     fs::path legacy = write_game_toml(
@@ -80,6 +82,16 @@ static void test_2d_edge_fill_opt_in() {
     auto config = PSXRecompV4::load_game_config(path);
     check(config.ws_nw_2d_edge_fill,
           "native-wide 2D edge fill reaches GameConfig");
+    fs::remove(path);
+}
+
+static void test_nclip_gpu_coords_opt_in() {
+    fs::path path = write_game_toml(
+        "psxrecomp_ws_nclip_gpu_coords.toml",
+        "nclip_gpu_coords = true\n");
+    auto config = PSXRecompV4::load_game_config(path);
+    check(config.ws_nclip_gpu_coords,
+          "native-wide 11-bit NCLIP reaches GameConfig");
     fs::remove(path);
 }
 
@@ -186,6 +198,7 @@ int main() {
     test_full_visibility_aperture();
     test_defaults_and_legacy_pair();
     test_2d_edge_fill_opt_in();
+    test_nclip_gpu_coords_opt_in();
     test_camera_zoom_policy();
     test_dome_engine_projection_policy();
     test_two_ranges_parse_independently();

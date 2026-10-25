@@ -52,6 +52,11 @@ static int      s_save_pending = -1;   /* slot, or -1 */
 static int      s_load_pending = -1;
 static int      s_load_completed = 0;
 static int      s_load_failed = 0;
+/* Frame anchor for frame-exact debug captures (debug_server capture_plan):
+ * how many loads have completed, and s_frame_count when the last one did. */
+static uint32_t s_load_generation = 0;
+static uint64_t s_last_load_frame = 0;
+static uint64_t s_last_load_vblanks = 0;
 static int      s_save_failed = 0;
 static uint32_t s_last_save_pc = 0;
 static int      s_save_defer_slot = -1;
@@ -577,6 +582,15 @@ uint32_t savestate_last_save_pc(void) {
     return s_last_save_pc;
 }
 
+uint32_t savestate_load_generation(uint64_t* frame) {
+    if (frame) *frame = s_last_load_frame;
+    return s_load_generation;
+}
+
+uint64_t savestate_last_load_vblanks(void) {
+    return s_last_load_vblanks;
+}
+
 void savestate_poll(CPUState* cpu, uint32_t resume_pc) {
     if (s_save_pending < 0 && s_load_pending < 0) return;   /* hot path: nothing staged */
 
@@ -697,6 +711,13 @@ void savestate_poll(CPUState* cpu, uint32_t resume_pc) {
             cdrom_accelerate_after_savestate();
             /* Netplay post-load barrier observes this before the longjmp. */
             s_load_completed = 1;
+            {
+                extern uint64_t s_frame_count;
+                extern uint64_t g_vblank_raise_count;
+                s_last_load_frame = s_frame_count;
+                s_last_load_vblanks = g_vblank_raise_count;
+                s_load_generation++;
+            }
             /* Restage FBO/present latch so the restored frame is visible
              * immediately (avoids disabled-display blank latch + stale smooth). */
             psx_frontend_on_savestate_loaded();

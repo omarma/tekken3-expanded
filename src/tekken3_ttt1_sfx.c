@@ -269,7 +269,8 @@ void __wrap_func_800757A8(CPUState *cpu) {
  * 3 as still starting for the few frames before its envelope is up. */
 /* SURVIVAL RESULTS (state 14) announces the player's fighter the same way,
  * from 80075864 (returning to 800758B4), which says "wins" once voice 1 is
- * free: a guest's name now plays there too and waits the same. */
+ * free: a guest's name now plays there too and waits the same, and so
+ * does a native's. */
 enum { WINS_TASK_RETURN=0x800744ac, RESULTS_WINS_RETURN=0x800758b4, NAME_START_CHECKS=4 };
 /* Frames seen by the round's end (8003CB84 below), the last one on which
  * the task checked voice 1, and the frames "wins" still plays. */
@@ -285,6 +286,19 @@ void __wrap_func_8008D658(CPUState *cpu) {
         checks++;
         if(!cpu->gpr[2]){name_wait=0;fprintf(stderr,"SURVIVAL RESULTS: guest's name over after %u checks, \"wins\" may follow\n",checks);checks=0;}
         cpu->pc=cpu->gpr[31];return;
+    }
+    /* A native's name (on its T3 or TTT1 moves) plays on voice 1: its only
+     * check, the frame after the name, read 3 and "wins" came 16 frames in,
+     * over "Gun-" (B82). A 3 reads as still starting, as for the Team
+     * Battle task, until the envelope is up (name_wait past the checks). */
+    if((cpu->pc==0 || cpu->pc==0x8008d658) && cpu->gpr[31]==RESULTS_WINS_RETURN && cpu->gpr[4]==2 && name_wait) {
+        static unsigned checks;
+        __real_func_8008D658(cpu);
+        checks++;
+        if(cpu->gpr[2]==3 && name_wait<=NAME_START_CHECKS){name_wait++;cpu->gpr[2]=1;}
+        else if(cpu->gpr[2]==1)name_wait=NAME_START_CHECKS+1;
+        else {name_wait=0;fprintf(stderr,"SURVIVAL RESULTS: native's name over after %u checks, \"wins\" may follow\n",checks);checks=0;}
+        return;
     }
     if((cpu->pc==0 || cpu->pc==0x8008d658) && cpu->gpr[31]==WINS_TASK_RETURN && cpu->gpr[4]==2) {
         if(name_wait && name_guest) {

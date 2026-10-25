@@ -6,10 +6,22 @@
  * then 0x8004C390 marks the save as changed. 0x80051660 returns +0 + +4 + +6,
  * the CHARACTERS ranking's count. The modulo credited a guest to a stock
  * fighter (Jun, 38, to Gun Jack, 16). A guest's counters live here instead,
- * in ttt1-guest-records.txt beside memory card 1, one line per guest key:
- * the card itself never holds a guest ID and stays valid without the mod.
- * The total still counts the guest's games, as it counts every fighter's.
- * The recompiler starts these functions after their first three
+ * one line per guest key: the card itself never holds a guest ID and stays
+ * valid without the mod. The total still counts the guest's games, as it
+ * counts every fighter's.
+ * The game only ever uses card 1 ("bu00:"). Its save data lives in RAM: the
+ * EXE's defaults at boot, the card read once by the boot (0x8004C370, then
+ * 0x8004C240) or by CARD LOAD, written by CARD SAVE or by the auto save
+ * (0x8004C3B8: the AUTO SAVE option 0x80097F11 on and a counter changed,
+ * 0x8004C390, over an existing save only). The guests' records are kept the
+ * same way: in memory, emptied when the boot reads the card, replaced by the
+ * card's file (<card>-ttt1-guest-records.txt beside it) when a read of the
+ * card succeeds, written to that file when a write of the card succeeds. The
+ * file used to be written after every game and read once, whatever the card
+ * did: a reboot without a save kept the guests' counts and lost the stock
+ * fighters' (GH#113, B63). ttt1-guest-records.txt, that older file shared by
+ * every card, is read when the card has no file of its own yet. */
+/* The recompiler starts these functions after their first three
  * instructions (the modulo's lui / ori / mult), at the stack adjustment:
  * 0x800513C0, 0x80051464, 0x8005155C. Their arguments are still intact. */
 #include "mod_plugins.h"
@@ -18,6 +30,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 extern int tekken3_ttt1_roster_enabled(void);
 extern int tekken3_guest_character(unsigned id);
@@ -43,17 +59,28 @@ enum { NATIVE_RECORDS=0x8009804c, RECORD_SIZE=8, TOTAL=0x80097f1c, NATIVES=22,
 typedef struct { char key[32]; uint16_t field[4]; } GuestRecord;
 static GuestRecord records[RECORDS_MAX];
 static unsigned record_count;
-static int loaded;
 
-static int records_path(char *out,size_t size) {
+/* Card 1's file `suffix` (card1.mcd: card1-<suffix>), or with shared set
+ * <suffix> alone, in the card's folder. Also the Embu's rotation
+ * (src/tekken3_cine_trigger.c), kept beside the card the same way. */
+int tekken3_card_file(char *out,size_t size,const char *suffix,int shared) {
     const char *card=NULL;
     if(memcard_debug_info(0,&card,NULL,NULL,NULL) || !card || !*card)return 0;
     const char *slash=strrchr(card,'/'),*back=strrchr(card,'\\');
     if(back && (!slash || back>slash))slash=back;
     int n=slash?(int)(slash-card):1;
-    const char *dir=slash?card:".";
-    return snprintf(out,size,"%.*s/ttt1-guest-records.txt",n,dir)<(int)size;
+    const char *dir=slash?card:".",*name=slash?slash+1:card,*dot=strrchr(name,'.');
+    int stem=dot && dot>name?(int)(dot-name):(int)strlen(name);
+    if(shared)return snprintf(out,size,"%.*s/%s",n,dir,suffix)<(int)size;
+    return snprintf(out,size,"%.*s/%.*s-%s",n,dir,stem,name,suffix)<(int)size;
 }
+static int records_path(char *out,size_t size,int shared) {
+    return tekken3_card_file(out,size,"ttt1-guest-records.txt",shared);
+}
+/* The Embu's rotation follows the card as the records do. */
+extern void tekken3_embu_rotation_forget(void);
+extern void tekken3_embu_rotation_load(void);
+extern void tekken3_embu_rotation_save(void);
 /* Save data that names a fighter (see the note before save_guard): the
  * guests written as Jin on the card, and which guest each such entry was. */
 enum { SURVIVAL=0x80097ffc, SURVIVAL_ROWS=10, LAST_CHOICE=0x80097f0e, JIN=9 };
@@ -68,13 +95,16 @@ static unsigned time_record_count;
 static uint32_t survival_row(unsigned row);
 static void guests_back(void);
 static int guests_pending;
-static void load(void) {
-    if(loaded)return;
-    loaded=1;
-    char path[1024],line[256];
-    if(!records_path(path,sizeof path))return;
+static TimeRecord *ta_record;
+/* No guest record: the EXE's defaults, before the card is read. */
+static void forget(void) {
+    record_count=0;time_record_count=0;ta_record=NULL;
+    memset(survival_marks,0,sizeof survival_marks);memset(choice_marks,0,sizeof choice_marks);
+}
+static int read_file(const char *path) {
+    char line[256];
     FILE *f=fopen(path,"r");
-    if(!f)return;
+    if(!f)return 0;
     while(fgets(line,sizeof line,f)) {
         char key[32];unsigned v[4],row,n0,n1,n2;
         if(sscanf(line,"@survival %u %31s %u %u %u %u",&row,key,&v[0],&n0,&n1,&n2)==6 && row<SURVIVAL_ROWS) {
@@ -96,10 +126,29 @@ static void load(void) {
         }
     }
     fclose(f);
+    return 1;
+}
+static long long modified(const char *path) {
+    struct stat s;
+    return stat(path,&s)?-1:(long long)s.st_mtime;
+}
+/* The card was read: its file, else the older shared one (or its .new,
+ * left by a rename that Windows refused, when newer). */
+static void load(void) {
+    char path[1024],shared[1024],fresh[1040];
+    forget();
+    if(!records_path(path,sizeof path,0))return;
+    if(read_file(path)) {
+        fprintf(stderr,"TTT1 records: %u guest(s) read from %s\n",record_count,path);
+        return;
+    }
+    if(!records_path(shared,sizeof shared,1) || snprintf(fresh,sizeof fresh,"%s.new",shared)>=(int)sizeof fresh)return;
+    const char *from=modified(fresh)>modified(shared)?fresh:shared;
+    if(read_file(from))fprintf(stderr,"TTT1 records: %u guest(s) read from %s (shared file)\n",record_count,from);
 }
 static void save(void) {
     char path[1024],tmp[1040];
-    if(!records_path(path,sizeof path) || snprintf(tmp,sizeof tmp,"%s.new",path)>=(int)sizeof tmp)return;
+    if(!records_path(path,sizeof path,0) || snprintf(tmp,sizeof tmp,"%s.new",path)>=(int)sizeof tmp)return;
     FILE *f=fopen(tmp,"w");
     if(!f){fprintf(stderr,"TTT1 records: cannot write %s\n",tmp);return;}
     for(unsigned i=0;i<record_count;i++)
@@ -114,13 +163,19 @@ static void save(void) {
     for(unsigned i=0;i<time_record_count;i++)
         fprintf(f,"@time %s %u %u %u %u\n",time_records[i].key,time_records[i].time,
                 time_records[i].name[0],time_records[i].name[1],time_records[i].name[2]);
-    if(fclose(f)==0)rename(tmp,path);
+    if(fclose(f))return;
+#ifdef _WIN32
+    if(!MoveFileExA(tmp,path,MOVEFILE_REPLACE_EXISTING))   /* rename() refuses an existing target */
+#else
+    if(rename(tmp,path))
+#endif
+        fprintf(stderr,"TTT1 records: cannot replace %s\n",path);
+    else fprintf(stderr,"TTT1 records: %u guest(s) written to %s\n",record_count,path);
 }
 /* The guest's record, created on first use; NULL for a stock fighter. */
 static GuestRecord *find_record(unsigned id) {
     const char *key=tekken3_guest_key(id);
     if(!key)return NULL;
-    load();
     for(unsigned i=0;i<record_count;i++)if(!strcmp(records[i].key,key))return &records[i];
     return NULL;
 }
@@ -128,7 +183,6 @@ static GuestRecord *guest_record(unsigned id) {
     if(tekken3_guest_character(id)<0)return NULL;
     const char *key=tekken3_guest_key(id);
     if(!key)return NULL;
-    load();
     for(unsigned i=0;i<record_count;i++)if(!strcmp(records[i].key,key))return &records[i];
     if(record_count>=RECORDS_MAX)return NULL;
     GuestRecord *r=&records[record_count++];
@@ -148,8 +202,9 @@ static void bump_field(unsigned id,unsigned field) {
 static void bump_total(void){psx_mod_write_half(TOTAL,bump(psx_mod_read_half(TOTAL)));}
 static int entry(CPUState *cpu,uint32_t address){return cpu->pc==0 || cpu->pc==address;}
 static int guest(unsigned id){return tekken3_ttt1_roster_enabled() && tekken3_guest_character(id)>=0;}
-/* Done in C: continue at 0x8004C390, which returns to the caller. */
-static void finish(CPUState *cpu){save();cpu->pc=SAVE_CHANGED;}
+/* Done in C: continue at 0x8004C390, which marks the save as changed (for
+ * the auto save) and returns to the caller. */
+static void finish(CPUState *cpu){cpu->pc=SAVE_CHANGED;}
 
 void __wrap_func_800513C0(CPUState *cpu) {
     unsigned id=cpu->gpr[4];
@@ -270,9 +325,7 @@ enum { TA_MODE=3, TA_FIGHTER=0x800afb14, TA_TABLE=0x80097f4c, TA_POINTER=0x80097
 static uint32_t ta_row,ta_lent;
 static unsigned char ta_backup[8],ta_shown[8];
 static unsigned ta_ticks,ta_lent_tick;
-static TimeRecord *ta_record;
 static TimeRecord *time_record(const char *key) {
-    load();
     for(unsigned i=0;i<time_record_count;i++)if(!strcmp(time_records[i].key,key))return &time_records[i];
     if(time_record_count>=RECORDS_MAX)return NULL;
     TimeRecord *r=&time_records[time_record_count++];
@@ -314,7 +367,6 @@ void __wrap_func_8004CC08(CPUState *cpu) {
     for(unsigned i=0;i<8;i++)ta_shown[i]=psx_mod_read_byte(ta_row+i);
     ta_record->time=psx_mod_read_word(ta_row);
     for(unsigned i=0;i<3;i++)ta_record->name[i]=psx_mod_read_byte(ta_row+4+i);
-    save();
 }
 /* The name entry (states 16 and 17) lists the records of the stock rows 0..20 (the
  * ranking overlay's builder 0x800C172C, sort called from 0x800C1804, list
@@ -360,7 +412,7 @@ static void ta_list_sort(CPUState *cpu) {
     psx_mod_write_half(cpu->gpr[19]+12,(uint16_t)(n+1));   /* list count, stored before the sort */
 }
 /* Every frame: the lent row back if no record took it; the name the name
- * entry writes in our row goes to the file. */
+ * entry writes in our row goes to the guest's record. */
 static void time_attack_tick(void) {
     ta_ticks++;
     if(!ta_row)ta_row=psx_mod_alloc_guest_memory(8,4);
@@ -376,7 +428,6 @@ static void time_attack_tick(void) {
     for(unsigned i=0;i<8;i++)ta_shown[i]=psx_mod_read_byte(ta_row+i);
     ta_record->time=psx_mod_read_word(ta_row);
     for(unsigned i=0;i<3;i++)ta_record->name[i]=psx_mod_read_byte(ta_row+4+i);
-    save();
 }
 static void rx_tick(void);
 void tekken3_ranking_tick(void) {
@@ -501,7 +552,6 @@ static int rx_descending(const void *a,const void *b) {
 static const TimeRecord *rx_find_time(unsigned id) {
     const char *key=tekken3_guest_key(id);
     if(!key)return NULL;
-    load();
     for(unsigned i=0;i<time_record_count;i++)if(!strcmp(time_records[i].key,key))return &time_records[i];
     return NULL;
 }
@@ -595,7 +645,7 @@ void __wrap_func_8004CD80(CPUState *cpu) {
  * player's last choice (0x80097F0E / F, ID * 4 + costume). A guest's ID must
  * not reach the card: the game without the mod would read an ID it does not
  * know. Just before the card is written, a guest there becomes Jin (9), the
- * fighter the guests are built on, and ttt1-guest-records.txt keeps which
+ * fighter the guests are built on, and the card's records file keeps which
  * guest it was with what identifies the entry (wins and letters, costume);
  * the RAM gets the guests back right after. After the card is read, the
  * entries that still match get their guest back. Without the mod, the rows
@@ -603,7 +653,6 @@ void __wrap_func_8004CD80(CPUState *cpu) {
 static uint32_t survival_row(unsigned row){return SURVIVAL+row*8;}
 static int save_guard(void) {
     int changed=0;
-    load();
     if(ne_row) {                        /* the name entry's lent row: the card gets its own bytes */
         ne_copy(ta_row,ne_row);
         for(unsigned i=0;i<8;i++)psx_mod_write_byte(ne_row+i,ne_backup[i]);
@@ -628,12 +677,10 @@ static int save_guard(void) {
         choice_marks[p].costume=v&3;
         psx_mod_write_byte(LAST_CHOICE+p,(uint8_t)(JIN*4+(v&3)));changed=1;
     }
-    save();
     return changed;
 }
 /* Jin entries that match a mark take their guest back. */
 static void guests_back(void) {
-    load();
     for(unsigned row=0;row<SURVIVAL_ROWS;row++) {
         SurvivalMark *m=&survival_marks[row];
         if(!m->used)continue;
@@ -657,28 +704,46 @@ static void guests_back(void) {
     if(ne_row)ne_copy(ne_row,ta_row);       /* the name entry's lent row, over what came back */
 }
 /* The guests come back once the write has copied its blocks: at once when
- * the call returns, else on the next frame (tekken3_ranking_tick). */
+ * the call returns, else on the next frame (tekken3_ranking_tick). The
+ * write, like the read below, may span several dispatches; v0 is 0 when the
+ * card was written (1, 4 or 5 otherwise: the auto save never creates a
+ * save), and only then is the file written. */
+static uint32_t write_back;
 void __wrap_func_8004BEC0(CPUState *cpu) {
     uint32_t back=cpu->gpr[31];
-    int guarded=tekken3_ttt1_roster_enabled() && entry(cpu,0x8004bec0) && save_guard();
+    int first=entry(cpu,0x8004bec0);
+    if(first)write_back=back;
+    int guarded=first && tekken3_ttt1_roster_enabled() && save_guard();
     __real_func_8004BEC0(cpu);
     if(guarded) {
         if(cpu->pc==back)guests_back();
         else guests_pending=1;
     }
+    if(!write_back || cpu->pc!=write_back)return;
+    write_back=0;
+    if(cpu->gpr[2]==0){save();tekken3_embu_rotation_save();}
 }
 /* The load reads the card over several dispatches: the first call gives
  * the game back mid-read, and later ones resume inside the function. It is
  * done when a dispatch returns to the first call's return address, with v0
- * 0 on success. The boot's load finishes before the roster is up (no guest
- * has an ID yet): the guests then come back on the roster's first frame. */
+ * 0 on success: the guests' records are then the card's. The boot's read
+ * (from 0x8004C370, returning to 0x8004C380) starts from none, as the stock
+ * fighters' counters start from the EXE's zeros, and finishes before the
+ * roster is up (no guest has an ID yet): the guests then come back on the
+ * roster's first frame. A failed read leaves the records as they were. */
+enum { BOOT_READ_BACK=0x8004c380 };
 static uint32_t load_back;
 void __wrap_func_8004C240(CPUState *cpu) {
-    if(entry(cpu,0x8004c240))load_back=cpu->gpr[31];
+    if(entry(cpu,0x8004c240)) {
+        load_back=cpu->gpr[31];
+        if(load_back==BOOT_READ_BACK){forget();tekken3_embu_rotation_forget();}
+    }
     __real_func_8004C240(cpu);
     if(!load_back || cpu->pc!=load_back)return;
     load_back=0;
     if(cpu->gpr[2]!=0)return;
+    load();
+    tekken3_embu_rotation_load();
     if(tekken3_ttt1_roster_enabled())guests_back();
     else guests_pending=1;
 }

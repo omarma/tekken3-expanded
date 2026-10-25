@@ -1,5 +1,6 @@
 #include "mod_runtime.h"
 
+#include "debug_server.h"
 #include "disc_path.h"
 #include "iso_reader.h"
 #include "mod_packages.h"
@@ -1283,7 +1284,18 @@ extern "C" uint8_t psx_mod_read_byte(uint32_t address) {
     return psx_read_byte(address);
 }
 
+/* Stores made by host-native mod code carry no guest PC: attribute them to
+ * PSX_MOD_NATIVE_STORE_PC for the length of the store, so write traces and
+ * the precision census tell them from the guest store that ran last
+ * (ENHANCEMENTS.md G1.13). Restored after, so nothing guest-side sees it. */
+struct ModNativeStore {
+    uint32_t saved;
+    ModNativeStore() : saved(g_debug_last_store_pc) { g_debug_last_store_pc = PSX_MOD_NATIVE_STORE_PC; }
+    ~ModNativeStore() { g_debug_last_store_pc = saved; }
+};
+
 extern "C" void psx_mod_write_byte(uint32_t address, uint8_t value) {
+    ModNativeStore native;
     psx_write_byte(address, value);
 }
 
@@ -1292,6 +1304,7 @@ extern "C" uint16_t psx_mod_read_half(uint32_t address) {
 }
 
 extern "C" void psx_mod_write_half(uint32_t address, uint16_t value) {
+    ModNativeStore native;
     psx_write_half(address, value);
 }
 
@@ -1300,10 +1313,12 @@ extern "C" uint32_t psx_mod_read_word(uint32_t address) {
 }
 
 extern "C" void psx_mod_write_word(uint32_t address, uint32_t value) {
+    ModNativeStore native;
     psx_write_word(address, value);
 }
 
 extern "C" void psx_mod_write_code_word(uint32_t address, uint32_t value) {
+    ModNativeStore native;
     psx_write_word(address, value);
     dirty_ram_mark_executable_range(address & 0x1FFFFFFFu, 4u);
 }
@@ -1320,6 +1335,26 @@ extern "C" uint32_t psx_mod_alloc_gpu_dma_memory(uint32_t size,
 
 extern "C" int32_t psx_mod_widescreen_x_margin(void) {
     return (int32_t)psx_ws_x_margin();
+}
+
+extern "C" int gte_precision_native_active(void);
+extern "C" void gte_precision_native_word(uint32_t addr, uint32_t packed,
+                                          int32_t x16, int32_t y16, uint16_t z);
+
+extern "C" int psx_mod_precision_wanted(void) {
+    return gte_precision_native_active();
+}
+
+extern "C" int gte_geometry_correction_enabled(void);
+
+extern "C" int psx_mod_geometry_wanted(void) {
+    return gte_precision_native_active() && gte_geometry_correction_enabled();
+}
+
+extern "C" void psx_mod_precise_word(uint32_t address, uint32_t value,
+                                     int32_t x16, int32_t y16, uint32_t z) {
+    gte_precision_native_word(address, value, x16, y16,
+                              (uint16_t)(z > 0xFFFFu ? 0xFFFFu : z));
 }
 
 extern "C" int psx_mod_register_function_entry_plugin(

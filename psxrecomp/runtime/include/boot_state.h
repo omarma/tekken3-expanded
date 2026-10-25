@@ -105,6 +105,19 @@ enum {
                               (gpu_high_vram_pixels). Optional on load:
                               ignored when the half does not exist, the half
                               left untouched when the section is absent.      */
+    BS_SEC_MOD_AUDIO = 0x12, /* opt-in state of a mod's audio player
+                              (psx_mod_audio_state_register), written only
+                              while it plays. Optional on load: ignored
+                              without a registered player.                    */
+    BS_SEC_MOD_MEM = 0x13,     /* mod guest memory (0x9F000000), allocated part
+                                  only, written while a mod allocated some.
+                                  Optional on load: absent = left untouched.
+                                  Without it a state reloaded in another
+                                  launch lost the TTT1 guests' models, and in
+                                  the same launch could point the GPU at
+                                  freed packets (Tekken 3 Expanded, PGXP J0). */
+    BS_SEC_MOD_GPU_DMA = 0x14, /* mod GPU-DMA aperture (0x80E00000), the same
+                                  way: the mods' primitive packets the OT links. */
 };
 
 /* Save a COMPLETE snapshot at game handoff. Returns 1 on success. */

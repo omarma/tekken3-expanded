@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """A TTT ending at the end of a guest's Arcade, with TTT Cinematics as
-installed (src/tekken3_embu_scenes.c, tools/ttt_cinematics.py).
+installed (src/tekken3_cine_trigger.c, tools/ttt_cinematics.py).
 
     python3 tools/test_ttt_ending.py OUT --p1 kazuya|armorking [--build build-opt-dbg] [--visible] [--shots]
 
 Cold boot, Start at the title, Cross on ARCADE, R2 (the Tag page), the
 guest's cell, Square. The first fight counts as stage 9 (its index written
 once it loads), True Ogre next; every round is won by emptying player 2's
-life in turbo, True Ogre's in real time. Then the ending must play: with
-the engine's trigger table (triggers.txt, src/tekken3_cine_trigger.c) the
+life in turbo, True Ogre's in real time. Then the ending must play, by the
+engine's trigger table (triggers.txt, src/tekken3_cine_trigger.c): the
 log's "Cine trigger: arcade-end", "Cine: "<p1>" plays" and "over after",
-"Cine trigger: no ending movie" and "credits"; the old way (cinematics.txt)
-"TTT Cinematics: <p1>'s ending selected", "Ending: P2 reloaded", "Fight
-cinematic: started" and "over", "Ending: credits". The cutscene (state 8,
+"Cine trigger: no ending movie" and "credits". The cutscene (state 8,
 phase 17) must last at least 1 000 frames of the game (its frame counter:
 polling is slower on Windows). Windows: no save states needed
 (tools/ttt1_live.py boots on its own). --shots: a screenshot
@@ -48,8 +46,7 @@ def main():
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     build = L.ROOT / a.build
-    table = (build / 'mods/ttt-cinematics/triggers.txt').is_file()
-    if not table and not (build / 'mods/ttt-cinematics/cinematics.txt').is_file():
+    if not (build / 'mods/ttt-cinematics/triggers.txt').is_file():
         sys.exit(f'{build}/mods/ttt-cinematics is not prepared (tools/ttt_cinematics.py)')
     L.Session.start = start
     s = L.Session(guest=a.p1, visible=a.visible, build=build, env={'TEKKEN3_NATIVE_MOVES': '0'}); q = s.q
@@ -110,13 +107,11 @@ def main():
         s.stop()
     (a.out / 'states.json').write_text(json.dumps(rows))
     log = s.log()
-    wants = (('Cine trigger: arcade-end', f'Cine: "{a.p1}" plays', f'Cine: "{a.p1}" over after',
-              'Cine trigger: no ending movie', 'Cine trigger: credits') if table else
-             (f"TTT Cinematics: {a.p1}'s ending selected", 'Ending: P2 reloaded', 'Fight cinematic: started',
-              'Fight cinematic: over', 'Ending: credits'))
+    wants = ('Cine trigger: arcade-end', f'Cine: "{a.p1}" plays', f'Cine: "{a.p1}" over after',
+             'Cine trigger: no ending movie', 'Cine trigger: credits')
     for want in wants:
         if want not in log: failures.append(f'log without "{want}"')
-    for bad in ('rejected', 'no TTT1 moves', 'not the Arcade overlay'):
+    for bad in ('rejected', 'no TTT1 moves'):
         if bad in log: failures.append(f'log with "{bad}"')
     if cine < 1000: failures.append(f'the cutscene lasted {cine} frames, under 1 000')
     print(f'{a.p1}: cutscene {cine} frames, states {rows[-3:]}')

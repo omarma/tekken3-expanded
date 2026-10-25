@@ -3,12 +3,17 @@
 
 #include <stdint.h>
 
+/* Set by a mod (Tekken 3's cinematic engine, its close shots): primitives
+ * past the hardware size are drawn instead of rejected. */
+extern int g_psx_gpu_allow_oversize;
+
 /* PS1 hardware primitive-size rejection. Parsed coordinates are checked before
  * widescreen transforms and draw offsets; offsets do not change distances.
  * Quads are tested as their two rendered triangles independently. */
 static inline int psx_gpu_triangle_oversize(const int32_t* vx,
                                             const int32_t* vy,
                                             int a, int b, int c) {
+    if (g_psx_gpu_allow_oversize) return 0;
     int32_t minx = vx[a], maxx = vx[a];
     if (vx[b] < minx) minx = vx[b];
     if (vx[b] > maxx) maxx = vx[b];

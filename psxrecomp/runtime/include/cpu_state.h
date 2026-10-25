@@ -197,6 +197,7 @@ extern void     gte_ws_configure_dome_sites(const uint32_t* sites, int count,
                                              int overscan_num,
                                              int overscan_den, int min_sz);
 extern void     gte_ws_set_camera_zoom(int num, int den);
+extern void     gte_ws_set_nclip_gpu_coords(int on);
 extern uint32_t gte_read_data(CPUState* cpu, uint8_t reg);
 extern uint32_t gte_read_ctrl(CPUState* cpu, uint8_t reg);
 extern void     gte_write_data(CPUState* cpu, uint8_t reg, uint32_t val);
@@ -214,12 +215,38 @@ extern void     gte_precision_timeline_invalidate(void);
 extern void     gte_precision_speculative_begin(void);
 extern void     gte_precision_speculative_end(void);
 extern void     gte_precision_store_word(uint32_t addr, uint8_t reg);
+/* After an LWC2 into SXY0-2/SXYP (reg 12-15) has written `value`: restore the
+ * register's sub-pixel projection if `addr` holds a tracked projection store
+ * of that same value, else leave it dropped. `pc` is the LWC2's address
+ * (census only). Visual-only; guest-visible GTE state is unchanged. */
+extern void     gte_precision_lwc2_word(uint32_t addr, uint8_t reg,
+                                        uint32_t value, uint32_t pc);
+/* Value propagation hooks (ENHANCEMENTS.md G1.12), emitted only inside
+ * [recompiler] precision_funcs, each behind `if (g_gte_precision_tracking)`.
+ * LW and the ALU hooks run before the instruction with its operand values,
+ * SW after the store with the stored value. Visual-only host state. */
+extern int      g_gte_precision_tracking;
+extern void     gte_precision_cpu_lw(uint8_t rt, uint32_t addr);
+extern void     gte_precision_cpu_sw(uint32_t addr, uint8_t rt, uint32_t value);
+extern void     gte_precision_cpu_add(uint8_t rd, uint8_t rs, uint8_t rt,
+                                      uint32_t vs, uint32_t vt);
+extern void     gte_precision_cpu_sra(uint8_t rd, uint8_t rt, uint8_t sa,
+                                      uint32_t vt);
+extern void     gte_precision_cpu_and(uint8_t rd, uint8_t rs, uint8_t rt,
+                                      uint32_t vs, uint32_t vt);
+extern void     gte_precision_cpu_or(uint8_t rd, uint8_t rs, uint8_t rt,
+                                     uint32_t vs, uint32_t vt);
+extern void     gte_precision_cpu_drop(uint8_t rd);
 /* Sub-pixel vertex precision ([video] geometry_correction). Enables the side
  * cache that retains the 16.16 projection fraction the GTE discards when it
  * saturates SXY to integer screen pixels. Guest-visible GTE state is
  * unchanged — this is a visual-only enhancement, default off. */
 extern void     gte_geometry_correction_set(int enabled);
 extern int      gte_geometry_correction_enabled(void);
+/* Position-keyed fallback for triangles with no exact provenance (G1.11):
+ * off by default, the exact path being the primary one. */
+extern void     gte_geometry_position_fallback_set(int enabled);
+extern int      gte_geometry_position_fallback_enabled(void);
 /* Corrected vertices consumed since the last gte_geometry_correction_set —
  * the "is this actually doing anything on this title" counter. */
 extern uint32_t gte_geometry_correction_hits(void);

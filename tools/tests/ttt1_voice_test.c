@@ -28,7 +28,7 @@ int tekken3_devil_jin_player(unsigned p) { (void)p;return 0; }
 void tekken3_ttt1_sfx_tick(void) {}
 void tekken3_ttt1_sfx_stop(void) {}
 void tekken3_ttt1_sfx_mix(int16_t *o,int n,int a,const int16_t v[2],int g) { (void)o;(void)n;(void)a;(void)v;(void)g; }
-int tekken3_embu_music_mix(int16_t *o,int n,int a,int g) { (void)o;(void)n;(void)a;(void)g;return 0; }
+int tekken3_cine_music_mix(int16_t *o,int n,int a,int g,int *m) { (void)o;(void)n;(void)a;(void)g;*m=0;return 0; }
 static void cry(unsigned player,unsigned command) {
     CPUState cpu={0};cpu.gpr[4]=player;cpu.gpr[6]=command;cpu.gpr[31]=0x80012340;
     __wrap_func_80040C90(&cpu);assert(cpu.pc==cpu.gpr[31]);

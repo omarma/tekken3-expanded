@@ -85,10 +85,8 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.ttt=tk.StringVar(value=saved.get('ttt1',''))
             self.ttt1=tk.BooleanVar(value=saved.get('include_ttt1',saved.get('jun',True)))
             self.tekken3=tk.StringVar(value=saved.get('tekken3',''))
-            self.jin_red=tk.BooleanVar(value=saved.get('jin_red',False))
             self.cinematics=tk.BooleanVar(value=saved.get('ttt_cinematics',False))
             self.ttt_disc=tk.StringVar(value=saved.get('ttt_disc',''))
-            self.ttt_music=tk.BooleanVar(value=bool(saved.get('ttt_disc')))
             self.controls=[];self.ttt1_controls=[]
             if android_only:self.android_page(root)
             else:self.setup_page(root)
@@ -118,21 +116,15 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.window.geometry(f'+{x}+{y}')
         def setup_page(self,root):
             self.file_row(root,'Tekken 3 · USA PlayStation disc',self.disc,[('Disc image','*.cue *.bin *.iso')])
-            self.check=ttk.Checkbutton(root,text='Include the TTT1 characters',variable=self.ttt1,command=self.update_ttt1)
+            self.check=ttk.Checkbutton(root,text='Include Tekken Tag Tournament Content (TTT1 characters, TTT stages and music)',variable=self.ttt1,command=self.update_ttt1)
             self.check.pack(anchor='w',pady=(18,6));self.controls.append(self.check)
             self.file_row(root,'TTT1 arcade · tektagt.zip',self.ttt,[('Arcade ZIP','*.zip')],ttt1=True)
             self.file_row(root,'Tekken 3 arcade · tekken3.zip (optional: arcade difficulty levels and arcade stages)',self.tekken3,[('Arcade ZIP','*.zip')],ttt1=True)
-            self.jin_check=ttk.Checkbutton(root,text="Add-on: Jin's red lightning (from your TTT1 ROM)",variable=self.jin_red)
-            self.jin_check.pack(anchor='w',pady=(6,0));self.controls.append(self.jin_check);self.ttt1_controls.append(self.jin_check)
-            self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",
-                                                  variable=self.cinematics,command=self.update_cinematics)
+            # Optional: the TTT stages' PS2 music (BGM SELECT: REMIXED) and the endings' music.
+            self.file_row(root,'Tekken Tag Tournament · USA PS2 disc (optional: PS2 music of the TTT stages and TTT Cinematics)',
+                          self.ttt_disc,[('Disc image','*.cue *.bin *.iso')],ttt1=True)
+            self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",variable=self.cinematics)
             self.cinematics_check.pack(anchor='w',pady=(6,6));self.controls.append(self.cinematics_check);self.ttt1_controls.append(self.cinematics_check)
-            self.music_check=ttk.Checkbutton(root,text="TTT Cinematics music · requires your Tekken Tag Tournament PS2 disc",
-                                             variable=self.ttt_music,command=self.update_cinematics)
-            self.controls.append(self.music_check);self.ttt1_controls.append(self.music_check)
-            self.ttt_disc_row=self.file_row(root,"Tekken Tag Tournament · USA PS2 disc",self.ttt_disc,
-                                            [('Disc image','*.cue *.bin *.iso')],ttt1=True)
-            self.update_cinematics()
             ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+
                       ('Only the Android game is built, for an arm64 phone.\nThe first time also downloads the Android tools (about 1 GB).\n'
                        if self.android_setup else '')+('Tools download automatically; ' if os.name=='nt' else 'Needs cmake, ninja and SDL3 (brew install cmake ninja sdl3); '
@@ -154,13 +146,6 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.controls.extend((entry,button))
             if ttt1:self.ttt1_controls.extend((entry,button))
             return frame
-        def update_cinematics(self):
-            # The PS2 disc is optional and only for TTT Cinematics: asked once ticked.
-            # The music only with the cinematics, and the PS2 disc only with the music.
-            if self.cinematics.get():self.music_check.pack(anchor='w',padx=(22,0),pady=(0,6),after=self.cinematics_check)
-            else:self.music_check.pack_forget()
-            if self.cinematics.get() and self.ttt_music.get():self.ttt_disc_row.pack(fill='x',padx=(22,0),pady=(0,9),after=self.music_check)
-            else:self.ttt_disc_row.pack_forget()
         def browse(self,value,types):
             selected=filedialog.askopenfilename(parent=self.window,title='Choose your game file',filetypes=types)
             if selected:
@@ -179,18 +164,18 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             else:self.progress.stop()
         def start(self):
             if self.android_only and not self.android_setup:
+                # An older game is updated first, with the files it was set up with.
+                if not backend.ready() and not backend.android_ready() and not self.optional_ok(pc=True):return
                 self.status.set('Building the Android APK');self.detail.set('Checking the Android tools…')
             else:
                 # An update reads only the files it needs: the disc for a new release,
                 # the ROM for a new TTT1 import.
-                disc,rom=backend.needs(self.ttt1.get(),self.jin_red.get(),self.tekken3.get() or None,self.cinematics.get())
+                disc,rom=backend.needs(self.ttt1.get(),self.tekken3.get() or None,self.cinematics.get())
                 if disc and not Path(self.disc.get()).is_file():self.detail.set('Choose your Tekken 3 USA disc image first.');return
                 if rom and not Path(self.ttt.get()).is_file():
-                    self.detail.set('Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.');return
-                if self.ttt1.get() and self.tekken3.get() and not Path(self.tekken3.get()).is_file():
-                    self.detail.set('The Tekken 3 arcade ZIP was not found. Choose it again, or clear the field.');return
-                if self.ttt1.get() and self.cinematics.get() and self.ttt_music.get() and not Path(self.ttt_disc.get()).is_file():
-                    self.detail.set('Choose your Tekken Tag Tournament PS2 disc, or turn off TTT Cinematics music.');return
+                    self.detail.set('Choose your TTT1 arcade ZIP, or turn off Include Tekken Tag Tournament Content.');return
+                # The optional files (B85): one given but not usable, missing included.
+                if not self.optional_ok(pc=not self.android_setup):return
                 self.status.set('Starting setup');self.detail.set('Checking your game files…')
             self.set_busy(True)
             self.epoch+=1;epoch=self.epoch;self.completed=False;self.apk=None
@@ -201,10 +186,8 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             elif self.ttt1.get():
                 command+=['--disc',self.disc.get(),'--ttt1',self.ttt.get()]
                 if self.tekken3.get():command+=['--tekken3',self.tekken3.get()]
-                if self.jin_red.get():command.append('--jin-red-lightning')
-                if self.cinematics.get():
-                    command.append('--ttt-cinematics')
-                    if self.ttt_music.get():command+=['--ttt-disc',self.ttt_disc.get()]
+                if self.cinematics.get():command.append('--ttt-cinematics')
+                if self.ttt_disc.get():command+=['--ttt-disc',self.ttt_disc.get()]
             else:command+=['--disc',self.disc.get(),'--no-ttt1']
             try:
                 self.job=ProcessJob()
@@ -216,6 +199,49 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                 threading.Thread(target=self.read_events,args=(self.process,epoch),daemon=True).start()
             except Exception as error:
                 self.cancel();self.status.set('Setup could not start');self.detail.set(str(error))
+        def optional_ok(self,pc):
+            """An optional file the setup would read but cannot use: the player
+            goes on without it, or back to the files. True: start."""
+            ttt1=self.ttt1.get()
+            self.status.set('Checking your optional files');self.detail.set('');self.window.update_idletasks()
+            problems=backend.optional_problems(ttt1,(ttt1 and self.tekken3.get()) or None,(ttt1 and self.ttt_disc.get()) or None,
+                                               self.cinematics.get(),pc)
+            if not problems or self.ask_optional(problems):return True
+            names=' and '.join(p['file'] for p in problems)
+            self.status.set('Choose another '+names+('' if not self.android_only else ' in Setup Tekken 3'))
+            self.detail.set(('Click Browse, or clear the field to set up without it.' if len(problems)==1 else
+                             'Click Browse, or clear the fields to set up without them.') if not self.android_only
+                            else f'Open Setup Tekken 3 to choose another {names}, then build the APK again.')
+            return False
+        def ask_optional(self,problems):
+            one=len(problems)==1
+            dialog=tk.Toplevel(self.window);dialog.withdraw()
+            dialog.title('Optional file not usable' if one else 'Optional files not usable')
+            dialog.configure(bg='#11131b');dialog.resizable(False,False);dialog.transient(self.window)
+            frame=ttk.Frame(dialog,padding=24);frame.pack(fill='both',expand=True)
+            ttk.Label(frame,text=('This optional file cannot be used' if one else 'These optional files cannot be used'),
+                      font=(FONT,13,'bold')).pack(anchor='w',pady=(0,14))
+            for p in problems:
+                ttk.Label(frame,text=p['name'],font=(FONT,10,'bold')).pack(anchor='w')
+                ttk.Label(frame,text=p['path'],style='Muted.TLabel',wraplength=560).pack(anchor='w',pady=(2,6))
+                ttk.Label(frame,text=p['reason']+'\nWithout it, '+p['without'],wraplength=560,justify='left').pack(anchor='w')
+                ttk.Label(frame,text=p['expected'],style='Muted.TLabel',wraplength=560,justify='left').pack(anchor='w',pady=(6,16))
+            ttk.Label(frame,text=f"Continue without {'it' if one else 'them'}, or go back and choose another file?"
+                      if not self.android_only else f"Continue without {'it' if one else 'them'}? (Setup Tekken 3 changes your files.)",
+                      font=(FONT,10,'bold'),wraplength=560).pack(anchor='w',pady=(0,16))
+            answer=[False]
+            def close(value):answer[0]=value;dialog.destroy()
+            buttons=ttk.Frame(frame);buttons.pack(fill='x')
+            back=ttk.Button(buttons,text='Choose another file' if not self.android_only else 'Cancel',style='Play.TButton',command=lambda:close(False))
+            back.pack(side='right')
+            ttk.Button(buttons,text=f"Continue without {'it' if one else 'them'}",command=lambda:close(True)).pack(side='right',padx=(0,9))
+            dialog.protocol('WM_DELETE_WINDOW',lambda:close(False));dialog.bind('<Escape>',lambda e:close(False))
+            dialog.update_idletasks()
+            x=self.window.winfo_rootx()+(self.window.winfo_width()-dialog.winfo_reqwidth())//2
+            y=self.window.winfo_rooty()+(self.window.winfo_height()-dialog.winfo_reqheight())//3
+            dialog.geometry(f'+{max(0,x)}+{max(0,y)}');dialog.deiconify()
+            back.focus_set();dialog.grab_set();self.window.wait_window(dialog)
+            return answer[0]
         def read_events(self,process,epoch):
             for line in process.stdout:
                 try:self.events.put((epoch,json.loads(line)))

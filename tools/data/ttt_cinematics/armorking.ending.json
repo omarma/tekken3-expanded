@@ -1,0 +1,23 @@
+{
+ "about": "Armor King's Tekken Tag Tournament (PS2) ending (scene 18): Armor King and King fight in the ring, blue sparks at each blow (cmd 17 at 231-233 and 936-942), white flashes (324, 724, 946). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md) from the capture, in place of the old hand-made way (TTT Cinematics' ENDINGS; handoff/cine-convert.md, the user's request of 2026-10-13: Michelle's canonical basis and --contacts).",
+ "scene": "armorking",
+ "arena": 11,
+ "dark": 0,
+ "trigger": "arcade-end p1=armorking",
+ "ttt_stage": {"stage": 11,
+               "why": "the PS2 script's stage 11 (scene table 0x51B388), TTT arcade's stage 11: King's ring; every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 11 above"},
+ "spray_colour": "3050ff",
+ "spray_why": "cmd 17's sparks are blue on the PS2 (pictures at 236-265 and 944-963), added: a light blue where they cross",
+ "actors": [
+  {"cast": "armorking", "costume": 0, "skeleton": "armorking",
+   "retarget": ["--basis", "canonical", "--contacts", "--twists", "--collars", "--upper-arms", "--world", "--avoid", "1:340:600-731"],
+   "retarget_why": "--avoid 1:260:600-731: he pulls King's head with both arms round it; his forearms 135-450 from King's head on the PS2 (190 at 720 here) went into Tekken 3's bigger head (the user, 2026-10-22), kept 340 from its centre (260 left the hand on his face at 720: his head 30-65 off the PS2 one, the T3 skull above its bone); moving King instead (nudge) put the head under the other forearm",
+   "why": "TTT costume 4 (his own in the actor list): T3 costume 0, as the old way's"},
+  {"cast": "king", "costume": 0, "skeleton": "armorking", "idle": "roster/King-TTT1-idle.poses",
+   "retarget": ["--calib", "{actor0}", "--contacts", "--twists", "--collars", "--upper-arms"],
+   "why": "the Tekken 3 native on Armor King's TTT1 skeleton (no TTT1 model of his own in the import), his TTT1 stance; TTT costume 2: T3 costume 0"}
+ ],
+ "ignore": [
+  {"task": "0x3a0430", "why": "stage 11 background ambience: born every 32 frames with no script command, lives ~500 frames, always 18 800+ units from both actors (median 21 000); TTT Stages' stage 11 brings its own"}
+ ]
+}

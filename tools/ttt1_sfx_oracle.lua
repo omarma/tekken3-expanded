@@ -82,7 +82,10 @@ ttt1_sfx_frames = emu.add_machine_frame_notifier(function()
             sub:write_u16(0x080200 + 2 * (e[4] - 4), e[2])
         end
         sub:write_u16(pending, e[5] | 0x4000)
-        out:write(string.format('%d,%d,%d,%d,%.6f\n', e[1], e[2], e[3], tick, machine.time:as_double()))
+        -- %.6f follows the C locale MAME runs under: a French Windows writes
+        -- "25,072670", one CSV column too many (TTT Stages S3). Always a dot.
+        local at = string.format('%.6f', machine.time:as_double()):gsub(',', '.')
+        out:write(string.format('%d,%d,%d,%d,%s\n', e[1], e[2], e[3], tick, at))
     end
     if tick == FIRST + #list * STEP + 60 then
         out:write(string.format('blocked,%d\n', blocked))

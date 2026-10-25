@@ -27,7 +27,7 @@
 #include "dma.h"
 #include "gpu.h"
 #include "tekken3_outfits.h"
-#include "gpu_render.h"   /* gr_scale + gr_render_display_hires (screenshot_hires) */
+#include "gpu_render.h"   /* gr_scale + gr_read_display_hires (screenshot_hires) */
 #include "present_ring.h"
 #include "load_transition_ring.h"
 #include "cdrom.h"
@@ -45,6 +45,8 @@
 #include "crash_trace.h"
 #include "gpu_gl_renderer.h"
 #include "lockstep.h"
+#include "gte_precision_diag.h"
+#include "savestate.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -5195,6 +5197,81 @@ static void handle_write_ram(int id, const char *json)
     send_ok(id);
 }
 
+static const char *hires_capture(const char *path, uint32_t *out_w,
+                                 uint32_t *out_h, int *out_scale);
+static const char *wide_capture(const char *path, int *out_w, int *out_h);
+#define DIAG_SITE_JSON_CAP 2560
+
+/* One reading of every precision counter, so geom_correction and capture_plan
+ * report the same fields. All are free-running totals. */
+typedef struct {
+    uint64_t frame;
+    uint32_t lookups, hits, unrec, ambig, persp_sw;
+    uint64_t gp0_draw;
+    uint32_t gte[GTE_PRECISION_DIAG_COUNT];
+    uint32_t gpu[GPU_PRECISION_DIAG_COUNT];
+} PrecisionSample;
+
+static void precision_sample(PrecisionSample *ps)
+{
+    uint64_t nop, fill, env, copy;
+    memset(ps, 0, sizeof(*ps));
+    ps->frame = s_frame_count;
+    gte_geometry_correction_stats(&ps->lookups, &ps->hits, &ps->unrec, &ps->ambig);
+    ps->persp_sw = gpu_texture_correction_hits();
+    gpu_get_gp0_stats(&nop, &fill, &ps->gp0_draw, &env, &copy);
+    gte_precision_diag_stats(ps->gte);
+    gpu_precision_diag_stats(ps->gpu);
+}
+
+static int precision_sample_json(char *out, size_t cap, const PrecisionSample *ps)
+{
+    return snprintf(out, cap,
+        "\"frame\":%llu,\"geometry_vertex_hits\":%u,\"perspective_triangles\":%u,"
+        "\"lookups\":%u,\"miss_unrecorded\":%u,\"miss_ambiguous\":%u,"
+        "\"gp0_draw\":%llu,\"projected_vertices\":%u,"
+        "\"precise_triangles\":%u,\"texture_triangles\":%u,"
+        "\"texture_words_exact\":%u,\"texture_triangles_exact\":%u,"
+        "\"swc2\":%u,\"swc2_invalid\":%u,\"swc2_tracked\":%u,"
+        "\"swc2_scratchpad\":%u,\"swc2_other\":%u,"
+        "\"lwc2\":%u,\"lwc2_scratchpad\":%u,\"lwc2_scratchpad_would_track\":%u,"
+        "\"lwc2_ram_tracked\":%u,"
+        "\"lwc2_sxy\":%u,\"lwc2_sxy_restored\":%u,\"lwc2_sxy_miss_unwritten\":%u,"
+        "\"lwc2_sxy_miss_cpu_store\":%u,\"lwc2_sxy_miss_unprojected\":%u,"
+        "\"lwc2_sxy_miss_value\":%u,\"lwc2_sxy_miss_ram\":%u,"
+        "\"precise_words_exact\":%u,\"precise_triangles_exact\":%u,"
+        "\"precise_triangles_partial\":%u,\"precise_triangles_position\":%u,"
+        "\"precise_words_derived\":%u,\"precise_words_refused\":%u,"
+        "\"lwc2_sxy_restored_derived\":%u,\"cpu_lw\":%u,\"cpu_lw_shadow\":%u,"
+        "\"cpu_sw_shadow\":%u,\"cpu_alu_shadow\":%u,\"store_evicted\":%u,"
+        "\"seam_edges\":%u,\"precise_vertices_merged\":%u,\"native_words\":%u,"
+        "\"precise_rect_quads\":%u,\"cpu_interp\":%u",
+        (unsigned long long)ps->frame, ps->hits, ps->persp_sw,
+        ps->lookups, ps->unrec, ps->ambig,
+        (unsigned long long)ps->gp0_draw, ps->gte[GTE_DIAG_PROJECTED_VERTICES],
+        ps->gpu[GPU_DIAG_PRECISE_TRIANGLES], ps->gpu[GPU_DIAG_TEXTURE_TRIANGLES],
+        ps->gpu[GPU_DIAG_TEXTURE_WORDS_EXACT], ps->gpu[GPU_DIAG_TEXTURE_TRIANGLES_EXACT],
+        ps->gte[GTE_DIAG_SWC2], ps->gte[GTE_DIAG_SWC2_INVALID],
+        ps->gte[GTE_DIAG_SWC2_TRACKED], ps->gte[GTE_DIAG_SWC2_SCRATCH],
+        ps->gte[GTE_DIAG_SWC2_OTHER], ps->gte[GTE_DIAG_LWC2],
+        ps->gte[GTE_DIAG_LWC2_SCRATCH], ps->gte[GTE_DIAG_LWC2_SCRATCH_WOULD_TRACK],
+        ps->gte[GTE_DIAG_LWC2_RAM_TRACKED],
+        ps->gte[GTE_DIAG_LWC2_SXY], ps->gte[GTE_DIAG_LWC2_SXY_RESTORED],
+        ps->gte[GTE_DIAG_LWC2_SXY_MISS_UNWRITTEN], ps->gte[GTE_DIAG_LWC2_SXY_MISS_CPU_STORE],
+        ps->gte[GTE_DIAG_LWC2_SXY_MISS_UNPROJECTED], ps->gte[GTE_DIAG_LWC2_SXY_MISS_VALUE],
+        ps->gte[GTE_DIAG_LWC2_SXY_MISS_RAM],
+        ps->gpu[GPU_DIAG_PRECISE_WORDS_EXACT], ps->gpu[GPU_DIAG_PRECISE_TRIANGLES_EXACT],
+        ps->gpu[GPU_DIAG_PRECISE_TRIANGLES_PARTIAL],
+        ps->gpu[GPU_DIAG_PRECISE_TRIANGLES_POSITION],
+        ps->gpu[GPU_DIAG_PRECISE_WORDS_DERIVED], ps->gpu[GPU_DIAG_PRECISE_WORDS_REFUSED],
+        ps->gte[GTE_DIAG_LWC2_SXY_RESTORED_DERIVED], ps->gte[GTE_DIAG_CPU_LW],
+        ps->gte[GTE_DIAG_CPU_LW_SHADOW], ps->gte[GTE_DIAG_CPU_SW_SHADOW],
+        ps->gte[GTE_DIAG_CPU_ALU_SHADOW], ps->gte[GTE_DIAG_STORE_EVICTED],
+        ps->gpu[GPU_DIAG_SEAM_EDGES], ps->gpu[GPU_DIAG_PRECISE_VERTICES_MERGED],
+        ps->gte[GTE_DIAG_NATIVE_WORDS], ps->gpu[GPU_DIAG_PRECISE_RECT_QUADS],
+        ps->gte[GTE_DIAG_CPU_INTERP]);
+}
+
 /* geom_correction — is [video] geometry_correction / perspective_texturing
  * actually doing anything on THIS title?
  *
@@ -5203,29 +5280,336 @@ static void handle_write_ram(int id, const char *json)
  * packet whose position words lack full GTE projection provenance, simply draws
  * the faithful way. So "enabled" alone tells you nothing — these counters are
  * how you tell an engaged correction from an inert one. Both are free-running
- * totals; sample twice and diff for a per-window rate. */
+ * totals; sample twice and diff for a per-window rate.
+ *
+ * The miss split is the diagnostic that matters. The position table is exact
+ * (one slot per reachable SXY, no hashing), so "unrecorded" means no
+ * projection was EVER cached at that screen position — a real coverage gap in
+ * the tracking, not a cache artifact. A high unrecorded share means the game's
+ * vertex path never reaches us in a matchable form, which only full value
+ * propagation can fix; a high ambiguous share instead means distinct vertices
+ * are landing on the same pixel.
+ *
+ * perspective_triangles counts in the software backend only (0 under OpenGL /
+ * Vulkan); texture_triangles_exact is the renderer-independent count. The
+ * swc2_* / lwc2_* provenance census (ENHANCEMENTS.md G1.10) counts while
+ * perspective_texturing or geometry_correction is on. {"sites":1} adds the
+ * SWC2 sites that stored a projection, by PC. {"misses":1} adds the LWC2
+ * reloads into SXY0-2/SXYP that restored none (G1.11), by LWC2 PC, cause
+ * (unwritten, cpu_store, unprojected, value, ram) and writer PC. The
+ * precise_* fields split geometry-corrected triangles by path: exact
+ * provenance (all three words, or one or two) and the position fallback.
+ * {"tri_sites":1} adds them by the store PC of their first exact word (the
+ * packet builder), and the cpu_* / *_derived fields count the value
+ * propagation of [recompiler] precision_funcs (G1.12). */
 static void handle_geom_correction(int id, const char *json)
 {
-    (void)json;
-    /* The miss split is the diagnostic that matters. The position table is
-     * exact (one slot per reachable SXY, no hashing), so "unrecorded" means no
-     * projection was EVER cached at that screen position — a real coverage gap
-     * in the tracking, not a cache artifact. A high unrecorded share means the
-     * game's vertex path never reaches us in a matchable form, which only
-     * full value propagation can fix; a high ambiguous share instead means
-     * distinct vertices are landing on the same pixel. */
-    uint32_t lookups = 0, hits = 0, unrec = 0, ambig = 0;
-    gte_geometry_correction_stats(&lookups, &hits, &unrec, &ambig);
-    send_fmt("{\"id\":%d,\"ok\":true,"
-             "\"geometry_correction\":%d,"
-             "\"geometry_vertex_hits\":%u,"
-             "\"perspective_triangles\":%u,"
-             "\"lookups\":%u,\"miss_unrecorded\":%u,\"miss_ambiguous\":%u}",
-             id,
-             gte_geometry_correction_enabled(),
-             (unsigned)hits,
-             (unsigned)gpu_texture_correction_hits(),
-             (unsigned)lookups, (unsigned)unrec, (unsigned)ambig);
+    PrecisionSample ps;
+    char body[2560];
+    precision_sample(&ps);
+    precision_sample_json(body, sizeof(body), &ps);
+    char sites[DIAG_SITE_JSON_CAP];
+    sites[0] = '\0';
+    if (json_get_int(json, "sites", 0) > 0) {
+        uint32_t pc[32], count[32];
+        uint8_t scratch[32];
+        int n = gte_precision_diag_sites(pc, count, scratch, 32);
+        size_t pos = (size_t)snprintf(sites, sizeof(sites), ",\"sites_dropped\":%u,\"sites\":[",
+                                      ps.gte[GTE_DIAG_SITES_DROPPED]);
+        for (int i = 0; i < n && pos < sizeof(sites); i++)
+            pos += (size_t)snprintf(sites + pos, sizeof(sites) - pos,
+                                    "%s{\"pc\":\"0x%08X\",\"count\":%u,\"scratchpad\":%d}",
+                                    i ? "," : "", pc[i], count[i], scratch[i]);
+        if (pos < sizeof(sites)) snprintf(sites + pos, sizeof(sites) - pos, "]");
+    }
+    char misses[64 * 96 + 64];
+    misses[0] = '\0';
+    if (json_get_int(json, "misses", 0) > 0) {
+        static const char *const cause_name[] = {
+            "unwritten", "cpu_store", "unprojected", "value", "ram" };
+        uint32_t pc[64], writer[64], count[64];
+        uint8_t cause[64];
+        int n = gte_precision_diag_misses(pc, writer, count, cause, 64);
+        size_t pos = (size_t)snprintf(misses, sizeof(misses),
+                                      ",\"misses_dropped\":%u,\"misses\":[",
+                                      ps.gte[GTE_DIAG_MISSES_DROPPED]);
+        for (int i = 0; i < n && pos < sizeof(misses); i++)
+            pos += (size_t)snprintf(misses + pos, sizeof(misses) - pos,
+                                    "%s{\"pc\":\"0x%08X\",\"cause\":\"%s\","
+                                    "\"writer_pc\":\"0x%08X\",\"count\":%u}",
+                                    i ? "," : "", pc[i],
+                                    cause[i] < 5 ? cause_name[cause[i]] : "?",
+                                    writer[i], count[i]);
+        if (pos < sizeof(misses)) snprintf(misses + pos, sizeof(misses) - pos, "]");
+    }
+    char tri_sites[32 * 64 + 32];
+    tri_sites[0] = '\0';
+    if (json_get_int(json, "tri_sites", 0) > 0) {
+        uint32_t pc[32], exact[32], partial[32];
+        int n = gpu_precision_diag_triangle_sites(pc, exact, partial, 32);
+        size_t pos = (size_t)snprintf(tri_sites, sizeof(tri_sites), ",\"tri_sites\":[");
+        for (int i = 0; i < n && pos < sizeof(tri_sites); i++)
+            pos += (size_t)snprintf(tri_sites + pos, sizeof(tri_sites) - pos,
+                                    "%s{\"pc\":\"0x%08X\",\"exact\":%u,\"partial\":%u}",
+                                    i ? "," : "", pc[i], exact[i], partial[i]);
+        if (pos < sizeof(tri_sites)) snprintf(tri_sites + pos, sizeof(tri_sites) - pos, "]");
+    }
+    char seams[16 * 320 + 32];
+    seams[0] = '\0';
+    if (json_get_int(json, "seams", 0) > 0) {
+        GpuSeamSample sm[16];
+        int n = gpu_precision_diag_seams(sm, 16);
+        size_t pos = (size_t)snprintf(seams, sizeof(seams), ",\"seams\":[");
+        for (int i = 0; i < n && pos < sizeof(seams); i++) {
+            const GpuSeamSample *m = &sm[i];
+            pos += (size_t)snprintf(seams + pos, sizeof(seams) - pos,
+                "%s{\"frame\":%u,\"edge\":[%d,%d,%d,%d],"
+                "\"first\":[%.3f,%.3f,%.3f,%.3f],\"second\":[%.3f,%.3f,%.3f,%.3f],"
+                "\"first_pc\":[\"0x%08X\",\"0x%08X\"],\"second_pc\":[\"0x%08X\",\"0x%08X\"],"
+                "\"first_derived\":[%d,%d],\"second_derived\":[%d,%d]}",
+                i ? "," : "", m->frame, m->x[0], m->y[0], m->x[1], m->y[1],
+                m->first_fx[0] / 65536.0, m->first_fy[0] / 65536.0,
+                m->first_fx[1] / 65536.0, m->first_fy[1] / 65536.0,
+                m->second_fx[0] / 65536.0, m->second_fy[0] / 65536.0,
+                m->second_fx[1] / 65536.0, m->second_fy[1] / 65536.0,
+                m->first_pc[0], m->first_pc[1], m->second_pc[0], m->second_pc[1],
+                m->first_derived[0], m->first_derived[1],
+                m->second_derived[0], m->second_derived[1]);
+        }
+        if (pos < sizeof(seams)) snprintf(seams + pos, sizeof(seams) - pos, "]");
+    }
+    send_fmt("{\"id\":%d,\"ok\":true,\"geometry_correction\":%d,"
+             "\"position_fallback\":%d,\"tracking\":%d,%s%s%s%s%s}",
+             id, gte_geometry_correction_enabled(),
+             gte_geometry_position_fallback_enabled(), g_gte_precision_tracking,
+             body, sites, misses, tri_sites, seams);
+}
+
+/* video_enhancements — switch [video] geometry_correction / perspective_texturing
+ * live, through the same setters main.cpp calls at startup:
+ *   {"cmd":"video_enhancements","geometry_correction":0|1,"perspective_texturing":0|1,
+ *    "geometry_position_fallback":0|1,"geometry_cell_merge":0|1,
+ *    "geometry_seam_census":0|1,"geometry_rect_quads":0|1}
+ * geometry_seam_census (off) turns on the seam census of geom_correction;
+ * geometry_rect_quads (on) draws axis-aligned quads with an exact word as
+ * corrected triangles instead of a rect (G1.14).
+ * The last two have no startup setting: the position-keyed fallback of
+ * geometry correction (G1.11), off by default, and the pixel-cell merge of
+ * corrected vertices (G1.12), on by default. A key left out keeps its
+ * value. For A/B benches that must stay in ONE process:
+ * a save state does not carry host-side mod state (the TTT1 guests' models in
+ * mod memory), so a state reloaded in another launch can lose them. */
+static void handle_video_enhancements(int id, const char *json)
+{
+    extern void gpu_texture_correction_set(int enabled);
+    extern int gpu_texture_correction_enabled(void);
+    int geom = json_get_int(json, "geometry_correction", -1);
+    int persp = json_get_int(json, "perspective_texturing", -1);
+    int fallback = json_get_int(json, "geometry_position_fallback", -1);
+    int cells = json_get_int(json, "geometry_cell_merge", -1);
+    int census = json_get_int(json, "geometry_seam_census", -1);
+    int rects = json_get_int(json, "geometry_rect_quads", -1);
+    if (rects >= 0) gpu_geometry_rect_quads_set(rects);
+    if (census >= 0) gpu_geometry_seam_census_set(census);
+    if (fallback >= 0) gte_geometry_position_fallback_set(fallback);
+    if (cells >= 0) gpu_geometry_cell_merge_set(cells);
+    if (geom >= 0) gte_geometry_correction_set(geom);
+    if (persp >= 0) gpu_texture_correction_set(persp);
+    send_fmt("{\"id\":%d,\"ok\":true,\"geometry_correction\":%d,\"perspective_texturing\":%d,"
+             "\"geometry_position_fallback\":%d,\"geometry_cell_merge\":%d,"
+             "\"geometry_rect_quads\":%d}",
+             id, gte_geometry_correction_enabled(), gpu_texture_correction_enabled(),
+             gte_geometry_position_fallback_enabled(), gpu_geometry_cell_merge_enabled(),
+             gpu_geometry_rect_quads_enabled());
+}
+
+/* capture_plan — frame-exact captures anchored on the next save-state load.
+ *
+ * The same scene can only be compared off vs on if both captures show the
+ * SAME guest frame, and a TCP round trip cannot hit a frame. A load restores
+ * the whole guest, so "K frames after the load completed" is the same guest
+ * frame in every run that loads the same state with the same held input.
+ * Entries are staged before the load and served by debug_server_poll on the
+ * emu thread at s_frame_count == load frame + K:
+ *   {"cmd":"capture_plan","op":"add","after_load":K,"shot":"hires"|"wide"|"none","path":"...",
+ *    "anchor":"frame"|"vblank"}
+ * anchor "frame" (default) counts host frames, served at debug_server_poll.
+ * "vblank" counts guest VBlank raises (interrupts.c), served right at the
+ * raise: the guest is at the same instant in every run. Host frames are not:
+ * the poll lands at a different phase of the guest frame from run to run, and
+ * a single-buffered title (Tekken 3, 480i) is then caught mid-draw.
+ * "armed" counts guest VBlanks from the add itself, no load needed: for a
+ * scene held still by the title or a mod (a frozen frame drawn again each
+ * VBlank), where a state load cannot bring the scene back (host-side state).
+ * "buttons" (hex, as set_input) sets pad 1's override when the entry is
+ * served: an input sequence pinned to guest VBlanks, the same in every run
+ * (a TCP set_input lands a frame or two apart from run to run).
+ *   {"cmd":"capture_plan","op":"status"}   entries with their counter sample
+ *   {"cmd":"capture_plan","op":"clear"}
+ * A "none" entry only samples the counters (geom_correction fields), so two
+ * entries give an exact per-frame rate. */
+#define CAPTURE_PLAN_MAX 64
+typedef struct {
+    int after_load;
+    uint8_t anchor;          /* 0 host frames, 1 guest VBlanks, 2 VBlanks since added */
+    uint64_t armed_vblank;   /* anchor 2: g_vblank_raise_count at the add */
+    int buttons;             /* pad 1 override set when served, -1 none */
+    uint32_t vblank;         /* VBlanks since the load when served */
+    uint8_t shot;            /* 0 none, 1 hires, 2 wide */
+    uint8_t done;
+    uint32_t arm_generation; /* serve after this many completed loads */
+    char path[512];
+    char tri_path[512];      /* G1.12: triangle record of the last two VBlank periods */
+    char error[96];
+    PrecisionSample sample;
+} CapturePlanEntry;
+static CapturePlanEntry s_capture_plan[CAPTURE_PLAN_MAX];
+static int s_capture_plan_count = 0;
+static int s_capture_plan_pending = 0;
+int g_capture_plan_vblank_pending = 0;   /* tested by interrupts.c per VBlank */
+
+/* Serve the due entries of one anchor kind: host frames from
+ * debug_server_poll, guest VBlanks from the VBlank raise. */
+static void capture_plan_serve(int at_vblank)
+{
+    uint64_t load_frame = 0;
+    uint32_t generation = savestate_load_generation(&load_frame);
+    extern uint64_t g_vblank_raise_count;
+    uint64_t vblanks = g_vblank_raise_count - savestate_last_load_vblanks();
+    int pending = 0, vblank_pending = 0;
+    extern int g_gpu_tri_record;
+    extern void gpu_tri_record_vblank(void);
+    extern const char *gpu_tri_record_dump(const char *path);
+    if (at_vblank && g_gpu_tri_record) gpu_tri_record_vblank();
+    for (int i = 0; i < s_capture_plan_count; i++) {
+        CapturePlanEntry *e = &s_capture_plan[i];
+        if (e->done) continue;
+        const int armed = e->anchor == 2;
+        const uint64_t since = armed ? g_vblank_raise_count - e->armed_vblank : vblanks;
+        if ((e->anchor != 0) != (at_vblank != 0) ||
+            (!armed && generation < e->arm_generation) ||
+            (e->anchor ? since < (uint64_t)e->after_load
+                       : s_frame_count < load_frame + (uint64_t)e->after_load)) {
+            pending = 1;
+            if (e->anchor) vblank_pending = 1;
+            continue;
+        }
+        e->vblank = (uint32_t)since;
+        if (e->buttons >= 0) {
+            s_input_override = e->buttons;
+            s_input_frames = 0;
+        }
+        precision_sample(&e->sample);
+        const char *err = NULL;
+        if (e->shot == 1) {
+            uint32_t w, h;
+            int scale;
+            err = hires_capture(e->path, &w, &h, &scale);
+        } else if (e->shot == 2) {
+            int w, h;
+            err = wide_capture(e->path, &w, &h);
+        }
+        if (!err && e->tri_path[0]) err = gpu_tri_record_dump(e->tri_path);
+        if (err) {
+            strncpy(e->error, err, sizeof(e->error) - 1);
+            e->error[sizeof(e->error) - 1] = '\0';
+        }
+        e->done = 1;
+    }
+    s_capture_plan_pending = pending;
+    g_capture_plan_vblank_pending = vblank_pending;
+}
+
+static void capture_plan_poll(void)
+{
+    if (s_capture_plan_pending) capture_plan_serve(0);
+}
+
+void debug_server_capture_plan_vblank(void)
+{
+    capture_plan_serve(1);
+}
+
+static void handle_capture_plan(int id, const char *json)
+{
+    char op[16];
+    if (!json_get_str(json, "op", op, sizeof(op))) { send_err(id, "missing op"); return; }
+    uint64_t load_frame = 0;
+    uint32_t generation = savestate_load_generation(&load_frame);
+    if (!strcmp(op, "clear")) {
+        s_capture_plan_count = 0;
+        s_capture_plan_pending = 0;
+        g_capture_plan_vblank_pending = 0;
+        send_ok(id);
+        return;
+    }
+    if (!strcmp(op, "add")) {
+        if (s_capture_plan_count >= CAPTURE_PLAN_MAX) { send_err(id, "capture plan is full"); return; }
+        int after = json_get_int(json, "after_load", -1);
+        if (after < 0) { send_err(id, "after_load must be >= 0"); return; }
+        char shot[16] = "none";
+        json_get_str(json, "shot", shot, sizeof(shot));
+        CapturePlanEntry *e = &s_capture_plan[s_capture_plan_count];
+        memset(e, 0, sizeof(*e));
+        char anchor[16] = "frame";
+        json_get_str(json, "anchor", anchor, sizeof(anchor));
+        if (!strcmp(anchor, "vblank")) e->anchor = 1;
+        else if (!strcmp(anchor, "armed")) {
+            extern uint64_t g_vblank_raise_count;
+            e->anchor = 2;
+            e->armed_vblank = g_vblank_raise_count;
+        }
+        else if (strcmp(anchor, "frame")) { send_err(id, "anchor must be frame|vblank|armed"); return; }
+        if (!strcmp(shot, "hires")) e->shot = 1;
+        else if (!strcmp(shot, "wide")) e->shot = 2;
+        else if (strcmp(shot, "none")) { send_err(id, "shot must be hires|wide|none"); return; }
+        if (e->shot && !json_get_str(json, "path", e->path, sizeof(e->path))) {
+            send_err(id, "missing path"); return;
+        }
+        char buttons[32];
+        e->buttons = json_get_str(json, "buttons", buttons, sizeof(buttons))
+                         ? (int)hex_to_u32(buttons) : -1;
+        if (json_get_str(json, "triangles", e->tri_path, sizeof(e->tri_path))) {
+            extern int g_gpu_tri_record;
+            if (!e->anchor) { send_err(id, "triangles needs anchor vblank"); return; }
+            g_gpu_tri_record = 1;
+        }
+        e->after_load = after;
+        e->arm_generation = generation + 1;
+        s_capture_plan_count++;
+        s_capture_plan_pending = 1;
+        if (e->anchor) g_capture_plan_vblank_pending = 1;
+        send_fmt("{\"id\":%d,\"ok\":true,\"entries\":%d,\"armed_for_load\":%u}",
+                 id, s_capture_plan_count, e->arm_generation);
+        return;
+    }
+    if (strcmp(op, "status")) { send_err(id, "op must be add|status|clear"); return; }
+    size_t cap = 512u + (size_t)s_capture_plan_count * 3328u;
+    char *out = (char *)malloc(cap);
+    if (!out) { send_err(id, "oom"); return; }
+    size_t pos = (size_t)snprintf(out, cap,
+        "{\"id\":%d,\"ok\":true,\"frame\":%llu,\"loads\":%u,\"last_load_frame\":%llu,"
+        "\"pending\":%d,\"entries\":[",
+        id, (unsigned long long)s_frame_count, generation,
+        (unsigned long long)load_frame, s_capture_plan_pending);
+    for (int i = 0; i < s_capture_plan_count && pos < cap; i++) {
+        const CapturePlanEntry *e = &s_capture_plan[i];
+        pos += (size_t)snprintf(out + pos, cap - pos,
+            "%s{\"after_load\":%d,\"anchor\":\"%s\",\"vblank\":%u,\"shot\":\"%s\","
+            "\"path\":\"%s\",\"done\":%d,\"error\":\"%s\"",
+            i ? "," : "", e->after_load,
+            e->anchor == 2 ? "armed" : e->anchor ? "vblank" : "frame", e->vblank,
+            e->shot == 1 ? "hires" : e->shot == 2 ? "wide" : "none",
+            e->path, e->done, e->error);
+        if (e->done && pos < cap) {
+            out[pos++] = ',';
+            pos += (size_t)precision_sample_json(out + pos, cap - pos, &e->sample);
+        }
+        if (pos < cap) out[pos++] = '}';
+    }
+    if (pos < cap) snprintf(out + pos, cap - pos, "]}");
+    debug_server_send_line(out);
+    free(out);
 }
 
 static void handle_gpu_state(int id, const char *json)
@@ -8685,18 +9069,22 @@ static void handle_screenshot_file(int id, const char *json)
  * clean frame while the player is looking at a broken one — which is exactly
  * how the geometry-correction cracking got mis-reported as fixed.
  *
- * This routes the same present path the window uses (gr_render_display_hires),
- * so what lands in the PNG is what the player sees. Falls back to the native
- * resolve when no hi-res surface exists (supersampling 1 / software), so the
- * command always answers with something truthful about the actual output. */
-static void handle_screenshot_hires(int id, const char *json)
+ * This reads the surface the 4:3 window presents (gr_read_display_hires): the
+ * software mirror on the software backend, the supersampled VRAM FBO read back
+ * on OpenGL (before 2026-10-19 OpenGL answered from the software mirror,
+ * which it does not keep, and the PNG was the native image). Falls back to
+ * the native resolve when no hi-res surface exists (supersampling 1, Vulkan),
+ * so the command always answers with something truthful about the actual
+ * output. In 16:9 the surface is the 4:3 centre; wide_shot has the margins. */
+/* Capture the supersampled display to `path`. NULL on success, else the
+ * reason. Shared by screenshot_hires and capture_plan. */
+static const char *hires_capture(const char *path, uint32_t *out_w,
+                                 uint32_t *out_h, int *out_scale)
 {
     GpuDisplayInfo di;
     gpu_get_display_info(&di);
-    if (di.disabled || di.width == 0 || di.height == 0) {
-        send_err(id, "display disabled"); return;
-    }
-    if (di.depth24) { send_err(id, "24bpp scanout (unsupported)"); return; }
+    if (di.disabled || di.width == 0 || di.height == 0) return "display disabled";
+    if (di.depth24) return "24bpp scanout (unsupported)";
 
     int scale = gr_scale();
     if (scale < 1) scale = 1;
@@ -8705,26 +9093,23 @@ static void handle_screenshot_hires(int id, const char *json)
     if (h > 512) h = 512;
     uint32_t ow = w * (uint32_t)scale, oh = h * (uint32_t)scale;
 
-    char path[512];
-    if (!json_get_str(json, "path", path, sizeof(path)))
-        strncpy(path, "psx_screenshot_hires.png", sizeof(path) - 1);
-    path[sizeof(path) - 1] = '\0';
-
     uint32_t *argb = (uint32_t *)malloc((size_t)ow * oh * sizeof(uint32_t));
-    if (!argb) { send_err(id, "alloc failed"); return; }
-    int got = gr_render_display_hires(argb, (int)ow, (int)di.display_x,
-                                      (int)di.display_y, (int)w, (int)h);
+    if (!argb) return "alloc failed";
+    /* out_pitch is in BYTES (gpu_render.h); passing the width in pixels
+     * wrote 4 squeezed copies of the top quarter (fixed 2026-10-18). */
+    int got = gr_read_display_hires(argb, (int)(ow * sizeof(uint32_t)), (int)di.display_x,
+                                    (int)di.display_y, (int)w, (int)h);
     if (!got) {
         /* No hi-res surface (scale 1, or a backend without one): resolve the
          * native display instead and say so, rather than emitting a blank. */
         scale = 1; ow = w; oh = h;
-        got = gr_render_display(argb, (int)ow, (int)di.display_x,
+        got = gr_render_display(argb, (int)(ow * sizeof(uint32_t)), (int)di.display_x,
                                 (int)di.display_y, (int)w, (int)h);
-        if (!got) { free(argb); send_err(id, "no display surface"); return; }
+        if (!got) { free(argb); return "no display surface"; }
     }
 
     uint8_t *rgb = (uint8_t *)malloc((size_t)ow * oh * 3);
-    if (!rgb) { free(argb); send_err(id, "alloc failed"); return; }
+    if (!rgb) { free(argb); return "alloc failed"; }
     for (size_t i = 0; i < (size_t)ow * oh; i++) {
         uint32_t p = argb[i];
         rgb[i * 3 + 0] = (uint8_t)((p >> 16) & 0xFF);
@@ -8734,12 +9119,25 @@ static void handle_screenshot_hires(int id, const char *json)
     free(argb);
 
     FILE *f = fopen(path, "wb");
-    if (!f) { free(rgb); send_err(id, "cannot open file"); return; }
+    if (!f) { free(rgb); return "cannot open file"; }
     int ok = png_write_rgb(f, rgb, ow, oh);
     free(rgb);
     fclose(f);
-    if (!ok) { send_err(id, "png encode failed"); return; }
+    if (!ok) return "png encode failed";
+    *out_w = ow; *out_h = oh; *out_scale = scale;
+    return NULL;
+}
 
+static void handle_screenshot_hires(int id, const char *json)
+{
+    char path[512];
+    if (!json_get_str(json, "path", path, sizeof(path)))
+        strncpy(path, "psx_screenshot_hires.png", sizeof(path) - 1);
+    path[sizeof(path) - 1] = '\0';
+    uint32_t ow = 0, oh = 0;
+    int scale = 1;
+    const char *err = hires_capture(path, &ow, &oh, &scale);
+    if (err) { send_err(id, err); return; }
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\",\"width\":%u,"
              "\"height\":%u,\"scale\":%d}", id, path, ow, oh, scale);
 }
@@ -8789,7 +9187,9 @@ static void handle_dump_buffer(int id, const char *json)
  * present path uses (gr_render_wide_display into a scratch buffer), so the dump
  * reflects the composited wide frame 1:1, orientation included. Errors if the
  * active backend has no wide compositor or native-wide isn't engaged. */
-static void handle_wide_shot(int id, const char *json)
+/* Capture what the player sees in native-wide 16:9 to `path`. NULL on
+ * success, else the reason. Shared by wide_shot and capture_plan. */
+static const char *wide_capture(const char *path, int *out_w, int *out_h)
 {
     extern int gr_wide_supported(void);
     extern int gr_scale(void);
@@ -8798,9 +9198,9 @@ static void handle_wide_shot(int id, const char *json)
     extern void gl_renderer_sync_cpu(void);
     gl_renderer_sync_cpu();   /* no-op on SW / when no GL frame pending */
 
-    if (!gr_wide_supported()) { send_err(id, "active backend has no wide compositor"); return; }
+    if (!gr_wide_supported()) return "active backend has no wide compositor";
     int extra = ws_nw_extra();
-    if (extra <= 0) { send_err(id, "native-wide not engaged (extra=0; need a wide game frame)"); return; }
+    if (extra <= 0) return "native-wide not engaged (extra=0; need a wide game frame)";
 
     /* Debug requests can arrive after an offscreen upload disabled the draw
      * target, before main's present hook restores the UI authority flags.
@@ -8813,27 +9213,22 @@ static void handle_wide_shot(int id, const char *json)
 
     GpuDisplayInfo di;
     gpu_get_display_info(&di);
-    if (di.disabled || di.width == 0 || di.height == 0) { send_err(id, "display disabled"); return; }
+    if (di.disabled || di.width == 0 || di.height == 0) return "display disabled";
 
     int scale = gr_scale(); if (scale < 1) scale = 1;
     int present_w = (int)di.width + extra;
     int W = present_w * scale, H = (int)di.height * scale;
 
-    char path[512];
-    if (!json_get_str(json, "path", path, sizeof(path)))
-        strncpy(path, "psx_wide.png", sizeof(path) - 1);
-    path[sizeof(path) - 1] = '\0';
-
     uint32_t *buf = (uint32_t *)malloc((size_t)W * H * sizeof(uint32_t));
-    if (!buf) { send_err(id, "alloc failed"); return; }
+    if (!buf) return "alloc failed";
     int n = gr_render_wide_display(buf, W * (int)sizeof(uint32_t),
                                    (int)di.display_x, (int)di.display_y, (int)di.height);
-    if (n <= 0) { free(buf); send_err(id, "no wide surface for displayed buffer"); return; }
+    if (n <= 0) { free(buf); return "no wide surface for displayed buffer"; }
 
     /* ARGB8888 (0xAARRGGBB) -> RGB, written in the buffer's row order (so the
      * PNG shows exactly the present orientation — the point of this probe). */
     uint8_t *rgb = (uint8_t *)malloc((size_t)W * H * 3);
-    if (!rgb) { free(buf); send_err(id, "alloc failed"); return; }
+    if (!rgb) { free(buf); return "alloc failed"; }
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             uint32_t px = buf[(size_t)y * W + x];
@@ -8845,10 +9240,23 @@ static void handle_wide_shot(int id, const char *json)
     }
     free(buf);
     FILE *f = fopen(path, "wb");
-    if (!f) { free(rgb); send_err(id, "cannot open file"); return; }
+    if (!f) { free(rgb); return "cannot open file"; }
     int ok = png_write_rgb(f, rgb, (uint32_t)W, (uint32_t)H);
     free(rgb); fclose(f);
-    if (!ok) { send_err(id, "png encode failed"); return; }
+    if (!ok) return "png encode failed";
+    *out_w = W; *out_h = H;
+    return NULL;
+}
+
+static void handle_wide_shot(int id, const char *json)
+{
+    char path[512];
+    if (!json_get_str(json, "path", path, sizeof(path)))
+        strncpy(path, "psx_wide.png", sizeof(path) - 1);
+    path[sizeof(path) - 1] = '\0';
+    int W = 0, H = 0;
+    const char *err = wide_capture(path, &W, &H);
+    if (err) { send_err(id, err); return; }
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\",\"width\":%d,\"height\":%d}",
              id, path, W, H);
 }
@@ -13322,6 +13730,8 @@ static const CmdEntry s_commands[] = {
     { "write_ram",         handle_write_ram },
     { "gpu_state",         handle_gpu_state },
     { "geom_correction",   handle_geom_correction },
+    { "capture_plan",      handle_capture_plan },
+    { "video_enhancements", handle_video_enhancements },
     { "ws_aspect_cone_site", handle_ws_aspect_cone_site },
     { "ws_margin",         handle_ws_margin },
     { "ws_hud_mode",       handle_ws_hud_mode },
@@ -14165,6 +14575,8 @@ void debug_server_poll(void)
     starvation_watchdog_heartbeat();
 
     if (!s_io_mutex || s_in_command) return;   /* no server, or re-entrant */
+
+    capture_plan_poll();   /* frame-exact staged captures (capture_plan) */
 
     SDL_LockMutex(s_io_mutex);
     if (s_io_state != IO_REQ) { SDL_UnlockMutex(s_io_mutex); return; }

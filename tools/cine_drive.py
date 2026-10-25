@@ -32,16 +32,20 @@ EXE = 'Tekken_3_Expanded.exe' if os.name == 'nt' else 'Tekken_3_Expanded'
 
 
 class Game:
-    def __init__(self, build, out, env, visible):
+    def __init__(self, build, out, env, visible, video=(), mods_state=None):
         self.dir = Path(tempfile.mkdtemp(prefix='cine-drive-'))
         run, saves = self.dir / 'run', self.dir / 'saves'
         run.mkdir(); (saves / 'openbios').mkdir(parents=True)
         shutil.copy2(build / EXE, run / EXE)
         for name in ('bios', 'mods', 'assets'):
             if (build / name).is_dir(): shutil.copytree(build / name, run / name)
+        # mods_state: the copy's mods/state.toml (which mods and options are on) in place of the build's
+        if mods_state is not None: (run / 'mods' / 'state.toml').write_text(mods_state)
         for card in ('card1.mcd', 'card2.mcd'):
             if (ROOT / 'saves' / card).is_file(): shutil.copy2(ROOT / 'saves' / card, saves / card)
-        (run / 'settings.toml').write_text('[video]\nsupersampling=1\nantialiasing=false\n'
+        # video: KEY=VALUE lines of [video] in place of the light defaults (a film's supersampling)
+        v = dict(supersampling='1', antialiasing='false'); v.update(kv.split('=', 1) for kv in video)
+        (run / 'settings.toml').write_text('[video]\n' + ''.join(f'{k}={x}\n' for k, x in v.items()) +
                                            '[controller]\np1_device="keyboard"\np2_device="none"\n')
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0)); self.port = listener.getsockname()[1]

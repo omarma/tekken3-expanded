@@ -6,6 +6,7 @@
 #include "psx_sha256.h"
 #include "psx_sdl.h"
 #include "tekken3_ttt1_assets.h"
+#include "tekken3_stage_source.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,6 +123,7 @@ const char *tekken3_ttt1_asset_root(void) {
     return path;
 }
 extern void tekken3_ttt1_combat_tick(void);
+extern void tekken3_ttt1_ball_sword_tick(void);
 extern void tekken3_ttt1_selector_tick(void);
 extern void tekken3_ttt1_voices_tick(void);
 extern int tekken3_ttt1_roster_enabled(void);
@@ -154,46 +156,17 @@ void tekken3_ttt1_before_init(uint32_t model) {
 }
 void tekken3_ttt1_after_init(void) { if(initializing>0) initializing--; }
 
-/* A cutscene of ours (src/tekken3_embu_scenes.c) may draw a player with
- * other model files than its guest's own, changing from one of its frames
- * on (TEKKEN3_EMBU_MODEL_P1 / _P2: "Prefix@frame,..."): Jin, then Devil Jin,
- * in Kazuya's TTT ending. */
-typedef struct { int frame; char prefix[40]; } ModelStep;
-static ModelStep model_steps[2][8];
-static int model_step_count[2]={-1,-1};
-/* Another cutscene selected (a TTT ending's own TEKKEN3_EMBU_MODEL_P1 / _P2): read again. */
-void tekken3_ttt1_embu_models_reset(void) { model_step_count[0]=model_step_count[1]=-1; }
+/* A cinematic may draw a player with other model files than its guest's
+ * own, changing from one of its frames on (the engine's `model` steps,
+ * src/tekken3_cine.c): Jin, then Devil Jin, in Kazuya's TTT ending; NULL
+ * for its own. */
 extern int tekken3_cine_frame(void);
 extern int tekken3_cine_pending(void);
 extern const char *tekken3_cine_model(unsigned player,int *known);
 static const char *embu_model(unsigned player) {
     int known;
-    const char *engine=tekken3_cine_model(player,&known);   /* the cinematic engine's (src/tekken3_cine.c) */
-    if(known)return engine;
-    if(model_step_count[player]<0) {
-        model_step_count[player]=0;
-        const char *e=getenv(player?"TEKKEN3_EMBU_MODEL_P2":"TEKKEN3_EMBU_MODEL_P1");
-        char list[512];
-        if(e && snprintf(list,sizeof list,"%s",e)<(int)sizeof list)
-            for(char *s=strtok(list,",");s && model_step_count[player]<8;s=strtok(NULL,",")) {
-                char *at=strchr(s,'@');if(!at)continue;*at=0;
-                ModelStep *m=&model_steps[player][model_step_count[player]++];
-                snprintf(m->prefix,sizeof m->prefix,"%s",s);m->frame=atoi(at+1);
-                fprintf(stderr,"TTT1 Embu: P%u drawn with %s from frame %d\n",player+1,m->prefix,m->frame);
-            }
-    }
-    int frame=tekken3_cine_frame();
-    /* The fight an ending cutscene of ours plays in loads its guests with
-     * the first model files already: the cutscene then changes only
-     * textures. */
-    if(frame<0 && psx_mod_read_word(0x800ae204)!=6 && tekken3_cine_pending())frame=0;
-    if(!model_step_count[player] || frame<0)return NULL;
-    /* The first files before the first step: the reload happens at frame 0
-     * and the first step is later (JinPlain@14 in Kazuya's ending), so P2
-     * loaded Devil's geometry and then took JinPlain's textures. */
-    const char *out=model_steps[player][0].prefix;
-    for(int i=0;i<model_step_count[player];i++)if(frame>=model_steps[player][i].frame)out=model_steps[player][i].prefix;
-    return out;
+    const char *engine=tekken3_cine_model(player,&known);
+    return known?engine:NULL;
 }
 static const char *model_prefix(unsigned player) {
     const char *m=player<2?embu_model(player):NULL;
@@ -230,13 +203,15 @@ static unsigned tim_image(const GuestModel *m,unsigned x,unsigned y,unsigned w,u
     }
     return 0;
 }
-/* The costume's face expressions, if it has any (no file: Kunimitsu, the Jacks...). */
+/* The costume's face expressions, if it has any (no file: Kunimitsu, the Jacks...),
+ * beside the model actually loaded: a cinematic's `model` step brings its own
+ * (Jin's in the TTT endings, tools/ttt1_devil_jin.py --eyes). */
 static void read_face(unsigned player,const char *root,unsigned costume) {
     GuestModel *m=&models[player];
     unsigned char b[4+2*(6+2*FACE_MAX+2)];
     char path[4096];
     m->face_count=0;m->face_image[0]=0;
-    if(snprintf(path,sizeof path,"%s/%s-arcade-P%u.face",root,data_prefix(player),costume)>=(int)sizeof path)return;
+    if(snprintf(path,sizeof path,"%s/%s-arcade-P%u.face",root,model_prefix(player),costume)>=(int)sizeof path)return;
     FILE *f=fopen(path,"rb");
     if(!f)return;
     size_t n=fread(b,1,sizeof b,f);fclose(f);
@@ -387,8 +362,9 @@ static int native_moves_player(unsigned player) {
      * numbers: on his TTT1 alias table they fell to his stance, and he
      * stood in guard while Heihachi was lifted. */
     unsigned phase=psx_mod_read_half(0x800ae224);
-    /* Not on a cutscene of ours on those phases (a TTT ending): its native
-     * partner (King beside Armor King) plays its TTT1 clips there. */
+    /* Not on a cinematic of the engine, which holds phase 17 (a TTT
+     * ending): its natives (King beside Armor King) play their poses
+     * through the TTT1 decoder there. */
     if(psx_mod_read_word(0x800ae204)==8 && (phase==16 || phase==17) && !tekken3_cine_pending())return 0;
     return id<23 && psx_mod_read_half(0x800a9240+player*0x188c)==id;
 }
@@ -416,9 +392,10 @@ static uint16_t half(const unsigned char *p) { return p[0] | (uint16_t)p[1]<<8; 
  * intro to K.O.; Practice, Tekken Ball, Tekken Force too); every costume
  * fits. make_packets_native() points their faces there. x 800..863, used
  * before, is read by the arenas: the tiles spoiled their scenery.
- * Two 32-wide columns in the one page; the first stops at row 224, where
- * player 1's command icons go (icon_tick); every costume still fits. */
-enum { BAND_ROWS=224, MOVE_X0=960, MOVE_Y0=0, MOVE_Y1=256, MOVE_ICONS_Y=224, MOVE_MAX=32 };
+ * Two 32-wide columns in the one page; both stop at row 224, where player
+ * 1's command icons go (icon_tick: 35 wide, into the second column, B89);
+ * every costume still fits (the second column's tallest, 176 rows). */
+enum { BAND_ROWS=224, MOVE_X0=960, MOVE_Y0=0, MOVE_ICONS_Y=224, MOVE_MAX=32 };
 typedef struct { unsigned bx,by,w,h,nx,ny; } MovedTile;
 static MovedTile moved[2][MOVE_MAX];
 static unsigned moved_count[2];
@@ -440,7 +417,7 @@ static void plan_moves(unsigned player) {
         /* Shelf per column: tiles stack downwards; a column is 32 wide. */
         int placed=0;
         for(unsigned c=0;c<2 && !placed;c++) {
-            if(w>32 || column_y[c]+h>(c?MOVE_Y1:MOVE_ICONS_Y) || moved_count[player]>=MOVE_MAX)continue;
+            if(w>32 || column_y[c]+h>MOVE_ICONS_Y || moved_count[player]>=MOVE_MAX)continue;
             moved[player][moved_count[player]++]=(MovedTile){x%64,by,w,h,MOVE_X0+c*32,column_y[c]};
             column_y[c]+=h;placed=1;
         }
@@ -467,7 +444,7 @@ static const MovedTile *moved_tile(unsigned player,unsigned bx,unsigned by,unsig
  * fight and loading states), except where something else wrote since. The
  * tiles go up again when the fight shows (state 8, phase 6 on). */
 typedef struct { unsigned x,y,w,h; } MoveArea;
-static const MoveArea move_areas[2]={{MOVE_X0,MOVE_Y0,32,MOVE_ICONS_Y-MOVE_Y0},{MOVE_X0+32,MOVE_Y0,32,MOVE_Y1-MOVE_Y0}};
+static const MoveArea move_areas[2]={{MOVE_X0,MOVE_Y0,32,MOVE_ICONS_Y-MOVE_Y0},{MOVE_X0+32,MOVE_Y0,32,MOVE_ICONS_Y-MOVE_Y0}};
 static uint16_t move_under[2][32*256],move_written[2][32*256];
 static int moved_up;
 static void moved_save_under(void) {
@@ -489,12 +466,17 @@ void tekken3_ttt1_moved_tiles_hide(void) {
 }
 /* The COMMAND LIST (Start in any fight) and COMBO TRAINING's row of inputs
  * draw their button and arrow icons from a sheet the game keeps in player 1's
- * texture band, VRAM (384..413, 224..255): buttons u 0..39, arrows
+ * texture band, VRAM (384..418, 224..255): buttons u 0..39, arrows
  * u 40..119, 4bpp, CLUTs x 768..1023, y 508..510 (COMBO TRAINING's
- * blue arrows read x 848). Most guest costumes cover
+ * blue arrows read x 848); the Practice menu's QUICK ROLL triangles, up
+ * u 120..129 and down u 130..139, v 224..239, CLUT (432, 504), (416, 504)
+ * on the highlighted line: the sheet stopped at u 119 and they showed the
+ * costume (B89). Every CLUT of rows 504..510 from x 384 (the menus' and the
+ * HUD's) is let through: page 6 v 224..255 is this sheet for any of them.
+ * Most guest costumes cover
  * it, and COMBO TRAINING shows the row while player 1 fights, so the sheet
- * cannot come back to its place. It is saved before player 1's costume first
- * lands, copied to (960, 224), under player 2's moved tiles in the page no
+ * cannot come back to its place. It is saved before player 1's costumes
+ * land, copied to (960, 224), under player 2's moved tiles in the page no
  * fight uses (plan_moves), and the GPU reads the icons there while player 1
  * is a guest: same page row, so v does not move. (896, 288), used before, is
  * no arena's but is the common hit spark's texture (0x800766B4, table
@@ -506,26 +488,33 @@ void tekken3_ttt1_moved_tiles_hide(void) {
  * the area in the
  * costume fold instead costs every guest colours, and Kunimitsu no longer
  * fits at all. */
-enum { ICON_X=384, ICON_Y=224, ICON_W=30, ICON_H=32, ICON_NX=MOVE_X0, ICON_NY=MOVE_ICONS_Y };
+enum { ICON_X=384, ICON_Y=224, ICON_W=35, ICON_H=32, ICON_NX=MOVE_X0, ICON_NY=MOVE_ICONS_Y };
 static uint16_t icon_sheet[ICON_W*ICON_H], icon_costume[ICON_W*ICON_H], icon_under[ICON_W*ICON_H];
-static int icon_saved, icon_moved;
+static int icon_saved, icon_moved, icon_seen;
 static void icon_release(void) {
     if(!icon_moved)return;
     psx_mod_gpu_texture_alias(0,0,0,0,0,0,0,0,0,0,0,0);
     gr_vram_transfer_in(ICON_NX,ICON_NY,ICON_W,ICON_H,icon_under);
     icon_moved=0;
 }
+/* The game puts its sheet back whole (35 x 32) at the modes menu; until then
+ * the triangles' part is empty: in the attract (title, demo fights, Embu),
+ * where guests fight as player 1 too. The sheet is therefore taken again
+ * before each of player 1's costumes whenever the area no longer holds what
+ * the last costume left there; a sheet kept from the attract had no
+ * triangles (B89). A re-upload in the same fight finds the costume, and
+ * keeps the sheet. */
 static void icon_before_upload(unsigned player) {
     if(player!=0)return;
     icon_release();
-    if(!icon_saved)gr_vram_transfer_out(ICON_X,ICON_Y,ICON_W,ICON_H,icon_sheet);
+    static uint16_t now[ICON_W*ICON_H];
+    gr_vram_transfer_out(ICON_X,ICON_Y,ICON_W,ICON_H,now);
+    if(!icon_seen || memcmp(now,icon_costume,sizeof now))memcpy(icon_sheet,now,sizeof now);
 }
 static void icon_after_upload(unsigned player) {
-    if(player!=0 || icon_saved)return;
-    /* A re-upload in the same fight reads back the costume, not the sheet:
-     * the sheet is the one the game left there, so keep it only if the
-     * costume changed the area. */
+    if(player!=0)return;
     gr_vram_transfer_out(ICON_X,ICON_Y,ICON_W,ICON_H,icon_costume);
+    icon_seen=1;
     icon_saved=memcmp(icon_sheet,icon_costume,sizeof icon_sheet)!=0;
 }
 /* Start + Select from the COMMAND LIST changes the state at once, but the list
@@ -541,17 +530,24 @@ static unsigned icon_hold(void) {
     }
     return v;
 }
+/* The game is in state 8, phase 1, for a few frames between the selector and
+ * the loading screen, and the selector still draws then: the spot is the
+ * bottom of Bryan's and Heihachi's icons (u 128 and 160, v 198..255), which
+ * showed the command icons after a fight with a guest as player 1 (B84). The
+ * sheet goes up once the fight shows (phase 6 on, as moved_tick) and stays
+ * for the rest of state 8. */
 static void icon_tick(void) {
     static unsigned away;
     unsigned state=psx_mod_read_word(0x800ae204);
-    int on=icon_saved && state==8 && guest_player(0) && original_base[0];
+    int fight=state==8 && (icon_moved || psx_mod_read_half(0x800ae224)>=6);
+    int on=icon_saved && fight && guest_player(0) && original_base[0];
     if(on || state==8)away=0;
     if(icon_moved && !on && state!=8 && guest_player(0) && ++away<=icon_hold())return;
     if(on && !icon_moved) {
         /* Rewritten at each fight: loading screens may use the spot. */
         gr_vram_transfer_out(ICON_NX,ICON_NY,ICON_W,ICON_H,icon_under);
         gr_vram_transfer_in(ICON_NX,ICON_NY,ICON_W,ICON_H,icon_sheet);
-        psx_mod_gpu_texture_alias(1,ICON_X/64,0,ICON_Y,ICON_W*4-1,ICON_Y+ICON_H-1,768,508,1023,510,
+        psx_mod_gpu_texture_alias(1,ICON_X/64,0,ICON_Y,ICON_W*4-1,ICON_Y+ICON_H-1,384,504,1023,510,
                                   ICON_NX/64,ICON_NY-ICON_Y);
         icon_moved=1;
     } else if(!on)icon_release();
@@ -938,9 +934,14 @@ static void face_set(unsigned player,unsigned expression,unsigned duration) {
     /* An expression the costume lacks changes nothing, as 80104CE0. */
     if(expression<=models[player].face_count)face_state[player].expression=expression;
 }
+extern int tekken3_cine_eyes(unsigned player);
 void tekken3_ttt1_face_tick(unsigned player,int advanced,int expression,unsigned duration,unsigned flag) {
     GuestModel *m=&models[player];
     if(player>1 || !control || !m->face_image[0])return;
+    /* A cinematic's `eyes` (src/tekken3_cine.c): closed is the costume's
+     * blink image, held; open the plain face, without blinking. */
+    int eyes=tekken3_cine_eyes(player);
+    if(eyes>=0) { face_state[player].expression=eyes?m->face_blink:0; face_state[player].timer=0; advanced=0; }
     if(advanced) {
         static uint32_t seed=0x3039;
         if(expression>=0)face_set(player,(unsigned)expression,duration);
@@ -1133,9 +1134,11 @@ static unsigned hand_index(int16_t gauge) {
  * vertex lists: Kunimitsu's). The further its vertices from the bone on average, the more
  * open the hand. The pose whose closure (0 the table's most open .. 1 its tightest) is
  * nearest the level's is the one shown; measured once per table. */
+static unsigned hand_epoch;         /* another model in place (a cinematic's `swap`): measured again */
 static unsigned hand_pose(uint32_t table,int level) {
     static struct { uint32_t table; float closure[4]; int ok; } seen[16];
-    static unsigned next;
+    static unsigned next,epoch;
+    if(epoch!=hand_epoch) { epoch=hand_epoch; memset(seen,0,sizeof seen); }
     unsigned k=0;
     while(k<16 && seen[k].table!=table)k++;
     if(k==16) {
@@ -1653,6 +1656,34 @@ static void player_tick(unsigned player) {
     psx_mod_write_word(control+8,psx_mod_read_word(control+8)+1);
     fprintf(stderr,"%s model: P%u Jin model header replaced at %08X\n",name_for(player),player+1,base);
 }
+/* A cinematic changed this player's character (src/tekken3_cine.c, `swap`)
+ * and the game has just loaded its files, in the middle of a frame: a guest
+ * is grafted now, not at the next tick, or the frame would draw stock Jin.
+ * Its model read again (tekken3_guest_follow moved its generation); a graft
+ * of the guest before it on the same Jin envelope (no file changed, the
+ * loader left it) gives the stock header back first. */
+void tekken3_ttt1_guest_now(unsigned player) {
+    if(player>1 || !control)return;
+    hand_epoch++;
+    /* Followed again whatever its generation: the guest tick may have read
+     * it during the load, with the segment before (a preload's real reads
+     * last ~30 frames), and the same files are not read twice anyway. */
+    models[player].generation=~0u;
+    follow_models();
+    if(!guest_player(player))return;
+    uint32_t base=psx_mod_read_word(0x8009bd28u+player*4);
+    if(base==original_base[player] && psx_mod_read_word(base+24)!=base+0x620)
+        for(unsigned i=0;i<384;i++)psx_mod_write_word(base+i*4,original_header[player][i]);
+    psx_mod_write_byte(control,1); psx_mod_write_byte(control+12,2);   /* a guest in the fight (tekken3_ttt1_select) */
+    player_tick(player);
+}
+/* The player's actor is drawn with its guest's rows (src/tekken3_ttt1_wolf.c). */
+int tekken3_ttt1_guest_grafted(unsigned player) {
+    if(player>1 || !control || !models[player].first_block || !guest_player(player))return 0;
+    uint32_t base=psx_mod_read_word(0x8009bd28u+player*4);
+    return base>=0x80100000 && base<=0x801f8000 &&
+        psx_mod_read_word(base+24)==models[player].memory+models[player].first_block;
+}
 /* Attract-mode Embu (state 6) with guests. The launcher's Embu TTT feature
  * (one choice per native of the Embu) or TEKKEN3_EMBU_CAST, which wins, lists
  * native=guest pairs by key, e.g. "hwoarang=baek,jin=kazuya". The Embu keeps
@@ -1763,24 +1794,57 @@ void __wrap_func_8003172C(CPUState *cpu) {
     }
     __real_func_8003172C(cpu);
 }
-extern void tekken3_embu_scenes_tick(void);
+/* The Supercharge's glows (0x800707F4, an effect on limb 6 or 10) sit on the
+ * fist: the hand bone plus a vector of the 21-entry table 0x80025334 + 16 x
+ * the actor's ID (+0x18), turned by the hand's matrix. A guest's ID (23 on)
+ * read past it, a different stray vector for each guest (B66, GH#123). TTT1
+ * does the same (80157650) with its own table, 80023084 + 16 x the fighter's
+ * body code: (80, 0, 0) on both hands for every guest's body but Roger and
+ * Alex (17: 58), Tetsujin (15) and Unknown (33: 90). On the continuations
+ * after the turn (0x800708F0 bone 6, 0x800709B4 bone 10: actor in s0, the
+ * turned vector at sp + 0x10), a guest's is replaced by TTT1's, turned as
+ * 0x80081FD8 does it (GTE rtv0, sf = 1). */
+extern const char *tekken3_guest_key(unsigned id);
+static int guest_fist_reach(const char *key) {
+    static const struct {const char *key;int reach;} reach[]={
+        {"roger",58},{"alex",58},{"tetsujin",90},{"unknown",90}};
+    for(unsigned i=0;i<sizeof reach/sizeof *reach;i++)if(!strcmp(reach[i].key,key))return reach[i].reach;
+    return 80;
+}
+extern void __real_func_800707F4(CPUState *cpu);
+void __wrap_func_800707F4(CPUState *cpu) {
+    if(cpu->pc==0x800708f0 || cpu->pc==0x800709b4) {
+        uint32_t actor=cpu->gpr[16];
+        const char *key=actor==0x800a9228 || actor==0x800aaab4?tekken3_guest_key(psx_mod_read_half(actor+0x18)):NULL;
+        if(key) {
+            uint32_t m=actor+0x8f4+(cpu->pc==0x800708f0?6:10)*68;
+            int32_t reach=guest_fist_reach(key);
+            for(unsigned i=0;i<3;i++)
+                psx_mod_write_word(cpu->gpr[29]+0x10+i*4,(uint32_t)((int16_t)psx_mod_read_half(m+i*6)*reach>>12));
+        }
+    }
+    __real_func_800707F4(cpu);
+}
+extern void tekken3_cine_hooks_tick(void);
 extern void tekken3_ttt1_embu_effects(void);
 extern void tekken3_ttt1_embu_light(int embu);
 static void embu_tick(void) {
-    tekken3_embu_scenes_tick();
-    /* The lightning pack and light of a cinematic: the Embu's or a fight's
-     * cutscene of ours. */
+    tekken3_cine_hooks_tick();
+    /* The lightning pack and light of a cinematic. */
     int cine=tekken3_cine_frame()>=0;
     if(cine)tekken3_ttt1_embu_effects();
     tekken3_ttt1_embu_light(cine);
     embu_parse();
-    /* A fight's cutscene of ours (tekken3_embu_scenes.c) draws the fight's
-     * guests themselves: only their textures change. */
+    /* A cinematic draws the fight's guests themselves: only their textures
+     * change. */
     if(psx_mod_read_word(0x800ae204)==8)
         for(unsigned p=0;p<2;p++) {
             static const char *shown[2];
             const char *model=embu_model(p);
-            if(model==shown[p] || !models[p].first_block) continue;
+            /* Not on a native: a cinematic's `swap` may have made this
+             * player one (the Embu's Jin, between his model steps as
+             * Devil), its own textures in the band. */
+            if(model==shown[p] || !models[p].first_block || !guest_player(p)) continue;
             shown[p]=model;
             char tim[32];size_t n;
             snprintf(tim,sizeof tim,"arcade-P%u.tim",models[p].costume+1);
@@ -1794,6 +1858,9 @@ static void embu_tick(void) {
         embu_activated[0]=embu_activated[1]=0;
         return;
     }
+    /* Variant 2 (0x80097F20, the unlocked roster, TIPS § 28) is always the
+     * game's own: the casting is for the starting roster of variants 0-1. */
+    if(psx_mod_read_byte(0x80097f20)>1)return;
     for(unsigned p=0;p<2;p++) {
         if(!embu_activated[p])continue;
         const uint32_t actor=0x800a9228+p*0x188c;
@@ -1842,6 +1909,7 @@ static void guest_tick(void) {
     icon_tick();
     moved_tick();
     attack_label_tick();      /* natives' fights too */
+    tekken3_ttt1_ball_sword_tick();
     if (initializing || !psx_mod_read_byte(control)) return;
     for(unsigned player=0;player<2;player++)player_tick(player);
     for(unsigned player=0;player<2;player++)movelist_tick(player);

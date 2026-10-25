@@ -11,11 +11,14 @@ def generate(root):
     # T3 move number each frame; it is filled again for a fighter on TTT1
     # moves just before each of its two readers.
     ball='tekken3_ttt1_ball_boost({});'
+    # The combo counter's exceptions (0x8002F8A0) name the victim's next
+    # alias: a guest's paired reaction is a pack number there (B67).
+    paired='cpu->gpr[3] = tekken3_ttt1_paired_alias(cpu->gpr[3]);'
     for part,func,hooks in (
         (2,'8002DE24',[(0x8002DF90,0x2C620045,
          'if (tekken3_ttt1_source_condition(cpu->gpr[17], cpu->gpr[3])) cpu->gpr[2] = 1;')]),
         (2,'8002D9E8',[(0x8002DBB0,0x24636678,ball.format('cpu->gpr[17]'))]),
-        (3,'8002F3AC',[(0x8002FA00,0x8623019A,
+        (3,'8002F3AC',[(0x8002F8A0,0x862301A0,paired),(0x8002FA00,0x8623019A,
          'if (tekken3_ttt1_source_transition(cpu)) {\n'
          '#ifdef PSX_ENABLE_BLOCK_CYCLES\n    psx_cyc_bb_defer_flush();\n#endif\n'
          '    cpu->pc = 0x80030E6Cu; return;\n}')]),
@@ -39,6 +42,7 @@ def generate(root):
             'extern int tekken3_ttt1_source_transition(CPUState*);\n'
             'extern int tekken3_ttt1_source_rotation(uint32_t);\n'
             'extern int tekken3_ttt1_source_condition(uint32_t, unsigned);\n'
+            'extern uint32_t tekken3_ttt1_paired_alias(uint32_t);\n'
             'extern void tekken3_ttt1_ball_boost(uint32_t);\n\n'+'\n'.join(bodies))
 
 

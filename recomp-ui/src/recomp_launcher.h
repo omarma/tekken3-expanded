@@ -990,12 +990,11 @@ typedef struct RecompLauncherCGameInfo {
         RecompLauncherCPrepareProgressFn on_progress, void* progress_ctx);
     /* PSX geometry-precision controls (Settings.geometry_correction /
      * perspective_texturing). 0 => no row drawn, so every console that leaves
-     * this unset keeps exactly today's settings surface. One flag still gates
-     * both settings because they are two halves of the same enhancement, but
-     * only perspective_texturing currently draws a control: geometry_correction
-     * is known to crack meshes at the coverage the runtime can achieve and is
-     * withdrawn from the UI while staying readable from game.toml/settings.toml
-     * (psxrecomp ENHANCEMENTS.md G1.8/G1.9). Appended for ABI stability. */
+     * this unset keeps exactly today's settings surface. It draws the
+     * perspective_texturing row; geometry_correction also needs
+     * has_geometry_correction_row (below), because partial coverage cracks
+     * meshes and a title opts in only once its coverage is measured
+     * (psxrecomp ENHANCEMENTS.md G1.9, G1.16). Appended for ABI stability. */
     int  has_geometry_precision;
 
     /* Master switch for the first-run setup wizard + Generate & rebuild UI.
@@ -1042,6 +1041,9 @@ typedef struct RecompLauncherCGameInfo {
     /* Host hides the mouse cursor per Settings.mouse_cursor. 0 => no row.
      * Appended for ABI stability. */
     int  has_mouse_cursor;
+    /* Draw the Settings.geometry_correction row (with has_geometry_precision).
+     * PSX: [video] offer_geometry_correction. Appended for ABI stability. */
+    int  has_geometry_correction_row;
 } RecompLauncherCGameInfo;
 
 /* recomp_launcher_run_window return codes */

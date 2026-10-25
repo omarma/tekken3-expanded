@@ -128,6 +128,7 @@ void launcher_model_init(LauncherModel* m,
         m->has_skip_fmv         = game->has_skip_fmv != 0;
         m->has_turbo_loads      = game->has_turbo_loads != 0;
         m->has_geometry_precision = game->has_geometry_precision != 0;
+        m->has_geometry_correction_row = game->has_geometry_correction_row != 0;
         m->has_mouse_cursor     = game->has_mouse_cursor != 0;
         // game->has_fullscreen_toggle is deliberately NOT read: the Fullscreen
         // row is universal (drawn for every console) — see recomp_launcher.h.
@@ -1085,11 +1086,13 @@ void launcher_model_toggle_perspective_texturing(LauncherModel* m) {
     m->s.perspective_texturing = !m->s.perspective_texturing;
 }
 
-/* Sub-pixel vertices are only observable in the supersampled mirror: at 1x the
- * corrected position rounds back to the pixel it came from. Say so in the UI
- * rather than letting the row look broken when someone ticks it at native res. */
+/* At 1x only the software renderer loses the sub-pixel positions: it rounds
+ * them to its pixel grid and smooths nothing. OpenGL rasterises them as floats
+ * and shows the correction at 1x too (about half the pixels of a Tekken 3
+ * fight change, as at 3x; psxrecomp ENHANCEMENTS.md G1.15). */
 bool launcher_model_geometry_correction_inert(const LauncherModel* m) {
-    return m->s.geometry_correction && m->s.supersampling < 2;
+    return m->s.geometry_correction && m->s.renderer == 0 &&
+           m->s.supersampling < 2;
 }
 
 // Screen-model vocabulary: the active SystemProfile's own set when it has one

@@ -8,6 +8,8 @@
 #include "psx_sha256.h"
 #include "tekken3_ttt1_assets.h"
 #include "tekken3_ttt1_ui_palette.h"
+#include "tekken3_stage_source.h"
+#include "tekken3_bgm_select.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -338,11 +340,30 @@ static unsigned forced_donor(const Tekken3Guest *g) {
     }
     return 0;
 }
+/* TEKKEN3_MOKUJIN_MOVESET=<key> (benches): Mokujin's own draw (0x8004F2DC,
+ * actor in a0, moves key written to +0x16) gives that T3 key, Julia's 10 for
+ * one. The masks of 0x80097EF0 written from outside lose to the game's own.
+ * The routine is sliced at its calls (rand): the key is written once it
+ * returns to its caller. */
+extern void __real_func_8004F2DC(CPUState *cpu);
+void __wrap_func_8004F2DC(CPUState *cpu) {
+    static uint32_t actor,caller;
+    if(cpu->pc==0 || cpu->pc==0x8004f2dc){actor=cpu->gpr[4];caller=cpu->gpr[31];}
+    __real_func_8004F2DC(cpu);
+    const char *forced=getenv("TEKKEN3_MOKUJIN_MOVESET");
+    if(actor && cpu->pc==caller && forced && *forced) {
+        psx_mod_write_half(actor+0x16,(uint16_t)atoi(forced));actor=0;
+    }
+}
+static void reset_button_donor(unsigned player);
+/* Round start. A guest that switches on L1 (Unknown) takes her own moveset
+ * back, as TTT1 does at each round, not the one she ended the round on. */
 int tekken3_guest_draw_moveset(unsigned player) {
     if(player>1 || tekken3_guest_character(psx_mod_read_half(0x800a9240+player*0x188c))<0)return 0;
     select_guest();
     Tekken3Guest *g=&guests[player];
-    if(!g->donor_count || g->on_button)return 0;
+    if(!g->donor_count)return 0;
+    if(g->on_button){unsigned before=g->donor;reset_button_donor(player);return g->donor!=before;}
     unsigned pick=draw(g->donor_count),forced=forced_donor(g);
     if(forced)pick=forced-1;
     g->donor=pick+1;g->moves_generation++;
@@ -380,8 +401,8 @@ int tekken3_guest_switch_undo(unsigned player) {
     g->donor=g->previous_donor;g->moves_generation++;
     return 1;
 }
-/* A new fight starts on the guest's own moveset, or on the one
- * TEKKEN3_TETSUJIN_MOVESET forces (tools/ttt1/combos.py probes Unknown's). */
+/* A new fight, and each round, starts on the guest's own moveset, or on the
+ * one TEKKEN3_TETSUJIN_MOVESET forces (tools/ttt1/combos.py probes Unknown's). */
 static void reset_button_donor(unsigned player) {
     Tekken3Guest *g=&guests[player];
     unsigned start=forced_donor(g);
@@ -424,7 +445,7 @@ void tekken3_guest_pool_reset(unsigned slot){if(slot<2)pool_used[slot]=0;}
 void tekken3_guest_pool_flip(unsigned slot){if(slot<2){pool_side[slot]^=1;pool_used[slot]=0;}}
 /* Guest k is character GUEST_ID+k. All of them share model 52: its file is
  * loaded per player. */
-enum { GUEST_ID=23, GUEST_MODEL=52, STOCK_CELLS=21,
+enum { GUEST_ID=23, GUEST_MODEL=52,
        /* The menu's unused fighter-texture scratch, outside the font atlas
         * at x=896..943. Native fighter loading restores this area before play. */
        ICON_X=448, ICON_Y=160, ICON_PAGE=0x87,
@@ -1300,6 +1321,22 @@ static int page,stock_saved;
  * guest. */
 static int closed_on_tag,reopened;
 static unsigned char stock_grid[GRID_BYTES],stock_ids[22];
+/* 21 with every fighter unlocked, fewer on a locked roster (10 on a new
+ * memory card): the game's own count, given back with its page. */
+static unsigned stock_count;
+/* The strip under the portraits is laid out for one row of cells or two:
+ * building the grid, the overlay sets TWO_ROWS (1 when the second row has
+ * a fighter) and copies the matching 48-byte layout of its table LAYOUTS
+ * to LAYOUT (cells' y, drawing area, frame height). A locked roster has one
+ * row, set 33 px lower: the Tag page's second row fell off the screen, under
+ * a one-row strip (B58). Each page takes its own layout. */
+enum { TWO_ROWS=0x8011862c, LAYOUT=0x80118744, LAYOUTS=0x801102dc, LAYOUT_BYTES=48 };
+static unsigned stock_two_rows;
+static void lay_out(unsigned two_rows) {
+    if(psx_mod_read_word(TWO_ROWS)==two_rows)return;
+    psx_mod_write_word(TWO_ROWS,two_rows);
+    for(unsigned i=0;i<LAYOUT_BYTES;i++)psx_mod_write_byte(LAYOUT+i,psx_mod_read_byte(LAYOUTS+two_rows*LAYOUT_BYTES+i));
+}
 static void write_tag_page(void) {
     for(unsigned k=0;k<roster_count;k++) {
         uint32_t n=GRID+k*12;
@@ -1329,10 +1366,12 @@ static void write_tag_page(void) {
     }
     psx_mod_write_word(GRID_COUNT,roster_count);
     psx_mod_write_word(0x80118644,psx_mod_read_word(0x80118644)|guest_bits());
+    lay_out(tag_guest_at(0,1)>=0);
 }
 static void write_stock_page(void) {
     copy_host(GRID,stock_grid,GRID_BYTES);copy_host(CELL_IDS,stock_ids,sizeof stock_ids);
-    psx_mod_write_word(GRID_COUNT,STOCK_CELLS);
+    psx_mod_write_word(GRID_COUNT,stock_count);
+    lay_out(stock_two_rows);
 }
 
 /* R2 / L2, either player: switch between the stock grid and the Tag page.
@@ -1341,8 +1380,9 @@ static void write_stock_page(void) {
 enum { PAD_L2=0x0100, PAD_R2=0x0200, PAD_L1=0x0400, ABSENT=22 };
 /* L1 pressed in a fight by a player whose guest switches on it: frames left
  * for the switch to happen, which it does once the fighter is in stance
- * (tools: tekken3_ttt1_combat_tick). The game never sees that L1. */
-enum { SWITCH_WINDOW=8 };
+ * (tools: tekken3_ttt1_combat_tick). The game never sees that L1. A
+ * quarter of a second: an L1 pressed as a move ends is kept for the stance. */
+enum { SWITCH_WINDOW=15 };
 static unsigned switch_request[2];
 int tekken3_guest_switch_request(unsigned player) {
     if(player>1 || !switch_request[player])return 0;
@@ -1350,20 +1390,78 @@ int tekken3_guest_switch_request(unsigned player) {
     return 1;
 }
 void tekken3_guest_switch_done(unsigned player){if(player<2)switch_request[player]=0;}
-/* Unknown played by the CPU. TTT1's CPU switches her on the Tag button when
- * it is under pressure: measured at the Arcade final (TIPS.md section 28,
- * tools/ttt1_unknown_cpu_switches.lua), never against an idle player, even
- * with her life taken away, and about once every 1,300 frames under attack,
- * hit or guarding, never twice within ~300 frames. Here: pressure = she
- * lost life or guarded (tekken3_guest_note_guard) in the last PRESSURE
- * frames; past MIN_GAP frames since her last switch, each frame under
- * pressure switches with a chance of 1 / HAZARD (mean gap MIN_GAP + HAZARD).
- * The request then waits up to CPU_WINDOW frames for her stance.
- * TEKKEN3_UNKNOWN_CPU_SWITCH="min_gap,hazard,pressure" overrides. */
-enum { CPU_WINDOW=120 };
-static unsigned cpu_min_gap=300,cpu_hazard=1000,cpu_pressure=300;
+/* Unknown played by the CPU. TTT1's CPU (0x80142AC8, ttt-ps1 ia/8013E780.c)
+ * is armed when it takes its defensive branch against an attack
+ * (0x80141880), then, while her current move carries the switch cancel
+ * (stance, walks, crouch, dashes, side steps), switches with a chance of 1
+ * in 4 at each decision; the switch disarms it. Measured at the Arcade
+ * final (F14, MAME): one switch every ~750 frames under attack, none
+ * against an idle player (TIPS.md section 28). Here: armed = she lost life
+ * or guarded (tekken3_guest_note_guard) in the last PRESSURE frames; past
+ * MIN_GAP frames since her last switch, each frame she can switch
+ * (tekken3_ttt1_switch_ready) does it with a chance of 1 / CHANCE, at once.
+ * Before F14 a request waited up to 120 frames for her stance and came
+ * once every ~1,300 frames.
+ * TEKKEN3_UNKNOWN_CPU_SWITCH="min_gap,chance,pressure" overrides. */
+enum { CPU_WINDOW=4 };
+static unsigned cpu_min_gap=600,cpu_hazard=4,cpu_pressure=300;
 static unsigned fight_frame,pressure_until[2],last_switch[2],last_life[2];
 static int cpu_player(unsigned p){return psx_mod_read_half(0x800ae1f8+p*2)==0;}
+/* Unknown's regeneration, as TTT1's final boss (0x8016A4E4, a team of
+ * Unknown alone, flag +0x3DD): each frame her life (+0x3D0) gains max / 6000
+ * up to a recoverable ceiling (+0x3D4, her red bar) that each hit lowers by
+ * 0.6 times its damage, so she gets back 40 % of what she took; none while
+ * her move has guard bits (+0xC2 = attrs & 0x18). Measured at the Arcade
+ * final: 1.95 points a second (195 life). Here, for a CPU Unknown in Arcade
+ * only (the user's choice): the same 1.95 points a second (195 << 16 / 6000
+ * a frame) on T3's 130, up to the same 40 % of each hit, not while her
+ * move's guard bits (actor +0x66 = attrs & 0x18) are set. The life bar draws
+ * life / maximum: it fills again as for Yoshimitsu's healing, whose move
+ * property (type 13) takes damage away in the same routine. That routine
+ * (fighter_damage_apply, 0x8004439C) runs once a played frame for each
+ * fighter, not in the pause nor the replay: the regeneration runs at its
+ * entry. TTT1's other rule, no K.O. while the red bar is left, is not kept:
+ * T3 has no red bar to show it. TEKKEN3_UNKNOWN_REGEN="units a frame,
+ * recoverable %" overrides (0 turns it off). */
+enum { ARCADE=0, REGEN_RATE=(195<<16)/6000, REGEN_SHARE=40 };
+static unsigned regen_rate=REGEN_RATE,regen_share=REGEN_SHARE;
+/* T3's life stays in whole points (life << 16): its K.O. is a life of
+ * exactly 0 once the damage is taken (fighter_damage_apply), and a fraction
+ * left over would keep her standing at 0. The fraction gathers here, and
+ * whole points go to her life. */
+static int regen_track[2];static int32_t regen_last[2],regen_ceiling[2],regen_fraction[2];
+extern void __real_func_8004439C(CPUState *cpu);
+void __wrap_func_8004439C(CPUState *cpu) {
+    if(cpu->pc==0 || cpu->pc==0x8004439c) {
+        static int configured;
+        if(!configured) {
+            configured=1;
+            const char *e=getenv("TEKKEN3_UNKNOWN_REGEN");
+            unsigned a,b;
+            if(e && sscanf(e,"%u,%u",&a,&b)==2 && b<=100){regen_rate=a;regen_share=b;}
+        }
+        uint32_t actor=cpu->gpr[4];
+        unsigned p=actor==0x800a9228?0:actor==0x800a9228+0x188c?1:2;
+        if(p<2 && regen_rate && psx_mod_read_word(0x800afa88)==ARCADE &&
+           tekken3_guest_switches_on_button(p) && cpu_player(p)) {
+            int32_t life=(int32_t)psx_mod_read_word(actor+0x3f4),max=(int32_t)psx_mod_read_word(actor+0x3f8);
+            if(!regen_track[p] || life>regen_last[p]){regen_track[p]=1;regen_ceiling[p]=life;regen_fraction[p]=0;}
+            else if(life<regen_last[p])
+                regen_ceiling[p]-=(int32_t)((int64_t)(regen_last[p]-life)*(100-regen_share)/100);
+            if(regen_ceiling[p]<life)regen_ceiling[p]=life;
+            if(regen_ceiling[p]>max)regen_ceiling[p]=max;
+            if(life>0 && life+0x10000<=regen_ceiling[p] && !(psx_mod_read_half(actor+0x66)&0x18)) {
+                regen_fraction[p]+=(int32_t)regen_rate;
+                if(regen_fraction[p]>=0x10000) {
+                    regen_fraction[p]-=0x10000;life+=0x10000;
+                    psx_mod_write_word(actor+0x3f4,(uint32_t)life);
+                }
+            }
+            regen_last[p]=life;
+        }
+    }
+    __real_func_8004439C(cpu);
+}
 void tekken3_guest_note_guard(unsigned defender) {
     if(defender<2)pressure_until[defender]=fight_frame+cpu_pressure;
 }
@@ -1381,13 +1479,15 @@ static void cpu_switch_tick(void) {
         uint32_t actor=0x800a9228+p*0x188c;
         unsigned life=psx_mod_read_half(actor+0x3f6);
         if(!fighting || !tekken3_guest_switches_on_button(p) || !cpu_player(p)) {
-            last_life[p]=life;last_switch[p]=fight_frame;pressure_until[p]=0;continue;
+            last_life[p]=life;last_switch[p]=fight_frame;pressure_until[p]=0;
+            if(!fighting)regen_track[p]=0;     /* between rounds: a new ceiling */
+            continue;
         }
         if(life<last_life[p])pressure_until[p]=fight_frame+cpu_pressure;
         last_life[p]=life;
         if(switch_request[p] || fight_frame>=pressure_until[p] || fight_frame-last_switch[p]<cpu_min_gap)continue;
-        if(draw(cpu_hazard))continue;
-        switch_request[p]=CPU_WINDOW;last_switch[p]=fight_frame;
+        if(!tekken3_ttt1_switch_ready(p) || draw(cpu_hazard))continue;
+        switch_request[p]=CPU_WINDOW;last_switch[p]=fight_frame;pressure_until[p]=0;
         fprintf(stderr,"TTT1 characters: P%u %s (CPU) switches under pressure\n",p+1,guest(p)->name);
     }
 }
@@ -1830,6 +1930,7 @@ static void loading_card_palette(unsigned p) {
 }
 static void arena_tick(unsigned state);
 static void opponents_tick(unsigned state);
+static int lift_player=-1;            /* Ogre's cutscene lifts a guest on this side (below) */
 static void team_tick(unsigned state);
 static void portraits_tick(unsigned state);
 /* The CPU's fighter of the current Survival fight (ID * 4 + costume), noted
@@ -1853,6 +1954,7 @@ static void survival_tick(unsigned state) {
         current=-1;
     }
 }
+static int demo_taken;                 /* the attract demo's fighters taken over (demo_fighters) */
 void tekken3_ttt1_roster_tick(void) {
     if(enabled<0)enabled=roster_setting();
     if(!enabled)return;
@@ -1860,8 +1962,10 @@ void tekken3_ttt1_roster_tick(void) {
     patch_tables();
     unsigned state=psx_mod_read_word(0x800ae204);
     arena_tick(state);
+    if(state!=8 && state!=11 && state!=1)demo_taken=0;
     cpu_switch_tick();
     opponents_tick(state);
+    if(state!=8)lift_player=-1;
     team_tick(state);
     portraits_tick(state);
     devil_jin_name(state);
@@ -1904,14 +2008,22 @@ void tekken3_ttt1_roster_tick(void) {
         loading_card_drawn[p]=0;
     }
     if(cabinet) {
-        /* The overlay's "ID < 22" tests and its availability mask. */
+        /* The overlay's "ID < 22" tests and its availability mask. Not the
+         * two at 0x8010D9B4 and 0x8010DA30: as the selector opens, they let
+         * a player's last fighter look for its cell, and 22 (none yet) is
+         * the ID of every hidden cell of a locked roster: the cursor started
+         * on the first one, empty (B58, GH#7). Stock, 22 takes the default
+         * cell; a guest found no cell in the stock page either. */
         immediate(0x8010d5f0,0x1f,(0x1fffffu|guest_bits())>>16);
-        immediate(0x8010d9b4,22,select_bound());immediate(0x8010da30,22,select_bound());
         immediate(0x8010db38,23,select_bound());
         immediate(0x8010dc0c,22,select_bound());immediate(0x8010f7b0,22,select_bound());
-        if(!stock_saved && psx_mod_read_word(GRID_COUNT)==STOCK_CELLS) {
+        /* Phase 1: the overlay has built its grid, as many cells as the
+         * roster has unlocked fighters. */
+        if(!stock_saved && psx_mod_read_half(0x800ae224)==1) {
             for(unsigned i=0;i<GRID_BYTES;i++)stock_grid[i]=psx_mod_read_byte(GRID+i);
             for(unsigned i=0;i<sizeof stock_ids;i++)stock_ids[i]=psx_mod_read_byte(CELL_IDS+i);
+            stock_count=psx_mod_read_word(GRID_COUNT);
+            stock_two_rows=psx_mod_read_word(TWO_ROWS);
             stock_saved=1;
         }
         /* Reopen the Tag page once the selector has settled: choosing
@@ -2247,9 +2359,12 @@ void __wrap_func_80052990(CPUState *cpu) {
     if(tekken3_ttt1_roster_enabled() && (cpu->pc==0 || cpu->pc==0x80052990) && tekken3_guest_character(cpu->gpr[5])>=0)cpu->gpr[5]=9;
     __real_func_80052990(cpu);
 }
+extern int tekken3_cine_swap_read(CPUState *cpu);
 void __wrap_func_8006BF20(CPUState *cpu) {
     if(tekken3_ttt1_roster_enabled() && (cpu->pc==0 || cpu->pc==0x8006bf20) && cpu->gpr[4]>=303 && cpu->gpr[4]<=306)
         cpu->gpr[4]-=(GUEST_MODEL-18)*4;
+    /* A cinematic's character change: the file served from the kept ones (src/tekken3_cine_swap.c). */
+    if((cpu->pc==0 || cpu->pc==0x8006bf20) && tekken3_cine_swap_read(cpu))return;
     __real_func_8006BF20(cpu);
 }
 void __wrap_func_8003626C(CPUState *cpu) {
@@ -2311,15 +2426,39 @@ static int arena_player(const CPUState *cpu) {
         return who==1?(int)psx_mod_read_byte(a+31):who==0?0:who==2?(int)chooser:(int)cpu->gpr[5];
     }
 }
+enum { DEMO=6 };
+static void demo_fighters(void);
+extern int tekken3_cine_pending(void);
 void __wrap_func_8004F3B0(CPUState *cpu) {
-    if((cpu->pc==0 || cpu->pc==0x8004f3b0) && tekken3_ttt1_roster_enabled()) {
-        int p=arena_player(cpu),k=p==0 || p==1?tekken3_guest_character(psx_mod_read_half(0x800add5c+p*2)):-1;
-        arena_pending=k>=0;music_only=psx_mod_read_word(cpu->gpr[4])==7;
+    /* The roster's correction with TTT1 Characters on; the fight's stage with
+     * it, or with TTT Stages alone (natives only, TTT Stages S7). */
+    int guests=tekken3_ttt1_roster_enabled();
+    /* BGM SELECT's RANDOM: the fight's version (src/tekken3_bgm_select.c). */
+    if(cpu->pc==0 || cpu->pc==0x8004f3b0)tekken3_bgm_select_fight();
+    if((cpu->pc==0 || cpu->pc==0x8004f3b0) && (guests || tekken3_arcade_stages_source_ready(TEKKEN3_STAGE_TTT))) {
+        /* The attract's demo fight; a cinematic's scene loads in its mode
+         * too, on the game's stage. */
+        unsigned mode=psx_mod_read_word(cpu->gpr[4]);
+        int scene=mode==DEMO && tekken3_cine_pending();
+        if(guests && mode==DEMO && !scene && psx_mod_read_word(0x800ae204)==8)demo_fighters();
+        int p=arena_player(cpu),k=guests && (p==0 || p==1)?tekken3_guest_character(psx_mod_read_half(0x800add5c+p*2)):-1;
+        if(guests){arena_pending=k>=0;music_only=psx_mod_read_word(cpu->gpr[4])==7;}
         if(k>=0) {
             unsigned owner=roster[k].arena_owner<STOCK_FIGHTERS?roster[k].arena_owner:9;
             uint32_t record=psx_mod_read_word(0x80097d40+owner*16);
             arena_value=psx_mod_read_byte(record+10);music_value=psx_mod_read_byte(record+11);
         }
+        /* The fight's stage (src/tekken3_stage_source.c), from the arena of
+         * the guest's model fighter or of the native's record (fighter * 4 +
+         * costume, 0x800ADD98 + 2 * player). */
+        int arena=-1;
+        if(k>=0)arena=(int)arena_value;
+        else if(p==0 || p==1) {
+            unsigned id=psx_mod_read_half(0x800add5c+p*2),costume=psx_mod_read_half(0x800add98+p*2)&3;
+            uint32_t record=id<23?psx_mod_read_word(0x80097d40+(id*4+costume)*4):0;   /* 23 records: Tiger is 22 */
+            if(record>>24==0x80)arena=psx_mod_read_byte(record+10);
+        }
+        tekken3_stage_source_decide(scene?~0u:mode,p,k>=0?roster[k].key:NULL,arena);
     }
     __real_func_8004F3B0(cpu);
 }
@@ -2333,9 +2472,10 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
  * stage 1: 1 or 2 guests take the place of drawn fighters at stages 5-8,
  * and one game in BOSS_ONE_IN, Devil, Angel or Unknown replaces the stage 9
  * boss. Never the player's own fighter. TEKKEN3_CPU_GUESTS="min,max,boss"
- * overrides (0,0,0: no guest). */
+ * overrides (0,0,0: no guest), "min,max,boss,key" names that boss (tests). */
 enum { OPPONENTS=0x800afb18, OPPONENT_COUNT=10, STAGE_INDEX=0x800afaac, GAME_MODE=0x800afa88 };
 static unsigned guests_min=1,guests_max=2,boss_one_in=4;
+static char boss_key[32];
 static int hidden_boss(unsigned k) {
     const char *n=roster[k].key;
     return !strcmp(n,"devil") || !strcmp(n,"angel") || !strcmp(n,"unknown");
@@ -2353,6 +2493,60 @@ static const char *fighter_name(unsigned id) {
     int k=tekken3_guest_character(id);
     return k>=0?roster[k].name:id<STOCK_FIGHTERS?stock[id]:"?";
 }
+/* The attract's demo fight (mode 6; B75, GH#130). The menus' overlay picks
+ * its fighters as it sets the mode up (menu_demo_pick_chars, 0x800DAF30;
+ * the Embu's overlay has a copy, 0x800D302C): the 14 stock fighters of a
+ * list (Law, Eddy, Paul, King, Lei, Xiaoyu, Hwoarang, Jin, Yoshimitsu, Nina,
+ * Heihachi, Julia, Bryan, Anna) that are unlocked, player 1 the one after an
+ * index kept on the card, player 2 another one drawn; both in the costume
+ * that bit 9 of the games played gives. The guests (not Devil, Angel,
+ * Unknown) join that list at the same odds (the user's choice, 2026-10-22):
+ * as the fight's set-up asks for its arena (0x8004F3B0, player 1's), player
+ * 1 is the next of the mod's own turn over the whole list, natives and
+ * guests in turn (the game's first pick starts it; kept for the session, not
+ * on the card), player 2 another
+ * one drawn from it. The costume stays the game's. Once per demo.
+ * TEKKEN3_ATTRACT_DEMO="p1[,p2]" (keys, tekken3_t3_key_id or guests; the
+ * benches): p1 starts the turn, p2 is player 2 in every demo. */
+static const unsigned char demo_natives[]={1,8,0,3,2,7,6,9,4,5,13,10,12,18};
+static int demo_turn=-1;
+extern int tekken3_t3_key_id(const char *key);
+static int key_id(const char *key){int id=tekken3_t3_key_id(key);return id>=0?id:tekken3_guest_id(key);}
+static void demo_fighters(void) {
+    if(demo_taken)return;
+    demo_taken=1;
+    static int forced[2]={-1,-1},parsed;
+    if(!parsed) {
+        parsed=1;
+        const char *e=getenv("TEKKEN3_ATTRACT_DEMO");
+        char a[32]="",b[32]="";
+        if(e && sscanf(e,"%31[^,],%31s",a,b)>=1){forced[0]=key_id(a);forced[1]=key_id(b);}
+    }
+    /* Natives and guests in turn: player 1 is a guest one demo in two, not
+     * after all the natives. */
+    unsigned natives_on[sizeof demo_natives],guests_on[GUEST_MAX],nn=0,ng=0;
+    uint32_t unlocked=psx_mod_read_word(AVAILABLE);
+    for(unsigned i=0;i<sizeof demo_natives;i++)if(unlocked>>demo_natives[i]&1)natives_on[nn++]=demo_natives[i];
+    for(unsigned k=0;k<roster_count;k++)if(!hidden_boss(k))guests_on[ng++]=GUEST_ID+k;
+    unsigned list[sizeof demo_natives+GUEST_MAX],n=0;
+    for(unsigned i=0;i<nn || i<ng;i++) {
+        if(i<nn)list[n++]=natives_on[i];
+        if(i<ng)list[n++]=guests_on[i];
+    }
+    if(n<2)return;
+    if(demo_turn<0) {
+        unsigned first=forced[0]>=0?(unsigned)forced[0]:psx_mod_read_half(0x800add5c);
+        demo_turn=0;
+        for(unsigned i=0;i<n;i++)if(list[i]==first)demo_turn=(int)i;
+    } else demo_turn=(demo_turn+1)%(int)n;
+    unsigned other=draw(n-1);
+    if(other>=(unsigned)demo_turn)other++;
+    for(unsigned i=0;i<n;i++)if((int)list[i]==forced[1] && i!=(unsigned)demo_turn)other=i;
+    psx_mod_write_half(0x800add5c,(uint16_t)list[demo_turn]);
+    psx_mod_write_half(0x800add5e,(uint16_t)list[other]);
+    fprintf(stderr,"TTT1 characters: attract demo, %s against %s (%u fighters)\n",fighter_name(list[demo_turn]),
+            fighter_name(list[other]),n);
+}
 static void opponents_tick(unsigned state) {
     static unsigned char written[OPPONENT_COUNT*4];
     static int configured;
@@ -2360,7 +2554,7 @@ static void opponents_tick(unsigned state) {
         configured=1;
         const char *e=getenv("TEKKEN3_CPU_GUESTS");
         unsigned a,b,c;
-        if(e && sscanf(e,"%u,%u,%u",&a,&b,&c)==3 && a<=b && b<=4){guests_min=a;guests_max=b;boss_one_in=c;}
+        if(e && sscanf(e,"%u,%u,%u,%31s",&a,&b,&c,boss_key)>=3 && a<=b && b<=4){guests_min=a;guests_max=b;boss_one_in=c;}
     }
     unsigned mode=psx_mod_read_word(GAME_MODE);
     if(state!=11 || (mode!=0 && mode!=3) || psx_mod_read_word(STAGE_INDEX)!=0)return;
@@ -2385,11 +2579,70 @@ static void opponents_tick(unsigned state) {
     }
     if(nb && boss_one_in && !draw(boss_one_in)) {
         unsigned k=bosses[draw(nb)];
+        for(unsigned i=0;i<nb;i++)if(!strcmp(roster[bosses[i]].key,boss_key))k=bosses[i];
         list[8*4]=(unsigned char)(GUEST_ID+k);
         fprintf(stderr,"TTT1 characters: %s replaces the stage 9 boss\n",roster[k].name);
     }
     for(unsigned i=0;i<sizeof list;i++)psx_mod_write_byte(OPPONENTS+i,list[i]);
     memcpy(written,list,sizeof list);
+}
+/* Ogre's cutscene lifts the stage 9 boss (F07). Its setup (phase 16, the
+ * Arcade overlay's 0x800B3CA0, interpreted) turns the human's actor into the
+ * one Ogre lifts: 0x800361EC(actor, model), model 26 / 27 Heihachi (Jin's
+ * 18 / 19 for a Heihachi player: the stage 9 boss either way), the costume
+ * from 0x800AFA88 + 0xB1; then ID and move key from +0x14 / 4, the files
+ * wanted (0x8006C618), the model's files read (0x80036310) and built
+ * (0x80035CE8), both models marked loaded (0x8006C63C). Its script plays
+ * Ogre's moves 2227 (Ogre) and 2228 (the one lifted). 0x800361EC's page is
+ * patched (patch_tables), so the overlay's call to it is interpreted and
+ * never reaches a wrapper: a guest the mod drew in Heihachi's place
+ * (opponent list entry 9) takes the actor at the next call, 0x8006C618 at
+ * 0x800B3E1C (player 1) or 0x800B3EFC (player 2): its descriptor entry and
+ * ID, model 52 (the files of the guest the player now follows), Heihachi's
+ * move key kept; grafted once both models are marked loaded. Phase 20
+ * reloads the player's own fighter (0x8002A40C): the identity goes back
+ * first. */
+enum { LIFT_WANT_P1=0x800b3e24, LIFT_WANT_P2=0x800b3f04, LIFT_WANT_CALL=0x0c01b186,
+       LIFT_LOADED=0x800b3f64, LIFT_LOADED_CALL=0x0c01b18f };
+extern void tekken3_ttt1_guest_now(unsigned player);
+static int lift_site(uint32_t back,uint32_t call) {
+    return psx_mod_read_word(back-8)==call && psx_mod_read_word(0x800ae204)==8 &&
+           psx_mod_read_half(0x800ae224)==16 && initialized && tekken3_ttt1_roster_enabled();
+}
+extern void __real_func_8006C618(CPUState *cpu);
+void __wrap_func_8006C618(CPUState *cpu) {
+    uint32_t back=cpu->gpr[31];
+    if((cpu->pc==0 || cpu->pc==0x8006c618) && (back==LIFT_WANT_P1 || back==LIFT_WANT_P2) && lift_site(back,LIFT_WANT_CALL)) {
+        unsigned player=back==LIFT_WANT_P2,id=psx_mod_read_byte(OPPONENTS+8*4),costume=psx_mod_read_byte(OPPONENTS+8*4+1)&3;
+        uint32_t actor=0x800a9228+player*0x188c;
+        int k=tekken3_guest_character(id);
+        if(k<0)fprintf(stderr,"TTT1 characters: Ogre's cutscene lifts %s (P%u)\n",fighter_name(psx_mod_read_half(actor+0x18)),player+1);
+        else {
+            psx_mod_write_half(actor+0x14,(uint16_t)(id*4+costume));
+            psx_mod_write_half(actor+0x18,(uint16_t)id);
+            psx_mod_write_half(actor+0x1c,GUEST_MODEL);
+            if(!player)cpu->gpr[5]=cpu->gpr[6]=GUEST_MODEL;   /* player 1's model, wanted on both lines */
+            follow(player,id);follow_costume(player,costume);
+            lift_player=(int)player;
+            fprintf(stderr,"TTT1 characters: Ogre's cutscene lifts %s, the stage 9 boss (P%u)\n",roster[k].name,player+1);
+        }
+    }
+    __real_func_8006C618(cpu);
+}
+extern void __real_func_8006C63C(CPUState *cpu);
+void __wrap_func_8006C63C(CPUState *cpu) {
+    uint32_t back=cpu->gpr[31];
+    int graft=(cpu->pc==0 || cpu->pc==0x8006c63c) && back==LIFT_LOADED && lift_player>=0 && lift_site(back,LIFT_LOADED_CALL);
+    __real_func_8006C63C(cpu);
+    if(graft && cpu->pc==back)tekken3_ttt1_guest_now((unsigned)lift_player);
+}
+/* Phase 20's reload (src/tekken3_embu_scenes.c): the player's own fighter. */
+void tekken3_ogre_lift_reload(unsigned p1,unsigned c1,unsigned p2,unsigned c2) {
+    if(lift_player<0)return;
+    unsigned id=lift_player?p2:p1;
+    follow((unsigned)lift_player,id);follow_costume((unsigned)lift_player,(lift_player?c2:c1)&3);
+    fprintf(stderr,"TTT1 characters: Ogre's cutscene over, P%d back to %s\n",lift_player+1,fighter_name(id));
+    lift_player=-1;
 }
 /* Guests in Survival. After each win 0x800B0B84 draws the next opponent
  * (0x800B26D0: a pool that widens with the stage number, +0x24: the first

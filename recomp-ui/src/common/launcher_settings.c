@@ -29,6 +29,9 @@ static int av_linear_filter(const LauncherModel* m) {
 static int av_antialiasing(const LauncherModel* m) { return m->has_antialiasing; }
 static int av_affine(const LauncherModel* m) { return m->has_affine_filter; }
 static int av_perspective(const LauncherModel* m) { return m->has_geometry_precision; }
+static int av_geometry(const LauncherModel* m) {
+    return m->has_geometry_precision && m->has_geometry_correction_row;
+}
 static int av_screen_kind(const LauncherModel* m) { return m->has_screen_kind; }
 static int av_frame_interp(const LauncherModel* m) {
     return m->has_frame_interp && m->s.renderer;
@@ -49,6 +52,7 @@ static int av_language(const LauncherModel* m) { return m->num_languages > 0; }
 static int on_integer_scale(const LauncherModel* m) { return m->s.integer_scale != 0; }
 static int on_linear_filter(const LauncherModel* m) { return m->s.linear_filter != 0; }
 static int on_affine(const LauncherModel* m) { return m->s.affine_filter != 0; }
+static int on_geometry(const LauncherModel* m) { return m->s.geometry_correction != 0; }
 static int on_perspective(const LauncherModel* m) { return m->s.perspective_texturing != 0; }
 static int on_frame_interp(const LauncherModel* m) { return m->s.frame_interp != 0; }
 static int on_skip_fmv(const LauncherModel* m) { return m->s.auto_skip_fmv != 0; }
@@ -97,6 +101,11 @@ static const LauncherSetting kSettings[] = {
       launcher_model_aa_label, launcher_model_cycle_aa, NULL, NULL },
     { "affine_filter", "display", "Affine background smoothing", NULL, LSET_TOGGLE, 0,
       av_affine, NULL, on_affine, launcher_model_toggle_affine_filter,
+      NULL, NULL, NULL, NULL },
+    { "geometry_correction", "display", "Geometry correction",
+      "Draws 3D polygons at sub-pixel positions, so models and stages stop wobbling. "
+      "Tiny gaps can flicker where a corner touches another polygon's edge.", LSET_TOGGLE, 0,
+      av_geometry, NULL, on_geometry, launcher_model_toggle_geometry_correction,
       NULL, NULL, NULL, NULL },
     { "perspective_textures", "display", "Perspective textures",
       "Stops large floors and walls from warping as the camera moves.", LSET_TOGGLE, 0,

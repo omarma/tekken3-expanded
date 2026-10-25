@@ -1405,7 +1405,15 @@ TranslateResult StrictTranslator::translate(const PSXRecomp::DecodedInstruction&
             ? fmt::format("cpu->gpr[{}]", static_cast<int>(rs))
             : fmt::format("(uint32_t)((int32_t)cpu->gpr[{}] + ({}))", static_cast<int>(rs), static_cast<int>(offset));
         bool special = PSXRecompGTERegisters::data_write_needs_helper(rt);
-        if (special) {
+        if (rt >= 12 && rt <= 15) {
+            // SXY0-2/SXYP: restore or drop the register's sub-pixel projection
+            // (precision tracker, ENHANCEMENTS.md G1.11). LWC2 writes no GPR.
+            r.c_code = gte_stall + fmt::format(
+                "gte_write_data(cpu, {}, psx_cyc_lwc2_read(cpu, {})); "
+                "gte_precision_lwc2_word({}, {}, cpu->gte_data[{}], 0x{:08X}u);",
+                static_cast<int>(rt), addr, addr, static_cast<int>(rt),
+                static_cast<int>(rt), d.address);
+        } else if (special) {
             r.c_code = gte_stall + fmt::format(
                 "gte_write_data(cpu, {}, psx_cyc_lwc2_read(cpu, {}));",
                 static_cast<int>(rt), addr);

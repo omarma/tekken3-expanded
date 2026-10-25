@@ -40,6 +40,7 @@ struct CueTrackRef {
     uint32_t index01     = 0;      // track start, file-relative LBA
     uint32_t index00     = 0;      // pregap start, file-relative LBA
     bool     has_index00 = false;
+    uint32_t pregap      = 0;      // PREGAP sectors: on the disc, not in the file
 };
 
 struct CueSheet {

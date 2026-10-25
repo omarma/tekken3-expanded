@@ -342,6 +342,7 @@ typedef struct {
     // One flag gates both rows (two halves of one enhancement); the settings
     // stay independent. false => both rows hidden.
     bool     has_geometry_precision;
+    bool     has_geometry_correction_row; // geometry row too (title opted in)
     bool     has_mouse_cursor;       // Mouse cursor row (s.mouse_cursor 0..3)
     // (no has_fullscreen_toggle: the Fullscreen row is universal — every
     // console draws it; the ABI flag of that name is deprecated/ignored.)
@@ -597,8 +598,9 @@ const char* launcher_model_texture_filter_label(const LauncherModel* m);
 // PSX geometry precision (gated on has_geometry_precision).
 void launcher_model_toggle_geometry_correction(LauncherModel* m);
 void launcher_model_toggle_perspective_texturing(LauncherModel* m);
-// True when geometry correction is on but supersampling is 1x, where the
-// correction rounds back to the native pixel and has no visible effect.
+// True when geometry correction is on with the software renderer at 1x, which
+// rounds the corrected positions to whole pixels (no smoothing). OpenGL shows
+// the correction at any scale.
 bool launcher_model_geometry_correction_inert(const LauncherModel* m);
 void launcher_model_cycle_screen_kind(LauncherModel* m);       // Raw/CRT/Composite/Trinitron
 const char* launcher_model_screen_kind_label(const LauncherModel* m);

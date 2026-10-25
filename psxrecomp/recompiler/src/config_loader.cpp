@@ -601,6 +601,10 @@ static RuntimeConfig parse_runtime_block(const toml::value& cfg, const fs::path&
             rt.video_perspective_texturing =
                 toml::find<bool>(video, "perspective_texturing");
         }
+        if (video.contains("offer_geometry_correction")) {
+            rt.video_offer_geometry_correction =
+                toml::find<bool>(video, "offer_geometry_correction");
+        }
         if (video.contains("crt_filter")) {
             const auto mode = toml::find<std::string>(video, "crt_filter");
             if      (mode == "raw")       rt.video_screen_kind = 0;
@@ -1350,6 +1354,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
     bool ws_nw_backdrop = false;
     bool ws_nw_2d_edge_fill = false;
     bool ws_clear_reveal = false;
+    bool ws_nclip_gpu_coords = false;
     bool ws_nw_flat_backdrop = false;
     bool ws_nw_phase_backdrop = false;
     int ws_nw_ui_stretch_min_ot = 0;
@@ -1396,6 +1401,20 @@ GameConfig load_game_config(const fs::path& config_path_in) {
         const auto& arr = toml::find<std::vector<std::string>>(recomp, "hot_funcs");
         for (const auto& a : arr)
             hot_funcs.push_back(parse_hex(a, "recompiler.hot_funcs"));
+    }
+    // Optional [recompiler] precision_funcs — value-propagation hooks (G1.12).
+    std::vector<std::pair<uint32_t, uint32_t>> precision_funcs;
+    if (recomp.contains("precision_funcs")) {
+        const auto& arr = toml::find<std::vector<std::string>>(recomp, "precision_funcs");
+        for (const auto& a : arr) {
+            const size_t dash = a.find('-');
+            const uint32_t lo = parse_hex(a.substr(0, dash), "recompiler.precision_funcs");
+            const uint32_t hi = dash == std::string::npos
+                ? lo : parse_hex(a.substr(dash + 1), "recompiler.precision_funcs");
+            if (hi < lo)
+                throw std::runtime_error("recompiler.precision_funcs: range end before start: " + a);
+            precision_funcs.emplace_back(lo, hi);
+        }
     }
     // Optional emitter-level load-charge batching for VLC leaves.
     bool load_charge_batch = false;
@@ -1651,6 +1670,8 @@ GameConfig load_game_config(const fs::path& config_path_in) {
             ws_nw_2d_edge_fill = toml::find<bool>(ws, "nw_2d_edge_fill");
         if (ws.contains("clear_reveal"))
             ws_clear_reveal = toml::find<bool>(ws, "clear_reveal");
+        if (ws.contains("nclip_gpu_coords"))
+            ws_nclip_gpu_coords = toml::find<bool>(ws, "nclip_gpu_coords");
         if (ws.contains("nw_flat_backdrop"))
             ws_nw_flat_backdrop = toml::find<bool>(ws, "nw_flat_backdrop");
         if (ws.contains("nw_phase_backdrop"))
@@ -2196,6 +2217,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
         /*data_shard_funcs*/      data_shard_funcs,
         /*mod_function_entry_funcs*/ mod_function_entry_funcs,
         /*hot_funcs*/             hot_funcs,
+        /*precision_funcs*/       precision_funcs,
         /*load_charge_batch*/     load_charge_batch,
         /*load_charge_batch_funcs*/ load_charge_batch_funcs,
         /*vsync_query_func*/      vsync_query_func,
@@ -2252,6 +2274,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
         /*ws_nw_backdrop*/        ws_nw_backdrop,
         /*ws_nw_2d_edge_fill*/    ws_nw_2d_edge_fill,
         /*ws_clear_reveal*/       ws_clear_reveal,
+        /*ws_nclip_gpu_coords*/   ws_nclip_gpu_coords,
         /*ws_nw_flat_backdrop*/   ws_nw_flat_backdrop,
         /*ws_nw_phase_backdrop*/  ws_nw_phase_backdrop,
         /*ws_nw_ui_stretch_min_ot*/ ws_nw_ui_stretch_min_ot,

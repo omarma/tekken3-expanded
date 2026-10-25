@@ -24,6 +24,7 @@
 #include "dirty_ram_interp.h"
 #include "psx_cycles.h"
 #include "starvation_ring.h"
+#include "gte_precision_diag.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,6 +81,22 @@ uint32_t psx_mod_gpu_dma_memory_alloc(uint32_t size, uint32_t alignment) {
     memset(mod_gpu_dma_memory + start, 0, size);
     mod_gpu_dma_memory_used = start + size;
     return PSX_MOD_GPU_DMA_GUEST_BASE + start;
+}
+
+const uint8_t *psx_mod_memory_region(int which, uint32_t *used) {
+    if (which == 0) { *used = mod_memory_used; return mod_memory; }
+    *used = mod_gpu_dma_memory_used;
+    return mod_gpu_dma_memory;
+}
+
+int psx_mod_memory_restore(int which, const uint8_t *data, uint32_t len) {
+    uint8_t *region = which == 0 ? mod_memory : mod_gpu_dma_memory;
+    uint32_t *used = which == 0 ? &mod_memory_used : &mod_gpu_dma_memory_used;
+    uint32_t cap = which == 0 ? (uint32_t)MOD_MEMORY_SIZE : (uint32_t)PSX_MOD_GPU_DMA_APERTURE_SIZE;
+    if (len > cap) return 0;
+    memcpy(region, data, len);
+    if (*used < len) *used = len;
+    return 1;
 }
 
 static int mod_gpu_dma_memory_offset(uint32_t phys, uint32_t width,
@@ -1727,6 +1744,8 @@ static inline void d44_note(uint32_t phys, uint32_t old, uint32_t val) {
 
 static void psx_write_word_raw(uint32_t addr, uint32_t val);
 extern void gte_precision_invalidate_word(uint32_t addr);
+/* Width-aware (G1.15): a half store keeps the other half's provenance. */
+extern void gte_precision_invalidate_store(uint32_t addr, uint32_t size);
 void psx_write_word(uint32_t addr, uint32_t val) {
     extern void (*g_overlay_flush_pending_cycles)(void);
     if (g_overlay_flush_pending_cycles) g_overlay_flush_pending_cycles();
@@ -1840,6 +1859,11 @@ static void psx_write_word_raw(uint32_t addr, uint32_t val) {
     {
         uint32_t off;
         if (mod_gpu_dma_memory_offset(phys, 4u, &off)) {
+            /* Traced like RAM: mods build GPU packets here, and a census of
+             * packet builders reads their writers (ENHANCEMENTS.md G1.13). */
+            uint32_t old;
+            memcpy(&old, mod_gpu_dma_memory + off, sizeof(old));
+            debug_server_trace_write_check(phys, old, val, 4);
             memcpy(mod_gpu_dma_memory + off, &val, sizeof(val));
             return;
         }
@@ -1943,7 +1967,7 @@ void psx_write_half(uint32_t addr, uint16_t val) {
 }
 static void psx_write_half_raw(uint32_t addr, uint16_t val) {
     g_guest_store_count++;
-    gte_precision_invalidate_word(addr);
+    gte_precision_invalidate_store(addr, 2);
     if (sr_ptr && (*sr_ptr & 0x10000u)) return;
 
         /* KSEG2 guard — see psx_read_word_raw. */
@@ -1967,6 +1991,9 @@ static void psx_write_half_raw(uint32_t addr, uint16_t val) {
     {
         uint32_t off;
         if (mod_gpu_dma_memory_offset(phys, 2u, &off)) {
+            debug_server_trace_write_check(phys,
+                (uint32_t)mod_gpu_dma_memory[off] | ((uint32_t)mod_gpu_dma_memory[off + 1u] << 8),
+                (uint32_t)val, 2);
             mod_gpu_dma_memory[off] = (uint8_t)val;
             mod_gpu_dma_memory[off + 1u] = (uint8_t)(val >> 8);
             return;
@@ -2248,16 +2275,20 @@ uint32_t psx_cyc_lwc2_read(CPUState* cpu, uint32_t addr) {
 #else
     (void)cpu;
 #endif
+    uint32_t value;
 #if defined(PSX_NO_DEBUG_TOOLS) && !defined(PSX_COSIM)
     uint32_t phys;
     if (psx_cyc_main_ram_fast_addr(addr, 4u, &phys)) {
-        return (uint32_t)ram[phys]
-             | ((uint32_t)ram[phys + 1] << 8)
-             | ((uint32_t)ram[phys + 2] << 16)
-             | ((uint32_t)ram[phys + 3] << 24);
-    }
+        value = (uint32_t)ram[phys]
+              | ((uint32_t)ram[phys + 1] << 8)
+              | ((uint32_t)ram[phys + 2] << 16)
+              | ((uint32_t)ram[phys + 3] << 24);
+    } else
 #endif
-    return psx_read_word(addr);
+    value = psx_read_word(addr);
+    /* Provenance census (ENHANCEMENTS.md G1.10): one flag test when off. */
+    if (g_gte_precision_tracking) gte_precision_diag_lwc2(addr, value);
+    return value;
 }
 
 /* Deprecated uncharged passthroughs (the +4 flat wait-state model is gone; load
@@ -2279,7 +2310,7 @@ void psx_write_byte(uint32_t addr, uint8_t val) {
 }
 static void psx_write_byte_raw(uint32_t addr, uint8_t val) {
     g_guest_store_count++;
-    gte_precision_invalidate_word(addr);
+    gte_precision_invalidate_store(addr, 1);
     if (sr_ptr && (*sr_ptr & 0x10000u)) return;
 
         /* KSEG2 guard — see psx_read_word_raw. */
@@ -2302,6 +2333,7 @@ static void psx_write_byte_raw(uint32_t addr, uint8_t val) {
     {
         uint32_t off;
         if (mod_gpu_dma_memory_offset(phys, 1u, &off)) {
+            debug_server_trace_write_check(phys, (uint32_t)mod_gpu_dma_memory[off], (uint32_t)val, 1);
             mod_gpu_dma_memory[off] = val;
             return;
         }

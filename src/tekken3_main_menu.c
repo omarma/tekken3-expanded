@@ -4,6 +4,8 @@
 #include "tekken3_main_menu.h"
 #include "cpu_state.h"
 #include "mod_plugins.h"
+#include "tekken3_game_options.h"
+#include "tekken3_bgm_select.h"
 
 #define SCREEN 0x800ae204u
 #define PHASE 0x800ae224u
@@ -101,11 +103,14 @@ int tekken3_main_menu_hold_turbo(void) { return turbo_hold > 0; }
 void __wrap_func_800753BC(CPUState *cpu) {
     if (cpu->gpr[5] == EXIT_SOUND && turbo_hold < EXIT_SOUND_FRAMES)
         turbo_hold = EXIT_SOUND_FRAMES;
+    tekken3_game_options_cursor(cpu);     /* GAME OPTION's rows past the screen */
     __real_func_800753BC(cpu);
 }
 
 void tekken3_main_menu_vblank(void) {
     if (turbo_hold > 0) --turbo_hold;
+    tekken3_bgm_select_tick();            /* BGM SELECT's row before the rows are copied */
+    tekken3_game_options_tick();
     if (psx_mod_game_started()) note_choice();
     if (pending >= 0 && psx_mod_game_started() && !menu_drawing_choice())
         finish_pending();

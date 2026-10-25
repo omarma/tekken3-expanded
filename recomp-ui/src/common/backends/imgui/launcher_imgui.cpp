@@ -2496,28 +2496,54 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
     }
 
     if (m->has_geometry_precision) {
-        // Geometry correction deliberately draws NO row. It moves vertices, and
-        // the runtime can only recover the sub-pixel original for ~5% of them
-        // (93% of lookups are ambiguous), so a corrected triangle meets an
-        // uncorrected neighbour and their shared edge splits open. Measured on
-        // Ape Escape; see psxrecomp ENHANCEMENTS.md G1.8/G1.9. The setting stays
-        // in the ABI and remains readable from game.toml/settings.toml so the
-        // work is still testable, exactly as has_turbo_loads/Settings.turbo_loads
-        // stayed after their row was dropped — it simply has no control.
+        // Perspective textures only change UV interpolation inside a polygon
+        // whose provenance is proven, so no vertex moves and neighbours cannot
+        // disagree about an edge: every PSX title gets the row.
         //
-        // Perspective textures are unaffected by that problem: they only change
-        // UV interpolation inside a polygon whose provenance is already proven,
-        // so no vertex moves and adjacent polygons cannot disagree about an edge.
+        // Geometry correction moves vertices. Where the runtime corrects part of
+        // a mesh only, a corrected triangle meets an uncorrected neighbour and
+        // their shared edge splits open (Ape Escape: ~5% of vertices, psxrecomp
+        // ENHANCEMENTS.md G1.8/G1.9). Its row is therefore drawn only for a
+        // title that opted in ([video] offer_geometry_correction) once its
+        // coverage was measured: Tekken 3 Expanded, no seam and no partial mesh
+        // in a fight (G1.16).
+        if (m->has_geometry_correction_row) {
+            row_label("Geometry correction", th);
+            bool geom = m->s.geometry_correction != 0;
+            if (ImGui::Checkbox("##geomcorr", &geom))
+                launcher_model_toggle_geometry_correction(m);
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(px(420));
+                ImGui::TextUnformatted(
+                    "Draws 3D polygons at the sub-pixel positions the console "
+                    "computes before rounding them, so models and stages stop "
+                    "wobbling as they move.\n\nVisual only: the game itself "
+                    "still sees whole pixels. Tiny gaps can still flicker where "
+                    "one polygon's corner touches another's edge.");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+            if (launcher_model_geometry_correction_inert(m)) {
+                ImGui::SameLine();
+                ImGui::TextColored(col(th.warn), "Software at 1x: no smoothing");
+            }
+        }
         row_label("Perspective textures", th);
         bool persp = m->s.perspective_texturing != 0;
         if (ImGui::Checkbox("##persptex", &persp))
             launcher_model_toggle_perspective_texturing(m);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Interpolates textures with perspective, which "
-                              "stops large floors and walls from warping as the "
-                              "camera moves.\n\nApplied only to polygons the "
-                              "runtime can prove came from the 3D pipeline, so "
-                              "2D art and menus are left alone.");
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(px(420));
+            ImGui::TextUnformatted(
+                "Interpolates textures with perspective, which stops large "
+                "floors and walls from warping as the camera moves.\n\n"
+                "Applied only to polygons the runtime can prove came from the "
+                "3D pipeline, so 2D art and menus are left alone.");
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
     }
 
     if (m->has_screen_kind) {

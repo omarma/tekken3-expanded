@@ -4,14 +4,17 @@
  "arena": 2,
  "dark": 0,
  "trigger": "arcade-end p1=kunimitsu",
- "sprite_colour": "1c1c1c",
- "sprite_why": "TTT's puff is snow (white, alpha-blended); in a forest without snow the user wants light grey smoke: an additive grey this faint",
+ "ttt_stage": {"stage": 2,
+               "why": "the PS2 script's stage 19 (scene table 0x51B388), YOSHIMITSU-B in the PS2 executable (0x440670), a PS2-only variant of Yoshimitsu's stage: TTT arcade's stage 2, its only Yoshimitsu stage, snowy too but a walled garden where the PS2's is an open forest with mountains beyond: no turn matches it, yaw 0 shows the most trees (180 put the walls close behind, 2026-10-21); every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 2 above"},
+ "sprite_colour": "404040",
+ "sprite_why": "TTT's puff is snow (white, alpha-blended); the user wants light grey smoke (2026-10-14). On TTT stage 2 (snow, the wall and trees behind) the 1c1c1c of the T3 forest no longer showed (the user, 2026-10-21): 404040, a light puff (707070 burst white, subtracted it was black)",
+ "retarget_why": "--upper-arms: with --collars alone the upper arms came out 23-25 degrees higher than the PS2's: Yoshimitsu's raised sword arm opened his armpit (530-680, Kunimitsu seen through it), her elbow stuck out in her close-up (220-240) (the user, 2026-10-21); Yoshimitsu --hips (the pelvis's turn as the PS2's) and --hand-turn 18:x:-90: his sword followed the PS2 hand's -y, its blade lies along z (stuck in the snow while he lies, 899-1439; held up instead of forward at 539-659)",
  "actors": [
   {"cast": "kunimitsu", "costume": 0, "skeleton": "kunimitsu",
-   "retarget": ["--basis", "canonical", "--calib-frame", "0:974", "--twists", "--collars"],
+   "retarget": ["--basis", "canonical", "--calib-frame", "0:974", "--twists", "--collars", "--upper-arms", "--world"],
    "why": "TTT costume -1 (the player's): T3 costume 0; her own head basis on her stance at 974 (session C); the arms' roll and the hands from the PS2 (--twists: rolled arms tore the mesh)"},
   {"cast": "yoshimitsu", "costume": 0, "skeleton": "kunimitsu", "idle": "roster/Yoshimitsu-TTT1-idle.poses",
-   "retarget": ["--calib", "{actor0}", "--calib-frame", "0:326", "--twists", "--collars"],
+   "retarget": ["--calib", "{actor0}", "--calib-frame", "0:326", "--twists", "--collars", "--upper-arms", "--hips", "--hand-turn", "18:x:-90"],
    "why": "the Tekken 3 native (the user, 2026-10-14: his hands do not show in this ending) on Kunimitsu's TTT1 skeleton, his TTT1 stance; TTT costume 2: T3 costume 0"}
  ],
  "ignore": []

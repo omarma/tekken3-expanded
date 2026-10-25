@@ -6,6 +6,7 @@
 #include "mod_plugins.h"
 #include "gpu.h"
 #include "tekken3_ttt1_assets.h"
+#include "tekken3_ttt1_ps2_laser.h"
 
 extern void __real_func_80036CAC(CPUState *cpu);
 extern void tekken3_cine_near_begin(uint32_t packets);
@@ -166,11 +167,83 @@ static void draw_sparks(const uint32_t *ctrl,uint32_t ot,unsigned p) {
     psx_mod_write_word(pkt,(psx_mod_read_word(slot)&0xffffffu)|(words<<24));
     psx_mod_write_word(slot,pkt&0xffffffu);
 }
+/* The PS2's beam (TTT PS2, measured on PCSX2, TIPS.md section 164): the orb
+ * at the start, image t on the t-th frame of the active window (t = 0..14),
+ * a square of 900 units facing the camera, not faded; then the beam cut into
+ * N = floor(length / 500) equal segments (none under 500), each a whole
+ * 64 x 32 image, U from the tip (0) to the start (1): from the tip, B[c],
+ * then A[c - 2] and A[c] in turn (A[c + 1] for the ninth), c = (t + 3) mod 7
+ * (the PS2's frame counter, B6 on t = 3). Each quad faces the camera, centred
+ * w / 6 under the beam. Kept from the arcade's: the width (50 + 100 f, the
+ * user's choice) and the fade on the vertex colour (0x80 x f). All additive,
+ * in one packet, the orb first. Returns 0 to draw the arcade's beam. */
+extern int tekken3_laser_age(unsigned p,int32_t s[3]);
+static int draw_ps2_laser(const uint32_t *ctrl,uint32_t ot,unsigned p,const int32_t *v,int fade) {
+    const Tekken3Ps2LaserImage *img;
+    uint32_t pkt;
+    int32_t s[3];
+    if(!tekken3_ps2_effects_on()) return 0;                 /* off or no pack: nothing called */
+    int age=tekken3_laser_age(p,s);
+    if(age<0 || !tekken3_ps2_laser_frame(p,(ot>>12)&1,&img,&pkt)) return 0;
+    uint32_t actor=0x800a9228+p*0x188c,o=pkt+4;
+    double h=(double)(ctrl[26]&0xffff);
+    enum { MOST=(TEKKEN3_PS2_LASER_PACKET_BYTES-4)/36-1 };              /* segments after the orb */
+    #define XY(x,y) ((((uint32_t)(int32_t)lround(y))&0xffff)<<16|(((uint32_t)(int32_t)lround(x))&0xffff))
+    #define QUAD(color,m,w,hgt,x0,y0,x1,y1,x2,y2,x3,y3) do { \
+        psx_mod_write_word(o,0x2E000000u|(color)); \
+        psx_mod_write_word(o+4,XY(x0,y0)); psx_mod_write_word(o+8,(uint32_t)(m).clut<<16|(uint32_t)(m).v<<8|(m).u); \
+        psx_mod_write_word(o+12,XY(x1,y1)); psx_mod_write_word(o+16,(uint32_t)(m).tpage<<16|(uint32_t)(m).v<<8|((m).u+(w))); \
+        psx_mod_write_word(o+20,XY(x2,y2)); psx_mod_write_word(o+24,(uint32_t)((m).v+(hgt))<<8|(m).u); \
+        psx_mod_write_word(o+28,XY(x3,y3)); psx_mod_write_word(o+32,(uint32_t)((m).v+(hgt))<<8|((m).u+(w))); \
+        o+=36; } while(0)
+    if(age<TEKKEN3_PS2_LASER_ORBS) {
+        double c[3];
+        project_beam(ctrl,actor,s,c);
+        if(c[2]>0) {
+            double r=450*h/c[2];
+            QUAD(0x808080u,img[age],63,63,c[0]-r,c[1]-r,c[0]+r,c[1]-r,c[0]-r,c[1]+r,c[0]+r,c[1]+r);
+        }
+    }
+    if(v) {
+        double dx=v[3]-v[0],dy=v[4]-v[1],dz=v[5]-v[2],length=sqrt(dx*dx+dy*dy+dz*dz);
+        int n=(int)(length/500);
+        if(n>MOST) n=MOST;
+        double f=fade/4096.0,world=50+100*f,drop=world/6;
+        unsigned g=(unsigned)(0x80*f);
+        uint32_t color=g<<16|g<<8|g;
+        int c=(age+3)%7;
+        for(int i=0;i<n;i++) {                                    /* i from the tip */
+            int32_t tip[3],start[3];
+            for(unsigned k=0;k<3;k++) {
+                tip[k]=(int32_t)(v[3+k]-(v[3+k]-v[k])*i/(double)n);
+                start[k]=(int32_t)(v[3+k]-(v[3+k]-v[k])*(i+1)/(double)n);
+            }
+            tip[1]+=(int32_t)drop; start[1]+=(int32_t)drop;      /* T3: +y is down */
+            double a[3],b[3];
+            project_beam(ctrl,actor,tip,a); project_beam(ctrl,actor,start,b);
+            if(a[2]<=0 || b[2]<=0) continue;
+            double ex=b[0]-a[0],ey=b[1]-a[1],len=sqrt(ex*ex+ey*ey);
+            if(len<1) continue;
+            double px=-ey/len,py=ex/len,wa=0.5*world*h/a[2],wb=0.5*world*h/b[2];
+            int k=i==0?TEKKEN3_PS2_LASER_B+c:TEKKEN3_PS2_LASER_A+(i==8?(c+1)%7:i&1?(c+5)%7:c);
+            QUAD(color,img[k],63,31,a[0]-px*wa,a[1]-py*wa,b[0]-px*wb,b[1]-py*wb,
+                 a[0]+px*wa,a[1]+py*wa,b[0]+px*wb,b[1]+py*wb);
+        }
+    }
+    #undef QUAD
+    #undef XY
+    if(o==pkt+4) return 1;
+    uint32_t words=(o-pkt-4)/4, slot=ot+4;                                  /* pres de l'avant */
+    psx_mod_write_word(pkt,(psx_mod_read_word(slot)&0xffffffu)|(words<<24));
+    psx_mod_write_word(slot,pkt&0xffffffu);
+    return 1;
+}
 static void draw_laser_beam(const uint32_t *ctrl,uint32_t ot,unsigned p) {
     int32_t v[6];
     int fade=0,beam=tekken3_laser_beam(p,v,&fade);
     tick_sparks(p,beam && v[4]==0?v+3:NULL);
     draw_sparks(ctrl,ot,p);
+    if(draw_ps2_laser(ctrl,ot,p,beam?v:NULL,fade)) return;
     if(!beam) return;
     /* Un paquet par joueur et par tampon : les deux rayons peuvent partir
      * dans la meme image. */

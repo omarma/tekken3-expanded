@@ -29,8 +29,11 @@ OPTIONAL = ('TTT1-voices.juv',           # Tetsujin ne parle pas
             'TTT1-sfx.jus',
             'TTT1-movelist.bin',           # tools/ttt1/movelist.py
             'TTT1-combos.bin',             # tools/ttt1/combos.py (COMBO TRAINING)
+            'TTT1-hiteffect64.hfx',        # effet de coup fort 64 x 64 (F12), repli sur le .tim 32 x 32
             # costumes 2 (Pied) et 3 (Start)
             *(f'TTT1-arcade-P{c}.{e}' for c in (2, 3) for e in ('3dm', 'relocs', 'tim')),
+            # le loup d'Unknown et sa lueur (tools/ttt1_import.py spirit())
+            *(f'TTT1-wolf.{e}' for e in ('3dm', 'relocs', 'glow')),
             # expressions du visage (tools/ttt1_import.py faces()) : pas chez Kunimitsu, les Jacks...
             *(f'TTT1-arcade-P{c}.face' for c in (1, 2, 3)),
             # ressorts des accessoires (tools/ttt1/accessories.py) : pas chez Tetsujin, Bruce, les Jacks...
@@ -120,6 +123,11 @@ def main(stamp=False):
     faces = sorted((WORK / 'panda-tiger/guest').glob('*-T3-ui.jui'))
     for p in faces: shutil.copyfile(p, OUT / p.name)
     if faces: print('Panda and Tiger: portraits staged')
+    # TTT Hitspark (tools/ttt1_hitspark.py): the natives' TTT1 strong-hit effects in 64 x 64,
+    # and the common sparks (Spark-, Guard-).
+    sparks = sorted((WORK / 'hitspark').glob('*-TTT1-hiteffect64.hfx'))
+    for p in sparks: shutil.copyfile(p, OUT / p.name)
+    if sparks: print(f'TTT Hitspark: {len(sparks)} packs staged (natives and common sparks)')
     print(f'{len(staged)} invites : {", ".join(staged)}')
     if missing: print(f'non importes : {", ".join(missing)}')
     stage_natives(table)

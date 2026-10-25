@@ -1,5 +1,7 @@
 #include "gpu_primitive_reject.h"
 
+int g_psx_gpu_allow_oversize = 0;
+
 #include <stdio.h>
 
 static int failures;

@@ -23,7 +23,8 @@ body:
       label: Version
       description: The release you downloaded, or "git clone" if you build from the repository.
       options:
-        - v1.3.0 (latest release)
+        - v1.4.0 (latest release)
+        - v1.3.0
         - v1.2.1
         - v1.2.0
         - v1.1.x

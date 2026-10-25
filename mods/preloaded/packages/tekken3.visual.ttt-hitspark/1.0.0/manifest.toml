@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.visual.ttt-hitspark"
+version = "1.0.0"
+name = "TTT Hitspark"
+author = "Tekken3Recomp"
+description = "Every fighter's strong-hit effect from Tekken Tag Tournament at its arcade resolution, 64x64 instead of the PS1's 32x32: the TTT1 guests' and Tekken 3's own cast's (Jin's red lightning included; not Gon's nor Dr. B's, who are not in TTT1). Made from your TTT1 ROM by the setup. OpenGL and software renderers."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "ttt-hitspark"
+name = "TTT Hitspark (64x64)"
+description = "Strong hits show each character's TTT1 effect in 64x64, the same size on screen, finer. Does nothing until the TTT1 characters are imported. Restart after changing."
+group = "Visual Enhancements"
+default_enabled = true
+
+[[plugin]]
+feature = "ttt-hitspark"
+id = "tekken3.ttt-hitspark"

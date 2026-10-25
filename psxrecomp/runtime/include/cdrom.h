@@ -87,6 +87,10 @@ int cdrom_load_in_progress(void);
 /* Physical non-XA data-read command state, without the logical load gap
  * bridge used by cdrom_load_in_progress(). Diagnostics only. */
 int cdrom_data_read_active(void);
+/* The 2048 user-data bytes of the mounted disc's sector `lba`, read on the
+ * host (mod disc patches applied, as the drive delivers them), outside the
+ * emulated drive: no command, IRQ or timing. 0 without a disc or past it. */
+int cdrom_host_read_sector(uint32_t lba, uint8_t *out);
 
 /* boot_state / netplay digest — full controller FSM (sector FIFOs included). */
 uint32_t cdrom_snapshot_bytes(void);

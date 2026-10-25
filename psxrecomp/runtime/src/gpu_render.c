@@ -233,6 +233,10 @@ int gr_render_display(uint32_t *o, int p, int dx, int dy, int dw, int dh) {
 int gr_render_display_hires(uint32_t *o, int p, int dx, int dy, int dw, int dh) {
     return g_b->render_display_hires(o, p, dx, dy, dw, dh);
 }
+int gr_read_display_hires(uint32_t *o, int p, int dx, int dy, int dw, int dh) {
+    if (g_b->read_display_hires) return g_b->read_display_hires(o, p, dx, dy, dw, dh);
+    return g_b->render_display_hires(o, p, dx, dy, dw, dh);
+}
 void gr_vram_write(int x, int y, uint16_t pixel)     { watch_rect(x, y, 1, 1); g_b->vram_write(x, y, pixel); }
 uint16_t gr_vram_read(int x, int y)                  { return g_b->vram_read(x, y); }
 void gr_vram_transfer_in(int x, int y, int w, int h, const uint16_t *d)  { watch_rect(x, y, w, h); g_b->vram_transfer_in(x, y, w, h, d); }

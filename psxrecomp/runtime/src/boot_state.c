@@ -9,6 +9,7 @@
 #include "psx_cycles.h"
 #include "psx_icache.h"    /* g_psx_icache_tv — fetch-cost tags in BS_SEC_ICACHE */
 #include "pst_wire.h"
+#include "mod_memory.h"    /* BS_SEC_MOD_MEM / BS_SEC_MOD_GPU_DMA                 */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,6 +65,20 @@ extern int      gpu_snapshot_read(const uint8_t* p, uint32_t len);
 extern uint32_t spu_snapshot_bytes(void);
 extern void     spu_snapshot_write(uint8_t* p);
 extern int      spu_snapshot_read(const uint8_t* p, uint32_t len);
+/* A mod's audio player (psx_mod_audio_state_register, BS_SEC_MOD_AUDIO). */
+static uint32_t (*s_mod_audio_bytes)(void);
+static void     (*s_mod_audio_write)(uint8_t* out);
+static int      (*s_mod_audio_read)(const uint8_t* in, uint32_t len);
+void psx_mod_audio_state_register(uint32_t (*bytes)(void),
+                                  void (*write)(uint8_t* out),
+                                  int (*read)(const uint8_t* in, uint32_t len)) {
+    s_mod_audio_bytes = bytes;
+    s_mod_audio_write = write;
+    s_mod_audio_read = read;
+}
+static uint32_t mod_audio_bytes(void) {
+    return s_mod_audio_bytes && s_mod_audio_write ? s_mod_audio_bytes() : 0u;
+}
 extern uint8_t* spu_get_ram_ptr(void);
 extern uint32_t spu_get_ram_bytes(void);
 extern uint32_t cdrom_snapshot_bytes(void);
@@ -372,6 +387,13 @@ static int boot_state_save_to(BsOut* o, const CPUState* cpu,
     h.abi_tag       = (int32_t)PSX_OVERLAY_ABI_TAG;
     h.codegen_ver   = (uint32_t)PSX_OVERLAY_CODEGEN_VER;
     h.section_count = gpu_high_vram_pixels() ? 17 : 16;
+    {
+        uint32_t used = 0;
+        psx_mod_memory_region(0, &used); if (used) h.section_count++;
+        psx_mod_memory_region(1, &used); if (used) h.section_count++;
+    }
+    const uint32_t audio_n = mod_audio_bytes();
+    if (audio_n) h.section_count++;
 
     ok = write_header_le(o, &h);
 
@@ -472,6 +494,21 @@ static int boot_state_save_to(BsOut* o, const CPUState* cpu,
              write_section(o, BS_SEC_VRAM_HI, wire, VRAM_SIZE);
         free(wire);
 #endif
+    }
+    /* Mod memory (bytes, no byte-order concern): only what was allocated. */
+    for (int which = 0; ok && which < 2; which++) {
+        uint32_t used = 0;
+        const uint8_t *region = psx_mod_memory_region(which, &used);
+        if (used)
+            ok = write_section(o, which ? BS_SEC_MOD_GPU_DMA : BS_SEC_MOD_MEM, region, used);
+    }
+    if (ok && audio_n) {
+        /* Opt-in mod audio player: only while it plays (section_count). */
+        uint8_t *buf = (uint8_t *)malloc(audio_n);
+        if (!buf) return 0;
+        s_mod_audio_write(buf);
+        ok = write_section(o, BS_SEC_MOD_AUDIO, buf, audio_n);
+        free(buf);
     }
     return ok;
 }
@@ -650,6 +687,10 @@ static int apply_section(uint32_t tag, const uint8_t* p, uint32_t len,
         }
 #endif
     }
+    case BS_SEC_MOD_MEM:
+        return psx_mod_memory_restore(0, p, len);
+    case BS_SEC_MOD_GPU_DMA:
+        return psx_mod_memory_restore(1, p, len);
     case BS_SEC_VRAM_HI: {
         /* Opt-in upper VRAM half: kept by a build whose mod made it. */
         if (len != VRAM_SIZE) return 0;
@@ -671,6 +712,8 @@ static int apply_section(uint32_t tag, const uint8_t* p, uint32_t len,
         }
 #endif
     }
+    case BS_SEC_MOD_AUDIO:
+        return s_mod_audio_read ? s_mod_audio_read(p, len) : 1;
     case BS_SEC_SPU:
         return spu_snapshot_read(p, len);
     case BS_SEC_SPURAM:
@@ -754,6 +797,18 @@ static void boot_state_append_reason(char* reason, size_t reason_cap,
     snprintf(reason + n, reason_cap - n, "%s", part);
 }
 
+/* A codegen marker that differs from the running build: rejected, unless the
+ * debug-bench override accepts it (logged either way). */
+static void boot_state_codegen_mismatch(int allow, const char* part,
+                                        char* reason, size_t reason_cap) {
+    if (allow) {
+        fprintf(stderr, "boot_state: %s accepted "
+                "(PSX_SAVESTATE_ALLOW_CODEGEN_MISMATCH)\n", part);
+        return;
+    }
+    boot_state_append_reason(reason, reason_cap, part);
+}
+
 int boot_state_check_buffer(const uint8_t* file, size_t file_len,
                             uint32_t bios_checksum, uint32_t entry_pc,
                             char* reason, size_t reason_cap) {
@@ -798,21 +853,29 @@ int boot_state_check_buffer(const uint8_t* file, size_t file_len,
                  (unsigned)h.entry_pc, (unsigned)entry_pc);
         boot_state_append_reason(reason, reason_cap, part);
     }
+    /* PSX_SAVESTATE_ALLOW_CODEGEN_MISMATCH=1 (debug benches only): a state
+     * is guest state (RAM, CPU, VRAM...), which a recompiler change does not
+     * alter. The codegen hash, the overlay ABI tag and the codegen version all
+     * describe the code that runs the guest; they guard the overlay caches,
+     * which are revalidated after a RAM restore anyway. tools/test_pgxp.py
+     * sets it so its kept scenes outlive the recompiler and ABI changes they
+     * measure (a change of emitted code bumps the ABI too, PGXP J1). */
+    const int allow_codegen = getenv("PSX_SAVESTATE_ALLOW_CODEGEN_MISMATCH") != NULL;
     if (h.codegen_hash != (uint32_t)PSX_OVERLAY_CODEGEN_HASH) {
         snprintf(part, sizeof(part), "codegen_hash=%08X(want %08X)",
                  (unsigned)h.codegen_hash,
                  (unsigned)PSX_OVERLAY_CODEGEN_HASH);
-        boot_state_append_reason(reason, reason_cap, part);
+        boot_state_codegen_mismatch(allow_codegen, part, reason, reason_cap);
     }
     if (h.abi_tag != (int32_t)PSX_OVERLAY_ABI_TAG) {
         snprintf(part, sizeof(part), "abi_tag=%d(want %d)",
                  (int)h.abi_tag, (int)PSX_OVERLAY_ABI_TAG);
-        boot_state_append_reason(reason, reason_cap, part);
+        boot_state_codegen_mismatch(allow_codegen, part, reason, reason_cap);
     }
     if (h.codegen_ver != (uint32_t)PSX_OVERLAY_CODEGEN_VER) {
         snprintf(part, sizeof(part), "codegen_ver=%u(want %u)",
                  (unsigned)h.codegen_ver, (unsigned)PSX_OVERLAY_CODEGEN_VER);
-        boot_state_append_reason(reason, reason_cap, part);
+        boot_state_codegen_mismatch(allow_codegen, part, reason, reason_cap);
     }
 
     if (reason && reason_cap && reason[0])

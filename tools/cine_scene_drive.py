@@ -39,6 +39,7 @@ def main():
     ap.add_argument('--build', default='build-rel-lite')
     ap.add_argument('--visible', action='store_true')
     ap.add_argument('--env', action='append', default=[], help='KEY=VALUE for the game (TEKKEN3_CINE_RECORD=...)')
+    ap.add_argument('--video', action='append', default=[], help='KEY=VALUE of settings.toml [video] (supersampling=4 for a film)')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     build = ROOT / a.build
@@ -46,7 +47,7 @@ def main():
     env = dict(e.split('=', 1) for e in a.env)
     if a.hold: env['TEKKEN3_CINE_HOLD'] = a.hold
     env['TEKKEN3_CINE_SCENE_TEST'] = f'{cine.as_posix()}@{a.start}:{120 if a.start == 8 else 30}:{int(a.black)}'
-    g = cd.Game(build, a.out, env, a.visible)
+    g = cd.Game(build, a.out, env, a.visible, a.video)
     rows, last, shot, ok, taken = [], None, -10 ** 9, False, set()
     try:
         g.q(cmd='turbo', enabled=1)

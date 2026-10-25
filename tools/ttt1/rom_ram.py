@@ -103,7 +103,21 @@ def effect_vram(folder, c: int, v: int = 0) -> bytes:
     game = load(folder)[2]
     u32 = lambda a: struct.unpack_from('<I', game, a - E.BASE)[0]
     record = u32(E.RECORDS + 4 * (8 * c + v))
-    row = E.EFFECTS + 0x18 * game[record - E.BASE + 10]
+    return effect_row_vram(folder, game[record - E.BASE + 10])
+
+
+# Rows of 8001AD30 that are no character's: TTT1's common sparks (F12, TTT
+# Hitspark), each in the strong-hit effect's format. 28: a landed hit's spray
+# (file 30; its own red palette, untinted: the operator's green option recolours
+# it at run time), 30: a guarded hit's sparks (file 1, tinted 80 / 96 / 128).
+SPARK_ROW, GUARD_ROW = 28, 30
+
+
+def effect_row_vram(folder, index: int) -> bytes:
+    """effect_vram for row `index` of 8001AD30."""
+    game = load(folder)[2]
+    u32 = lambda a: struct.unpack_from('<I', game, a - E.BASE)[0]
+    row = E.EFFECTS + 0x18 * index
     n = u32(row)
     red, green, blue = struct.unpack_from('<3h', game, row + 0x0C - E.BASE)
     sheet = file(folder, 3, n) if n < E.EFFECT_SPLIT else file(folder, 4, n - E.EFFECT_SPLIT)

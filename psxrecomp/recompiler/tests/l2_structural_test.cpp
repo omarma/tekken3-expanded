@@ -404,6 +404,11 @@ int main(int argc, char** argv) {
         check_gte_helper(I_TYPE(0x3A, V1, reg, 0),
                          fmt::format("gte_read_data(cpu, {})", reg),
                          PSXRecompGTERegisters::data_read_needs_helper(reg), "SWC2", reg);
+        // Sub-pixel precision reload hook: after LWC2 into SXY0-2/SXYP only
+        // (ENHANCEMENTS.md G1.11).
+        check_gte_helper(I_TYPE(0x32, V1, reg, 0),
+                         std::string("gte_precision_lwc2_word("),
+                         reg >= 12 && reg <= 15, "LWC2 precision", reg);
     }
 
     fmt::print("\nL2 structural: {}/{} ok", pass, total);

@@ -279,41 +279,83 @@ bool ISOReader::Open(const std::string& filename) {
     }
 
     // Build the segment table: open every file and lay it out at the next
-    // disc-relative sector. Every file must open — a multi-file dump with a
-    // missing track file would otherwise silently read the wrong sectors.
+    // disc-relative sector, each track's PREGAP (silence the disc has and the
+    // file does not store: redump's audio tracks carry PREGAP 00:02:00) before
+    // its INDEX 00, else its INDEX 01, as on the disc. Without the PREGAP every
+    // later track sits that much early: Tekken 3's staff roll, played from its
+    // TOC time (minutes and seconds), landed in the data track and stayed
+    // silent. Every file must open — a multi-file dump with a missing track
+    // file would otherwise silently read the wrong sectors.
+    struct FileRun { uint32_t file_sector, disc_lba, count; };
+    std::vector<std::vector<FileRun>> runs(bin_files.size());
+    std::vector<uint32_t> gap_lba(pending_tracks.size(), 0);
     uint32_t next_lba = 0;
-    for (const std::string& bin_name : bin_files) {
-        BinSegment seg;
-        seg.path = bin_name;
-        seg.file.open(bin_name, std::ios::binary);
-        if (!seg.file.is_open()) {
+    for (size_t f = 0; f < bin_files.size(); ++f) {
+        const std::string& bin_name = bin_files[f];
+        std::error_code ec;
+        const uintmax_t size = std::filesystem::file_size(bin_name, ec);
+        if (ec || size == 0) {
             Close();
             return false;
         }
-        seg.file.seekg(0, std::ios::end);
-        const std::streampos file_size = seg.file.tellg();
-        seg.file.clear();
-        if (file_size <= 0) {
+        const bool raw = (size % RAW_SECTOR_SIZE) == 0;
+        const uint32_t sectors =
+            static_cast<uint32_t>(size / (raw ? RAW_SECTOR_SIZE : SECTOR_SIZE));
+        uint32_t pos = 0;
+        auto add_file = [&](uint32_t end) {
+            if (end <= pos) return true;
+            BinSegment seg;
+            seg.path = bin_name;
+            seg.file.open(bin_name, std::ios::binary);
+            if (!seg.file.is_open()) return false;
+            seg.raw          = raw;
+            seg.start_lba    = next_lba;
+            seg.sector_count = end - pos;
+            seg.file_sector  = pos;
+            runs[f].push_back({pos, next_lba, end - pos});
+            next_lba += end - pos;
+            pos = end;
+            segments_.push_back(std::move(seg));
+            return true;
+        };
+        for (size_t i = 0; i < pending_tracks.size(); ++i) {
+            const PendingTrack& p = pending_tracks[i];
+            if (p.file_index != f || p.pregap == 0) continue;
+            if (!add_file(std::min(p.has_index00 ? p.index00 : p.index01, sectors))) {
+                Close();
+                return false;
+            }
+            BinSegment gap;
+            gap.start_lba    = next_lba;
+            gap.sector_count = p.pregap;
+            gap.raw          = raw;
+            gap.gap          = true;
+            gap_lba[i] = next_lba;
+            next_lba += p.pregap;
+            segments_.push_back(std::move(gap));
+        }
+        if (!add_file(sectors)) {
             Close();
             return false;
         }
-        const uint64_t size = static_cast<uint64_t>(file_size);
-        seg.raw          = (size % RAW_SECTOR_SIZE) == 0;
-        seg.sector_count = static_cast<uint32_t>(size / (seg.raw ? RAW_SECTOR_SIZE
-                                                                 : SECTOR_SIZE));
-        seg.start_lba    = next_lba;
-        next_lba += seg.sector_count;
-        segments_.push_back(std::move(seg));
     }
 
     // Convert the pending cue tracks to disc-relative LBAs.
-    for (const PendingTrack& p : pending_tracks) {
+    auto disc_lba = [&](size_t f, uint32_t file_sector) {
+        for (const FileRun& r : runs[f])
+            if (file_sector < r.file_sector + r.count)
+                return r.disc_lba + (file_sector - r.file_sector);
+        const FileRun& last = runs[f].back();
+        return last.disc_lba + (file_sector - last.file_sector);
+    };
+    for (size_t i = 0; i < pending_tracks.size(); ++i) {
+        const PendingTrack& p = pending_tracks[i];
         CDTrack t;
         t.number    = p.number;
         t.is_audio  = p.is_audio;
-        t.start_lba = segments_[p.file_index].start_lba + p.index01;
-        t.pregap_lba = segments_[p.file_index].start_lba +
-                       (p.has_index00 ? p.index00 : p.index01);
+        t.start_lba = disc_lba(p.file_index, p.index01);
+        t.pregap_lba = p.pregap ? gap_lba[i]
+                                : disc_lba(p.file_index, p.has_index00 ? p.index00 : p.index01);
         tracks_.push_back(t);
     }
 
@@ -326,7 +368,8 @@ bool ISOReader::Open(const std::string& filename) {
     }
 
     // Store the resolved data-track path for callers
-    bin_path_ = segments_.front().path;
+    for (const BinSegment& seg : segments_)
+        if (!seg.gap) { bin_path_ = seg.path; break; }
 
     is_open_ = true;
 
@@ -385,10 +428,10 @@ bool ISOReader::ReadSector(uint32_t lba, uint8_t* buffer) {
     }
 
     BinSegment* seg = SegmentForLBA(lba);
-    if (!seg) {
+    if (!seg || seg->gap) {
         return false;
     }
-    const uint32_t local_lba = lba - seg->start_lba;
+    const uint32_t local_lba = lba - seg->start_lba + seg->file_sector;
 
     // Clear any error flags from a previous failed read
     seg->file.clear();
@@ -435,10 +478,10 @@ bool ISOReader::ReadRawSector(uint32_t lba, uint8_t* buffer) {
     if (chd_) return read_chd_raw(*chd_, lba, buffer, nullptr);
 
     BinSegment* seg = SegmentForLBA(lba);
-    if (!seg || !seg->raw) {
+    if (!seg || seg->gap || !seg->raw) {
         return false;
     }
-    const uint32_t local_lba = lba - seg->start_lba;
+    const uint32_t local_lba = lba - seg->start_lba + seg->file_sector;
 
     seg->file.clear();
     std::streampos offset = static_cast<std::streampos>(local_lba) * RAW_SECTOR_SIZE;

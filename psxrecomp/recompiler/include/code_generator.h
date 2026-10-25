@@ -71,6 +71,17 @@ struct CodeGenConfig {
     // addresses (MotK VLC leaves, etc.). Host locality hint only.
     std::set<uint32_t> hot_funcs;
 
+    // [recompiler] precision_funcs: LW / SW / ADDU / SRA / AND / OR in the
+    // emitted functions starting in these inclusive ranges call the
+    // gte_precision_cpu_* value-propagation hooks (ENHANCEMENTS.md G1.12).
+    // Not applied in overlay mode. Empty = no hooks.
+    std::vector<std::pair<uint32_t, uint32_t>> precision_funcs;
+    bool is_precision_func(uint32_t start) const {
+        for (const auto& r : precision_funcs)
+            if (start >= r.first && start <= r.second) return true;
+        return false;
+    }
+
     // [recompiler] load_charge_batch(_funcs): install a function-local
     // cycle accumulator so load charges skip deadline probes until IRQ/MMIO
     // / function exit. Guest totals at those barriers are unchanged.
@@ -404,6 +415,11 @@ private:
     // translate_instruction to widen that function's width compares. See
     // func_has_screen_extent_cull().
     bool ws_auto_cull_func_ = false;
+    // Set per function by generate_function: the function is listed in
+    // config_.precision_funcs, so translate_instruction emits the G1.12
+    // value-propagation hooks. Cleared for every other function.
+    bool precision_func_ = false;
+    std::string precision_hooks(uint32_t instr, const std::string& code) const;
     // LEFT-edge funnel bltz addresses in the current function (auto_screen_x,
     // signed min/max + center±halfwidth idioms — ws_cull_detect.h). Populated
     // per function alongside ws_auto_cull_func_; generate_branch_condition

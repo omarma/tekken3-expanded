@@ -29,40 +29,49 @@ START, UP, DOWN, LEFT, RIGHT, CIRCLE = 0xfff7, 0xffef, 0xffbf, 0xff7f, 0xffdf, 0
 IDLE = 0xffff
 STATE, UNLOCK = 0x800ae204, 0x80097ef0
 GUEST_BITS_MASK = 0xff800000          # IDs 23..31: the only guests the word can carry
-GUEST_FIELDS, GUEST_TIME = (7, 5, 3, 0), 120000   # injected into ttt1-guest-records.txt for the first guest
+GUEST_FIELDS, GUEST_TIME = (7, 5, 3, 0), 120000   # injected into card1-ttt1-guest-records.txt for the first guest
 GUEST_GAMES = GUEST_FIELDS[0] + GUEST_FIELDS[2] + GUEST_FIELDS[3]   # what USAGE counts
 SURVIVAL = 0x80097ffc
 X, PAGE, TA_ROWS = 0x801e0000, 0x40, 0x801e0100      # the patched overlay's structures (records.c)
 STOCK_TA, COUNTERS = 0x80097f4c, 0x8009804c
 WL = X + 0x250                            # the wins / losses rows
+EXE = 'Tekken_3_Expanded' + ('.exe' if os.name == 'nt' else '')
+
+
+def link(source, target):
+    """A link to a mods entry: on Windows a junction (folder) or a hard link (file)."""
+    if os.name != 'nt': os.symlink(source, target)
+    elif Path(source).is_dir(): subprocess.run(['cmd', '/c', 'mklink', '/J', str(target), str(source)], check=True, capture_output=True)
+    else: os.link(source, target)
 
 
 class Game:
-    def __init__(self, build, ttt1, guests):
+    def __init__(self, build, ttt1, guests, memcards):
         self.tmp = Path(tempfile.mkdtemp(prefix='records-screen-'))
         run = self.tmp / 'run'
         run.mkdir()
-        shutil.copy2(build / 'Tekken_3_Expanded', run / 'Tekken_3_Expanded')
+        shutil.copy2(build / EXE, run / EXE)
         shutil.copytree(build / 'bios', run / 'bios') if (build / 'bios').is_dir() else None
         (run / 'mods').mkdir()
         for entry in (build / 'mods').iterdir():
-            if entry.name != 'ttt1': os.symlink(entry, run / 'mods' / entry.name)
+            if entry.name != 'ttt1': link(entry, run / 'mods' / entry.name)
         source = ttt1 or build / 'mods' / 'ttt1'
         if guests == 'one':
             (run / 'mods' / 'ttt1').mkdir()
             for entry in source.iterdir():
-                if entry.name != 'guests.txt': os.symlink(entry, run / 'mods' / 'ttt1' / entry.name)
+                if entry.name != 'guests.txt': link(entry, run / 'mods' / 'ttt1' / entry.name)
             first = next(l for l in (source / 'guests.txt').read_text().splitlines() if l.split())
             (run / 'mods' / 'ttt1' / 'guests.txt').write_text(first + '\n')
         else:
-            os.symlink(source, run / 'mods' / 'ttt1')
+            link(source, run / 'mods' / 'ttt1')
         (run / 'settings.toml').write_text('[video]\nsupersampling=1\n[controller]\np1_device="keyboard"\np2_device="none"\n')
         saves = self.tmp / 'saves'
-        shutil.copytree(ROOT / 'workspace/fixtures/ps1-saves', saves)
-        # The first guest has played 7 games and holds a TIME ATTACK record.
+        shutil.copytree(memcards, saves)
+        # The first guest has played 7 games and holds a TIME ATTACK record, in
+        # the card's own file: read only when the card holds a Tekken 3 save (B63).
         self.first_key = next(l for l in (source / 'guests.txt').read_text().splitlines() if l.split()).split()[0]
         if guests != 'none':
-            (saves / 'ttt1-guest-records.txt').write_text(
+            (saves / 'card1-ttt1-guest-records.txt').write_text(
                 f'{self.first_key} {" ".join(map(str, GUEST_FIELDS))}\n@time {self.first_key} {GUEST_TIME} 84 83 84\n')
         self.guest_count = {'none': 0, 'one': 1}.get(guests) if guests != 'all' else sum(
             1 for l in (source / 'guests.txt').read_text().splitlines() if l.split())
@@ -73,7 +82,7 @@ class Game:
         if guests == 'none': env['TEKKEN3_TTT1_ROSTER'] = '0'
         self.log = self.tmp / 'game.log'
         self.proc = subprocess.Popen(
-            [str(run / 'Tekken_3_Expanded'), '--game', str(ROOT / 'game.toml'),
+            [str(run / EXE), '--game', str(ROOT / 'game.toml'),
              '--disc', str(ROOT / 'disc/Tekken 3 (USA).cue'), '--no-launcher', '--renderer', 'software',
              '--debug-port', str(self.port), '--memcard-dir', str(saves), '--headless'],
             cwd=ROOT, stdout=self.log.open('w'), stderr=subprocess.STDOUT, env=env)
@@ -85,13 +94,9 @@ class Game:
     def value(self, a, n=4): return int.from_bytes(bytes.fromhex(self.q(cmd='read_ram', addr=f'{a:08x}', len=n)['hex']), 'little')
     def alive(self): return self.proc.poll() is None
 
-    def route(self, steps):
-        self.q(cmd='input_route_clear')
-        for frames, buttons in steps: self.q(cmd='input_route_append', frames=frames, buttons=buttons)
-        self.q(cmd='input_route_start')
-        while self.q(cmd='input_route_status').get('active'): time.sleep(.05)
-
-    def tap(self, b): self.route([(4, b), (14, IDLE)])
+    # One press at a time: the input_route queue stops after a card access,
+    # and the boot reads a card that holds a save (TIPS.md section 35).
+    def tap(self, b): self.q(cmd='press', buttons=b, frames=4, port=1); time.sleep(.4)
 
     def wait_state(self, want, seconds=90):
         end = time.monotonic() + seconds
@@ -104,6 +109,12 @@ class Game:
         if self.alive(): self.proc.terminate()
         try: self.proc.wait(timeout=10)
         except subprocess.TimeoutExpired: self.proc.kill()
+        # The links go first, never what they point to.
+        for mods in (self.tmp / 'run/mods', self.tmp / 'run/mods/ttt1'):
+            if not mods.is_dir() or os.path.islink(mods) or getattr(os.path, 'isjunction', lambda p: False)(mods): continue
+            for entry in mods.iterdir():
+                if getattr(os.path, 'isjunction', lambda p: False)(entry): os.rmdir(entry)
+                elif os.path.islink(entry): os.unlink(entry)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
@@ -159,25 +170,29 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--build', default='build-opt-dbg')
     ap.add_argument('--ttt1', help='staged ttt1 assets (default: BUILD/mods/ttt1)')
+    ap.add_argument('--memcard-dir', default=str(ROOT / 'workspace/fixtures/ps1-saves'),
+                    help='copied, never written; card 1 must hold a Tekken 3 save (CARD SAVE once) for the guest records to be read')
     ap.add_argument('--guests', default='all', choices=('all', 'one', 'none'))
     ap.add_argument('--native', help='json file: with --guests none the native (vanilla) pages are written there, otherwise the stock part of ours is compared with it')
     ap.add_argument('--shots', help='directory for one capture per RECORDS page (to be judged by eye)')
     args = ap.parse_args()
     build = (ROOT / args.build).resolve()
-    g = Game(build, Path(args.ttt1).resolve() if args.ttt1 else None, args.guests)
+    g = Game(build, Path(args.ttt1).resolve() if args.ttt1 else None, args.guests, Path(args.memcard_dir))
     failures = []
     def check(ok, what):
         print(('ok   ' if ok else 'FAIL ') + what, flush=True)
         if not ok: failures.append(what)
     try:
-        # Start through the intro until the modes menu (state 4).
-        for _ in range(60):
-            if g.value(STATE) == 4: break
-            g.tap(START); time.sleep(2)
+        # Start through the intro until the modes menu (state 4), which gives
+        # up after two seconds: OPTION MODE is chosen at once.
+        end = time.monotonic() + 240
+        while g.value(STATE) != 4 and time.monotonic() < end:
+            if g.value(STATE) in (2, 3): g.tap(START)
+            else: time.sleep(.1)
         check(g.value(STATE) == 4, 'reached the modes menu (state 4)')
-        time.sleep(3)
         stock_before = g.value(UNLOCK) & ~GUEST_BITS_MASK
-        g.route([(4, UP), (30, IDLE)]); g.tap(CIRCLE)
+        g.q(cmd='write_ram', addr='80097f40', bytes='00000000')   # ARCADE (a card brings back its last line)
+        g.tap(UP); time.sleep(.5); g.tap(CIRCLE)
         check(g.wait_state(5, 30), 'OPTION MODE is state 5')
         time.sleep(2)
         if args.guests != 'none':       # the first Survival row holds the first guest (id 23), 5 wins, name TST
@@ -220,6 +235,7 @@ def main():
             shot('page0')
             def scroll_check(p):    # the native Down scroll reaches the last row, Up goes back
                 base = X + p * PAGE; count = g.value(base + 4)
+                if count > PAGE - 8: return check(False, f'page {p} has a list to scroll ({count} rows)')
                 for _ in range(count + 2): g.tap(DOWN)
                 off = g.value(base)
                 check(count > 10 and off == count - 10, f'page {p} scrolled down to its last ten rows (offset {off}, {count} rows)'); shot(f'page{p}-end')

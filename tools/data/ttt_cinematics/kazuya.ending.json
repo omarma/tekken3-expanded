@@ -1,0 +1,24 @@
+{
+ "about": "Kazuya's Tekken Tag Tournament (PS2) ending (scene 28): Kazuya stands over Jin, Jin's Devil side wakes (891) and lightning runs over his body (cmd 10, 910-1002). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md) from the capture, in place of the old hand-made way (TTT Cinematics' ENDINGS).",
+ "scene": "kazuya",
+ "arena": 6,
+ "dark": 0,
+ "trigger": "arcade-end p1=kazuya",
+ "ttt_stage": {"stage": 6,
+               "why": "the PS2 script's stage 6 (scene table 0x51B388), TTT arcade's stage 6: Ogre's temple, lit (the user, 2026-10-21: not True Ogre's dark one); every TTT cinematic on its TTT stage; without TTT Stages, the T3 arena 6 above, lit"},
+ "actors": [
+  {"cast": "kazuya", "costume": 0, "skeleton": "kazuya",
+   "retarget": ["--basis", "canonical", "--twists", "--collars", "--upper-arms", "--world"],
+   "effect": "Jin-TTT1-hiteffect.tim",
+   "why": "TTT costume -1 (the player's): T3 costume 0"},
+  {"cast": "devil", "costume": 0, "skeleton": "devil", "cast_of": "jin",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--upper-arms"],
+   "models": [["../ttt-cinematics/JinPlain-TTT1", 0], ["../ttt-cinematics/DevilJinEnd-TTT1", 892]],
+   "effect": "Jin-TTT1-hiteffect.tim", "light": "ff2020",
+   "light_why": "the lightning's red light, as the old way's",
+   "why": "the script's Jin (TTT costume 2) on the Devil guest's skeleton (Jin's TTT1 model), plain Jin's textures until the script's Devil on (cmd 12 at 891, seen at 892 in the capture), then Devil Jin without wings (the old way's models); his lightning: Jin's red TTT1 effect"}
+ ],
+ "ignore": [
+  {"cmd": 12, "t": 891, "why": "Devil on: played as the `model` step to DevilJinEnd at 892 (actor 1's models)"}
+ ]
+}

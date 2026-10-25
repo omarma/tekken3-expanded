@@ -653,6 +653,43 @@ void codegen_tests() {
     check(overlay_mismatch.find("ws cull negsub") == std::string::npos,
           "overlay nonmatching negsub variant remains unchanged");
 
+    // [recompiler] precision_funcs (ENHANCEMENTS.md G1.12): hooks only in a
+    // listed function (single address or inclusive range), never in overlays.
+    PSXRecomp::CodeGenConfig precision_config;
+    precision_config.precision_funcs.emplace_back(0x80000000u, 0x80010000u);
+    const std::string unlisted = generate_first_instruction(
+        0x8C820004u, {}, false); // lw v0,4(a0)
+    check(unlisted.find("gte_precision_cpu_") == std::string::npos,
+          "precision hooks absent outside precision_funcs");
+    const std::string lw_hook = generate_first_instruction(
+        0x8C820004u, {}, false, precision_config);
+    check(lw_hook.find("if (g_gte_precision_tracking) gte_precision_cpu_lw(2u, cpu->gpr[4] + 4); "
+                       "cpu->gpr[2] = psx_cyc_load_word(") != std::string::npos,
+          "precision lw hook runs before the load");
+    const std::string sw_hook = generate_first_instruction(
+        0xAC820004u, {}, false, precision_config); // sw v0,4(a0)
+    check(sw_hook.find("cpu->write_word(cpu->gpr[4] + 4, cpu->gpr[2]); if (g_gte_precision_tracking) "
+                       "gte_precision_cpu_sw(cpu->gpr[4] + 4, 2u, cpu->gpr[2]);") != std::string::npos,
+          "precision sw hook runs after the store");
+    const std::string sra_hook = generate_first_instruction(
+        0x000B5843u, {}, false, precision_config); // sra t3,t3,1
+    check(sra_hook.find("gte_precision_cpu_sra(11u, 11u, 1u, cpu->gpr[11]); cpu->gpr[11] = (int32_t)") !=
+              std::string::npos,
+          "precision sra hook reads the operand before the shift");
+    const std::string addu_hook = generate_first_instruction(
+        0x012B4821u, {}, false, precision_config); // addu t1,t1,t3
+    check(addu_hook.find("gte_precision_cpu_add(9u, 9u, 11u, cpu->gpr[9], cpu->gpr[11]);") !=
+              std::string::npos,
+          "precision addu hook passes both operands");
+    PSXRecomp::CodeGenConfig precision_single;
+    precision_single.precision_funcs.emplace_back(0x80010000u, 0x80010000u);
+    check(generate_first_instruction(0x016C5824u, {}, false, precision_single)
+              .find("gte_precision_cpu_and(11u, 11u, 12u,") != std::string::npos,
+          "precision_funcs single address instruments its function");
+    check(generate_first_instruction(0x8C820004u, {}, true, precision_config)
+              .find("gte_precision_cpu_") == std::string::npos,
+          "precision hooks never emitted in overlay mode");
+
     PSXRecomp::CodeGenConfig vxrange_config;
     vxrange_config.ws_cull_vxrange_sites.insert(0x80010000u);
     const std::string vxrange = generate_first_instruction(

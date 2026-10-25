@@ -1,7 +1,7 @@
 """Local first-run setup. Downloads only pinned tools; game data stays local."""
 from __future__ import annotations
 from pathlib import Path, PureWindowsPath
-import argparse, hashlib, json, os, re, shutil, struct, subprocess, sys, time
+import argparse, fnmatch, hashlib, json, os, re, shutil, struct, subprocess, sys, time
 import urllib.request, urllib.error, zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -67,6 +67,9 @@ def ready():
         # or never made for an install set up with tekken3.zip before they existed.
         wanted=state.get('arcade_stages',bool(load_json(STATE/'last-inputs.json').get('tekken3')))
         if wanted and not arcade_stages_current(ARCADE_STAGES_INSTALLED):return False
+        # TTT's stages and their music, older than this checkout, or never made
+        # for an install set up with the TTT1 characters before they existed.
+        if not ttt_stages_ready(state):return False
     except OSError:return False
     return True
 
@@ -87,6 +90,10 @@ def android_ready():
     state=load_json(STATE/'android.json')
     if state.get('ttt1') and not ttt1_current(ROSTER):return False
     if state.get('arcade_stages') and not arcade_stages_current(ARCADE_STAGES_PACKS):return False
+    if state.get('ttt_stages') and not ttt_stages_current(TTT_STAGES_PACKS):return False
+    if state.get('ttt_music') and not ttt_music_current(TTT_MUSIC_PACK):return False
+    if state.get('ttt_ps2_music') and not ttt_ps2_music_current(TTT_PS2_MUSIC_PACK):return False
+    if state.get('ttt_ps2_laser') and not ttt_ps2_laser_current(TTT_PS2_LASER_PACK):return False
     return (state.get('release')==RELEASE and (ROOT/'generated/SLUS_004.02_dispatch.c').is_file()
             and (ROOT/'disc/Tekken 3 (USA).cue').is_file())
 
@@ -127,13 +134,17 @@ def arcade_stages_version():
 def arcade_stages_current(folder):
     return arcade_stages_version().current(folder)
 
+def arcade_stages_made(pc=True):
+    """This version's arcade stage packs are here: tekken3.zip is not read for them."""
+    if arcade_stages_current(ARCADE_STAGES_PACKS):return True
+    # Only beside the game (workspace/ freed): the build keeps that copy.
+    return pc and not (ARCADE_STAGES_PACKS/'version.txt').exists() and arcade_stages_current(ARCADE_STAGES_INSTALLED)
+
 def prepare_arcade_stages(tekken3,env,pc=True):
     """The 13 arcade stage packs from tekken3.zip, unless this version is
     already there. Optional: a failure only keeps the PS1 stages. True when
     the packs are ready."""
-    if arcade_stages_current(ARCADE_STAGES_PACKS):return True
-    # Only beside the game (workspace/ freed): the build keeps that copy.
-    if pc and not (ARCADE_STAGES_PACKS/'version.txt').exists() and arcade_stages_current(ARCADE_STAGES_INSTALLED):return True
+    if arcade_stages_made(pc):return True
     emit(message='Preparing the arcade stages',detail='Converting the Tekken 3 arcade stages from your tekken3.zip.')
     try:
         run([sys.executable,ROOT/'tools/arcade_stages/install.py','--tekken3',tekken3,'--out',ARCADE_STAGES_PACKS],environment=env,
@@ -143,18 +154,171 @@ def prepare_arcade_stages(tekken3,env,pc=True):
         return False
     return True
 
+# TTT Stages (TTT Stages S7): TTT's 15 stage packs (tools/arcade_stages/install.py
+# --ttt1) and their music (tools/ttt_stages/music_install.py), made from
+# tektagt.zip with the TTT1 characters, staged by CMakeLists.txt beside the game
+# (PC and Android) as mods/ttt-stages and mods/ttt-music; their copies there stay
+# when "free up disk space" deletes workspace/.
+TTT_STAGES_PACKS=ROOT/'workspace/ttt-stages/pack'
+TTT_STAGES_INSTALLED=BUILD/'mods/ttt-stages'
+TTT_MUSIC_PACK=ROOT/'workspace/ttt-stages/music-pack'
+TTT_MUSIC_INSTALLED=BUILD/'mods/ttt-music'
+# Their PS2 version (tools/ttt_stages/ps2_music_install.py), copied from the
+# player's TTT PS2 disc when one is given: mods/ttt-ps2-music.
+TTT_PS2_MUSIC_PACK=ROOT/'workspace/ttt-stages/ps2-music-pack'
+TTT_PS2_MUSIC_INSTALLED=BUILD/'mods/ttt-ps2-music'
+# Devil's and Angel's PS2 laser textures (tools/ps2/ttt_laser_install.py),
+# read on the same disc: mods/ttt-ps2-laser.
+TTT_PS2_LASER_PACK=ROOT/'workspace/ttt-ps2/laser-pack'
+TTT_PS2_LASER_INSTALLED=BUILD/'mods/ttt-ps2-laser'
+
+def laser_version():
+    """tools/ps2/laser_version.py: LASER_VERSION and the stamp."""
+    if 'ttt_laser_version' not in sys.modules:
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('ttt_laser_version',Path(__file__).resolve().parents[1]/'tools/ps2/laser_version.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sys.modules['ttt_laser_version']=module
+    return sys.modules['ttt_laser_version']
+
+def ttt_music_version():
+    """tools/ttt_stages/music_version.py: MUSIC_VERSION and the stamp."""
+    if 'ttt_music_version' not in sys.modules:
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('ttt_music_version',Path(__file__).resolve().parents[1]/'tools/ttt_stages/music_version.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sys.modules['ttt_music_version']=module
+    return sys.modules['ttt_music_version']
+
+def ttt_stages_current(folder):
+    return arcade_stages_version().ttt_current(folder)
+
+def ttt_music_current(folder):
+    return ttt_music_version().current(folder)
+
+def ttt_ps2_music_current(folder):
+    return ttt_music_version().ps2_current(folder)
+
+def ttt_ps2_laser_current(folder):
+    return laser_version().current(folder)
+
+def ttt_stages_ready(state):
+    """ready()'s check: wanted (ready.json, or an install with the TTT1
+    characters from before TTT Stages) means current. The PS2 music and the
+    PS2 laser: wanted by an install from before them that was given the TTT
+    PS2 disc."""
+    before=bool(state.get('ttt1',state.get('jun')))
+    if state.get('ttt_stages',before) and not ttt_stages_current(TTT_STAGES_INSTALLED):return False
+    if state.get('ttt_music',before) and not ttt_music_current(TTT_MUSIC_INSTALLED):return False
+    disc=before and bool(load_json(STATE/'last-inputs.json').get('ttt_disc'))
+    if state.get('ttt_ps2_music',disc) and not ttt_ps2_music_current(TTT_PS2_MUSIC_INSTALLED):return False
+    if state.get('ttt_ps2_laser',disc) and not ttt_ps2_laser_current(TTT_PS2_LASER_INSTALLED):return False
+    return True
+
+def ttt_ps2_music_made(pc=True):
+    """This version's PS2 music of the TTT stages is here: the disc is not read for it."""
+    return ttt_ps2_music_current(TTT_PS2_MUSIC_PACK) or (pc and not (TTT_PS2_MUSIC_PACK/'version.txt').exists()
+                                                         and ttt_ps2_music_current(TTT_PS2_MUSIC_INSTALLED))
+
+def prepare_ttt_ps2_music(ttt_disc,env,pc=True,keep=False):
+    """The TTT stages' PS2 music (GAME OPTION's BGM SELECT: REMIXED), copied
+    from the TTT PS2 disc unless this version is already there. Optional:
+    without the disc, an earlier copy goes and the stages keep their arcade
+    music; a failure only does the same. keep: the disc was given but set
+    aside as unusable this time (B85), a current copy stays. Ready or not."""
+    if not ttt_disc:
+        if keep:return ttt_ps2_music_made(pc)
+        for folder in (TTT_PS2_MUSIC_PACK,*([TTT_PS2_MUSIC_INSTALLED] if pc else [])):shutil.rmtree(folder,ignore_errors=True)
+        return False
+    if ttt_ps2_music_made(pc):return True
+    if not Path(ttt_disc).is_file():
+        log_line(f"{ttt_disc}: missing, the TTT stages' PS2 music skipped")
+        emit(message="Skipping the TTT stages' PS2 music",detail='Your Tekken Tag Tournament PS2 disc is no longer where the setup found it. Choose it again to add it.')
+        return False
+    emit(message="Preparing the TTT stages' PS2 music",detail='Copying the music of the Tekken Tag Tournament stages from your PS2 disc.')
+    try:run([sys.executable,ROOT/'tools/ttt_stages/ps2_music_install.py','--ttt-disc',ttt_disc,'--out',TTT_PS2_MUSIC_PACK],
+            environment=env,friendly="The TTT stages' PS2 music could not be prepared.")
+    except SetupError:
+        emit(message="Skipping the TTT stages' PS2 music",detail='It could not be copied from your PS2 disc (see the setup log). The TTT stages keep their arcade music.')
+        return False
+    return True
+
+def ttt_ps2_laser_made(pc=True):
+    """This version's PS2 laser textures are here: the disc is not read for them."""
+    return ttt_ps2_laser_current(TTT_PS2_LASER_PACK) or (pc and not (TTT_PS2_LASER_PACK/'version.txt').exists()
+                                                         and ttt_ps2_laser_current(TTT_PS2_LASER_INSTALLED))
+
+def prepare_ttt_ps2_laser(ttt_disc,env,pc=True,keep=False):
+    """The TTT PS2 effects: Devil's and Angel's laser textures and the
+    Mishima's strong-hit effects, read on the TTT PS2 disc and converted
+    (tools/ps2/ttt_laser_install.py) unless this version is already there.
+    Optional, as the PS2 music: without the disc an earlier copy goes; a
+    failure, or another version of the disc, only keeps the arcade's yellow
+    beam and TTT1's hit effects. keep: as for the PS2 music. Ready or not."""
+    if not ttt_disc:
+        if keep:return ttt_ps2_laser_made(pc)
+        for folder in (TTT_PS2_LASER_PACK,*([TTT_PS2_LASER_INSTALLED] if pc else [])):shutil.rmtree(folder,ignore_errors=True)
+        return False
+    if ttt_ps2_laser_made(pc):return True
+    if not Path(ttt_disc).is_file():
+        log_line(f"{ttt_disc}: missing, the TTT PS2 effects (Devil's and Angel's laser, the Mishima's hit effects) skipped")
+        emit(message="Skipping the TTT PS2 effects",detail='Your Tekken Tag Tournament PS2 disc is no longer where the setup found it. Choose it again to add it.')
+        return False
+    emit(message="Preparing the TTT PS2 effects",detail="Reading Devil's and Angel's laser and the strong-hit effects of Jin, Heihachi, Kazuya, Devil and Angel on your PS2 disc.")
+    try:run([sys.executable,ROOT/'tools/ps2/ttt_laser_install.py','--ttt-disc',ttt_disc,'--out',TTT_PS2_LASER_PACK],
+            environment=env,friendly="The TTT PS2 effects could not be prepared.")
+    except SetupError:
+        emit(message="Skipping the TTT PS2 effects",detail="They could not be read on your PS2 disc (see the setup log). Devil's and Angel's lasers keep the arcade's yellow beam, the Mishima their TTT1 hit effects.")
+        return False
+    return True
+
+def prepare_ttt_stages(ttt,env,pc=True):
+    """TTT's stage packs and their music from tektagt.zip, each unless this
+    version is already there. Optional: a failure, or tektagt.zip no longer
+    where it was, only keeps Tekken 3's stages and music (the STAGES row stays
+    hidden without the packs). (stages ready, music ready)."""
+    made=[]
+    for what,current,packs,installed,command in (
+            ('stages',ttt_stages_current,TTT_STAGES_PACKS,TTT_STAGES_INSTALLED,
+             [ROOT/'tools/arcade_stages/install.py','--ttt1',ttt,'--out',TTT_STAGES_PACKS]),
+            ('music',ttt_music_current,TTT_MUSIC_PACK,TTT_MUSIC_INSTALLED,
+             [ROOT/'tools/ttt_stages/music_install.py','--ttt1',ttt,'--out',TTT_MUSIC_PACK])):
+        # Only beside the game (workspace/ freed): the build keeps that copy.
+        if current(packs) or (pc and not (packs/'version.txt').exists() and current(installed)):
+            made.append(True);continue
+        name='the TTT stages' if what=='stages' else "the TTT stages' music"
+        if not Path(ttt).is_file():
+            log_line(f'{ttt}: missing, {name} skipped')
+            emit(message=f'Skipping {name}',detail='Your tektagt.zip is no longer where the setup found it. Choose it again to add them.')
+            made.append(False);continue
+        emit(message=f'Preparing {name}',detail=('Converting the Tekken Tag Tournament arcade stages' if what=='stages'
+             else 'Preparing the music of the Tekken Tag Tournament arcade stages')+' from your tektagt.zip.')
+        try:run([sys.executable,*command],environment=env,friendly=f'{name[0].upper()+name[1:]} could not be prepared.')
+        except SetupError:
+            emit(message=f'Skipping {name}',detail="They could not be prepared from your tektagt.zip (see the setup log). The game keeps Tekken 3's stages and music.")
+            made.append(False)
+        else:made.append(True)
+    return tuple(made)
+
 def cinematics_current():
     tools=str(ROOT/'tools')
     if tools not in sys.path:sys.path.insert(0,tools)
     import ttt_cinematics as C
-    # triggers.txt: the engine's table; cinematics.txt: the old way (--old-way).
-    return any((CINEMATICS/n).is_file() for n in ('triggers.txt','cinematics.txt')) and C.read_stamp(CINEMATICS)>=C.CINEMATICS_VERSION
+    # triggers.txt: the engine's table, the feature's only settings.
+    return (CINEMATICS/'triggers.txt').is_file() and C.read_stamp(CINEMATICS)>=C.CINEMATICS_VERSION
+
+def cinematics_off(folder):
+    """The option turned off: the feature finds no trigger table and plays
+    nothing (cinematics.txt: the old way's settings, before 1.3.0)."""
+    for name in ('triggers.txt','cinematics.txt'):
+        try:(folder/name).unlink()
+        except FileNotFoundError:pass
 
 def cinematics_models_ready():
     """Jin's models for the TTT cinematics, made once from the import's work files."""
     return all((CINEMATICS/f'{m}-TTT1-arcade-P1.{e}').is_file() for m in ('JinPlain','DevilJinEnd') for e in ('3dm','relocs','tim'))
 
-def ttt1_plan(jin_red=False,tekken3=None,cinematics=False):
+def ttt1_plan(tekken3=None,cinematics=False):
     """What brings the TTT1 characters to this import version: ('current',[])
     nothing; ('update',steps) those update steps (tools/ttt1_import_version.py),
     on the roster or, workspace/ deleted, on a copy of build-release/mods/ttt1;
@@ -163,8 +327,6 @@ def ttt1_plan(jin_red=False,tekken3=None,cinematics=False):
     folder=ROSTER if ttt1_ready(ROSTER) else INSTALLED if ttt1_ready(INSTALLED) else None
     if folder is None:return 'import',[]
     # Options the earlier setup was run without.
-    if jin_red and not any(p.is_file() for p in (WORK/'jin/Jin-TTT1-hiteffect.tim',BUILD/'mods/jin-ttt1-hit-effect/Jin-TTT1-hiteffect.tim')):
-        return 'import',[]
     if tekken3 and not any(p.is_file() for p in (ROOT/'workspace/difficulty/levels.bin',BUILD/'mods/difficulty/levels.bin')):
         return 'import',[]
     # The TTT cinematics need Jin's models, made from the work files.
@@ -369,6 +531,59 @@ def complete():
     if missing:raise SetupError('This folder is incomplete (missing: '+', '.join(missing[:4])+'). Extract the whole download again '
                                 '(on Windows, to a short path such as C:\\Games, with 7-Zip or git clone), then run the setup again.')
 
+# Mods removed from the game since an earlier release. An update unpacked over
+# the older folder keeps their files, and an enabled package whose plugin is no
+# longer built stops the launcher's Play (B86, GH#108, GH#137).
+RETIRED_SOURCES=('mods/preloaded/packages/tekken3.visual.forest-hd','mods/assets/forest-hd',
+                 'mods/preloaded/packages/tekken3.visual.jin-ttt1-hit-effect')
+RETIRED_STAGED=('mods/packages/tekken3.visual.forest-hd','mods/forest-hd',
+                'mods/packages/tekken3.visual.jin-ttt1-hit-effect','mods/jin-ttt1-hit-effect')
+
+def remove_retired():
+    gone=[p for p in [ROOT/p for p in RETIRED_SOURCES]+[BUILD/p for p in RETIRED_STAGED] if p.exists()]
+    for path in gone:shutil.rmtree(path,ignore_errors=True)
+    if gone:log_line('Removed, no longer part of the game: '+', '.join(p.relative_to(ROOT).as_posix() for p in gone))
+
+# An update unpacked over the older folder dates each file as its ZIP entry:
+# the date of the release's commit (git archive, tools/release/export.py). An
+# install set up after that date has objects newer than these sources, and
+# Ninja linked the new files' objects with the old ones (B97: undefined symbol
+# __wrap_func_8002A40C, tekken3_arcade_stages_source_ready...). Before each
+# build, every file whose content changed since the last check (.setup/
+# sources.json: size, date, SHA-256) is dated now, newer than any object built
+# so far, in build-release/ as in build-android/; with no record yet (an
+# install set up before this check), all of them. Not what the setup and the
+# builds make, nor the player's ROMs and discs (.gitignore).
+NOT_SOURCES=('.git','.setup','.runtime','build*','disc','generated','workspace','saves','out','dist','toolchain','export',
+             'psxrecomp/generated','psxrecomp/recompiler/build*','Tekken 3 Expanded*','*.apk',
+             '*.zip','*.7z','*.cue','*.iso','*.chd')
+
+def source_files():
+    """{path relative to ROOT: Path} of the files a build may read."""
+    found={}
+    for folder,dirs,files in os.walk(ROOT):
+        here=Path(folder).relative_to(ROOT).as_posix()
+        name=lambda n:n if here=='.' else f'{here}/{n}'
+        skip=lambda n:n=='__pycache__' or any(fnmatch.fnmatchcase(name(n),p) for p in NOT_SOURCES)
+        dirs[:]=[d for d in dirs if not skip(d)]
+        found.update((name(f),Path(folder)/f) for f in files if not skip(f))
+    return found
+
+def date_changed_sources():
+    record_path=STATE/'sources.json'
+    old=load_json(record_path);record={};changed=[]
+    for name,path in sorted(source_files().items()):
+        try:
+            info=path.stat();seen=old.get(name)
+            if seen and seen[:2]==[info.st_size,info.st_mtime_ns]:record[name]=seen;continue
+            sha=digest(path)
+            if not seen or seen[2]!=sha:os.utime(path);changed.append(name);info=path.stat()
+            record[name]=[info.st_size,info.st_mtime_ns,sha]
+        except OSError as error:log_line(f'{name}: not checked for changes ({error})')
+    save_json(record_path,record)
+    if changed:log_line(f'Dated now, to be compiled again: {len(changed)} changed file(s)'
+                        +(' (no record of an earlier check: all of them)' if not old else ': '+', '.join(changed[:8])+(' ...' if len(changed)>8 else '')))
+
 def validate_disc(disc,updating=False):
     if not disc.is_file():
         if updating:raise SetupError(f'This update needs your Tekken 3 disc image again: it is no longer at {disc}. Choose it, then click Try again.')
@@ -381,7 +596,7 @@ def validate_disc(disc,updating=False):
 def validate_ttt1(ttt,updating=False):
     if not ttt.is_file():
         if updating:raise SetupError(f'Updating the TTT1 characters needs your tektagt.zip again: it is no longer at {ttt}. Choose it, then click Try again.')
-        raise SetupError("Choose your TTT1 arcade ZIP, or turn off Include the TTT1 characters.")
+        raise SetupError("Choose your TTT1 arcade ZIP, or turn off Include Tekken Tag Tournament Content.")
     if str(ROOT/'tools') not in sys.path:sys.path.insert(0,str(ROOT/'tools'))
     import arcade_model_probe as probe
     definitions=load_json(probe.MANIFEST)['sets']
@@ -397,6 +612,45 @@ def tekken3_supported(path):
     try:
         with zipfile.ZipFile(path) as z:return TEKKEN3_PROGRAM<={i.CRC for i in z.infolist()}
     except (OSError,zipfile.BadZipFile):return False
+
+def tekken3_problem(path):
+    """Why tekken3.zip is not supported, in the player's words."""
+    if not Path(path).is_file():return 'It is no longer there (moved, renamed or deleted).'
+    try:
+        with zipfile.ZipFile(path) as z:names=[Path(i.filename).name.lower() for i in z.infolist()]
+    except (OSError,zipfile.BadZipFile):return 'It cannot be read as a ZIP file (damaged, or not a ZIP).'
+    # TET1's program ROMs (tet1vere.2e, .2j), the revision before TET2.
+    if any(re.fullmatch(r'tet1ver.*\.2[ej]',n) for n in names):return 'It is the TET1 revision of Tekken 3 arcade, not TET2/VER.E1.'
+    return 'Its program ROMs are not those of Tekken 3 arcade TET2/VER.E1.'
+
+# The framework's POST_BUILD empties build-release/mods at every link of the
+# game (psxrecomp/runtime/runtime.cmake) before the catalogues are staged
+# again, from workspace/ only. An update that rebuilds would lose the player's
+# mod settings (state.toml, the launcher's Mods page) and, workspace/ freed,
+# what the setup made beside the game. They are moved aside for the build
+# (build-release/mods.kept), and those the build did not stage again are moved
+# back; a build cut short leaves them there for the next attempt.
+MODS_KEPT=BUILD/'mods.kept'
+MOD_DATA=('state.toml','ttt1','ttt-stages','ttt-music','ttt-ps2-music','ttt-ps2-laser','arcade-stages','difficulty','ttt-cinematics')
+
+def restore_mods():
+    if not MODS_KEPT.is_dir():return
+    mods=BUILD/'mods';mods.mkdir(parents=True,exist_ok=True)
+    back=[n for n in MOD_DATA if (MODS_KEPT/n).exists() and not (mods/n).exists()]
+    for name in back:(MODS_KEPT/name).replace(mods/name)
+    if back:log_line('Kept across the build: mods/'+', mods/'.join(back))
+    shutil.rmtree(MODS_KEPT,ignore_errors=True)
+
+class kept_mods:
+    def __enter__(self):
+        restore_mods()            # an earlier build cut short
+        MODS_KEPT.mkdir(parents=True,exist_ok=True)
+        for name in MOD_DATA:
+            if (BUILD/'mods'/name).exists():(BUILD/'mods'/name).replace(MODS_KEPT/name)
+        return self
+    def __exit__(self,*error):
+        restore_mods()
+        return False
 
 def build_game(toolchain,env,include_ttt1):
     cmake=toolchain/'bin/cmake.exe' if toolchain else shutil.which('cmake')
@@ -561,18 +815,87 @@ def game_current():
     return (load_json(STATE/'ready.json').get('release')==RELEASE and (ROOT/'generated').is_dir()
             and (ROOT/'disc/Tekken 3 (USA).cue').is_file())
 
-def needs(include_ttt1,jin_red=False,tekken3=None,cinematics=False):
+def needs(include_ttt1,tekken3=None,cinematics=False):
     """Which of the player's files this setup reads: (disc, TTT1 ROM)."""
-    try:rom=include_ttt1 and ttt1_plan(jin_red or cinematics,tekken3,cinematics)[0]=='import'
+    try:rom=include_ttt1 and ttt1_plan(tekken3,cinematics)[0]=='import'
     except Exception:rom=include_ttt1
     return not game_current(),rom
 
 def ttt_disc_supported(path):
-    """A Tekken Tag Tournament USA PS2 disc with the endings' music."""
-    if str(ROOT/'tools') not in sys.path:sys.path.insert(0,str(ROOT/'tools'))
+    """A Tekken Tag Tournament USA PS2 disc with the endings' music, the
+    stages' music (tools/ttt_stages/ps2_music_install.py checks the same) and
+    Devil's and Angel's laser textures (tools/ps2/ttt_laser_install.py)."""
+    tools=Path(__file__).resolve().parents[1]/'tools'
+    if str(tools) not in sys.path:sys.path.insert(0,str(tools))
     import ttt_cinematics
-    try:return ttt_cinematics.music_found(path)
+    try:
+        if not ttt_cinematics.music_found(path):return False
     except (OSError,ValueError,StopIteration,IndexError):return False
+    if 'ps2_music_install' not in sys.modules:
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('ps2_music_install',tools/'ttt_stages/ps2_music_install.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sys.modules['ps2_music_install']=module
+    if not sys.modules['ps2_music_install'].found(path):return False
+    if 'ttt_laser_install' not in sys.modules:
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('ttt_laser_install',tools/'ps2/ttt_laser_install.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sys.modules['ttt_laser_install']=module
+    return sys.modules['ttt_laser_install'].found(path)
+
+# The optional files (B85, GH#110): a tekken3.zip or a TTT PS2 disc that this
+# setup would read but cannot use is no longer skipped with a line of the log
+# only. The window (easy_launcher.py) asks before it starts, the terminal setup
+# here: go on without it, or choose another file. tektagt.zip still stops the
+# setup (validate_ttt1). A file the setup does not read this time (what it
+# makes is already current) is not checked.
+TEKKEN3_EXPECTED=('Expected: MAME set tekken3, Tekken 3 (World, TET2/VER.E1), with the program ROMs tet2vere1.2e '
+                  '(SHA-1 3a5638c6ad40bfde6e12fdfd6d469f6ea5e9f4fb) and tet2vere1.2j (SHA-1 554d1e42886d6a6c9c5857e9cbd5d7c37d7a6e67), '
+                  'under these or older names. A zip with only tet1vere.2e and tet1vere.2j is the TET1 revision: not supported.')
+TTT_DISC_EXPECTED='Expected: Tekken Tag Tournament USA for PS2 (SLUS-20001), as a .cue with its .bin, a .bin or an .iso.'
+
+def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True):
+    """The optional files given that this setup reads and cannot use: a
+    list of dicts (key, file, name, path, reason, without, expected)."""
+    problems=[]
+    cinematics=cinematics and include_ttt1
+    if tekken3 and not tekken3_supported(tekken3):
+        # Read for the arcade stages, and by an import for the difficulty levels.
+        try:needed=not arcade_stages_made(pc) or (include_ttt1 and ttt1_plan(tekken3,cinematics)[0]=='import')
+        except Exception:needed=True
+        if needed:problems.append(dict(key='tekken3',file='tekken3.zip',name='Tekken 3 arcade · tekken3.zip',path=str(tekken3),reason=tekken3_problem(tekken3),
+            without='the arcade difficulty levels and the arcade stages are left out: the game keeps its PS1 difficulty levels and stages.',
+            expected=TEKKEN3_EXPECTED))
+    # Read for the stages' PS2 music and the PS2 laser, and for the endings' music at every setup with TTT Cinematics.
+    if include_ttt1 and ttt_disc and (cinematics or not ttt_ps2_music_made(pc) or not ttt_ps2_laser_made(pc)):
+        reason=('It is no longer there (moved, renamed or deleted).' if not Path(ttt_disc).is_file()
+                else None if ttt_disc_supported(ttt_disc)
+                else 'It is not Tekken Tag Tournament USA (SLUS-20001) for PS2, or the image is incomplete or damaged.')
+        if reason:problems.append(dict(key='ttt_disc',file='TTT PS2 disc',name='Tekken Tag Tournament · USA PS2 disc',path=str(ttt_disc),reason=reason,
+            without='the TTT stages play their arcade music, also with BGM SELECT: REMIXED'
+                    +(", and TTT Cinematics' endings play over Tekken 3's music" if cinematics else '')+'.',
+            expected=TTT_DISC_EXPECTED))
+    return problems
+
+def optional_text(problems):
+    """The terminal's question (the window lays out the same parts)."""
+    return '\n\n'.join(f"Your {p['file']} (optional): {p['path']}\n  {p['reason']}\n  Without it, {p['without']}\n  {p['expected']}"
+                       for p in problems)
+
+def go_on_without(problems):
+    """Each problem in the log and the progress lines. The terminal setup asks
+    first: no stops it, to give another file."""
+    for p in problems:log_line(f"{p['path']}: {p['reason']} Without it, {p['without']}")
+    if problems and TEXT and sys.stdin.isatty():
+        one=len(problems)==1
+        print('\n'+optional_text(problems)+'\n',flush=True)
+        try:answer=input(f"Continue without {'it' if one else 'them'}? [y/N] ")
+        except EOFError:answer=''
+        if answer.strip().lower()[:1] not in ('y','o'):
+            raise SetupError(f"Setup stopped. Run it again with another {' and '.join(p['file'] for p in problems)}"
+                             f", or without {'it' if one else 'them'}.")
+    for p in problems:emit(message=f"Going on without your {p['file']}",detail=f"{p['reason']} Without it, {p['without']}")
 
 def prepare_cinematics(ttt_disc,catalogue=None,out=None):
     """The TTT cinematics beside the installed catalogue (tools/ttt_cinematics.py)."""
@@ -586,7 +909,7 @@ def prepare_cinematics(ttt_disc,catalogue=None,out=None):
     run([sys.executable,ROOT/'tools/ttt_cinematics.py','--catalogue',catalogue,'--out',out,*(['--ttt-disc',ttt_disc] if ttt_disc else [])],
         friendly="The TTT cinematics could not be prepared. Open the setup log for details, then click Try again.")
 
-def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False,cinematics=False,ttt_disc=None,android=False,pc=True):
+def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,android=False,pc=True):
     """First setup, or an update: generate the game again only for a new
     RELEASE, and bring the TTT1 characters to this import version with the
     least work (ttt1_plan). pc=False (with android, Build Android APK): only
@@ -596,31 +919,38 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False,cinematics=False,tt
     with (STATE/'setup.log').open('w',encoding='utf-8') as f:f.write('Tekken 3 easy setup '+RELEASE+'\n')
     # Only run in the unpacked writable application folder, never require admin.
     complete()
+    remove_retired()
+    date_changed_sources()
     if shutil.disk_usage(ROOT).free<4*1024**3:raise SetupError('Setup needs at least 4 GB of free space in this folder.')
     updating=bool(load_json(STATE/'ready.json'))
     save_json(STATE/'last-inputs.json',{'disc':str(disc),'ttt1':str(ttt) if include_ttt1 else '',
-        'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),'jin_red':jin_red,
+        'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),
         'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'android':android})
-    # The TTT cinematics come with the TTT1 characters, and play Jin's red lightning.
+    # The TTT cinematics come with the TTT1 characters (Jin's red lightning: tools/ttt1_hitspark.py).
     cinematics=cinematics and include_ttt1
-    if cinematics and ttt_disc and not ttt_disc_supported(ttt_disc):
-        log_line(f'{ttt_disc}: not Tekken Tag Tournament USA (SLUS-20001) for PS2, endings music skipped')
-        emit(message="Skipping the TTT endings' music",detail="That disc is not Tekken Tag Tournament USA for PS2. The cinematics play over Tekken 3's music.")
-        ttt_disc=None
+    # The TTT PS2 disc, optional with the TTT1 characters: the TTT stages' PS2
+    # music, Devil's and Angel's PS2 laser textures, and the endings' music of
+    # the TTT cinematics. Missing, an earlier copy of the stages' music stays
+    # and the endings play over T3's music.
+    if not include_ttt1:ttt_disc=None
+    # Optional: an unsupported tekken3.zip only costs the arcade difficulty
+    # levels and the arcade stages, an unsupported TTT PS2 disc the PS2 music;
+    # checked now rather than failing at the end of the import. The terminal
+    # setup asks whether to go on (the window asked before starting).
+    problems=optional_problems(include_ttt1,tekken3,ttt_disc,cinematics,pc)
+    go_on_without(problems)
+    if any(p['key']=='tekken3' for p in problems):tekken3=None
+    # A disc set aside keeps what it made before (prepare_ttt_ps2_music's keep).
+    disc_set_aside=any(p['key']=='ttt_disc' for p in problems)
+    if disc_set_aside:ttt_disc=None
+    # Checked whenever the cinematics are on (they read it at every setup).
+    cinematics_disc=ttt_disc if cinematics else None
     generate=not game_current()
     if generate:
         if disc.is_file():disc=single_bin(cue_for(disc))
         validate_disc(disc,updating)
     else:log_line(f'Game generated by release {RELEASE}: rebuilding only')
-    # Optional: an unsupported tekken3.zip only costs the arcade difficulty
-    # levels and the arcade stages, checked now rather than failing at the end
-    # of the import.
-    if tekken3 and not tekken3_supported(tekken3):
-        log_line(f'{tekken3}: no TET2/VER.E1 program ROMs, arcade difficulty levels and arcade stages skipped')
-        emit(message='Skipping the arcade difficulty levels and arcade stages',detail='Your tekken3.zip is not the TET2/VER.E1 set (see the README). Setup goes on without them.')
-        tekken3=None
-    jin_red=jin_red or cinematics
-    plan,steps=ttt1_plan(jin_red,tekken3,cinematics) if include_ttt1 else ('none',[])
+    plan,steps=ttt1_plan(tekken3,cinematics) if include_ttt1 else ('none',[])
     if include_ttt1:
         log_line(f'TTT1 characters: {plan}, import version {import_version().TTT1_IMPORT_VERSION}'+(' ('+', '.join(steps)+')' if steps else ''))
         if plan=='import':validate_ttt1(ttt,updating)
@@ -643,39 +973,41 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,jin_red=False,cinematics=False,tt
     if plan=='import':
         emit(message='Adding the TTT1 characters',detail='Importing their models, moves, voices and portraits from your ROM. The first time takes about 15 minutes. This runs muted.')
         command=[sys.executable,ROOT/'tools/ttt1_setup.py','--ttt1',ttt,'--no-rebuild']
-        if jin_red:command.append('--jin-red-lightning')
         if tekken3:command+=['--tekken3',tekken3]
         run(command,
             environment=env,friendly="The TTT1 characters' import could not finish. Open the setup log for details, then click Try again.")
     elif plan=='update':update_ttt1(steps,env)
     # Before the build: CMakeLists.txt stages the packs from workspace/.
     arcade_stages=bool(tekken3) and prepare_arcade_stages(tekken3,env,pc)
+    # TTT's stages and music come from the same tektagt.zip as the characters.
+    ttt_stages,ttt_music=prepare_ttt_stages(ttt,env,pc) if include_ttt1 else (False,False)
+    # Their PS2 music from the TTT PS2 disc, if given (else an earlier copy goes).
+    ttt_ps2_music=prepare_ttt_ps2_music(ttt_disc,env,pc,keep=disc_set_aside)
+    # Devil's and Angel's PS2 laser textures from the same disc.
+    ttt_ps2_laser=prepare_ttt_ps2_laser(ttt_disc,env,pc,keep=disc_set_aside)
     if not pc:
-        # The Android build stages the TTT1 guests, the difficulty levels and the arcade stages
-        # from workspace/ itself (CMakeLists.txt).
+        # The Android build stages the TTT1 guests, the difficulty levels, the arcade stages
+        # and TTT's stages and music from workspace/ itself (CMakeLists.txt).
         if include_ttt1 and not ttt1_current(ROSTER):
             raise SetupError("The TTT1 characters' import is incomplete. Click Try again.")
-        if cinematics:prepare_cinematics(ttt_disc,ROSTER,ANDROID_CINEMATICS)
-        else:
-            try:(ANDROID_CINEMATICS/'cinematics.txt').unlink()
-            except FileNotFoundError:pass
-        save_json(STATE/'android.json',{'release':RELEASE,'ttt1':include_ttt1,'ttt_cinematics':cinematics,'arcade_stages':arcade_stages})
+        if cinematics:prepare_cinematics(cinematics_disc,ROSTER,ANDROID_CINEMATICS)
+        else:cinematics_off(ANDROID_CINEMATICS)
+        save_json(STATE/'android.json',{'release':RELEASE,'ttt1':include_ttt1,'ttt_cinematics':cinematics,'arcade_stages':arcade_stages,
+                                        'ttt_stages':ttt_stages,'ttt_music':ttt_music,'ttt_ps2_music':ttt_ps2_music,
+                                        'ttt_ps2_laser':ttt_ps2_laser})
         android_apk(toolchain,env)
         emit('complete',message='Android APK ready',detail='Setup is complete.')
         return
-    build_game(toolchain,env,include_ttt1)
+    with kept_mods():build_game(toolchain,env,include_ttt1)
     if not EXE.is_file():raise SetupError('The game executable was not created.')
     if include_ttt1:
         install_roster()
         if not ttt1_current(INSTALLED):raise SetupError('The TTT1 characters are missing from the finished build. Click Try again.')
-    if cinematics:prepare_cinematics(ttt_disc)
-    else:
-        # Turned off: the feature finds no settings and does nothing.
-        try:(CINEMATICS/'cinematics.txt').unlink()
-        except FileNotFoundError:pass
+    if cinematics:prepare_cinematics(cinematics_disc)
+    else:cinematics_off(CINEMATICS)
     save_json(STATE/'ready.json',{'release':RELEASE,'ttt1':include_ttt1,'exe_sha256':digest(EXE),'ttt_cinematics':cinematics,
-                                  'arcade_stages':arcade_stages,
-                                  'ttt1_import':import_version().TTT1_IMPORT_VERSION if include_ttt1 else None})
+                                  'arcade_stages':arcade_stages,'ttt_stages':ttt_stages,'ttt_music':ttt_music,'ttt_ps2_music':ttt_ps2_music,
+                                  'ttt_ps2_laser':ttt_ps2_laser,'ttt1_import':import_version().TTT1_IMPORT_VERSION if include_ttt1 else None})
     # After ready.json: the PC game plays even if the Android build stops.
     if android:android_apk(toolchain,env)
     emit('complete',message='Ready to play',detail='Setup is complete.')
@@ -707,6 +1039,7 @@ def android_only():
             raise SetupError('Choose your game files first (Build Android APK asks for them), then build the APK.')
         update_install()
         with (STATE/'setup.log').open('a',encoding='utf-8') as f:f.write('Tekken 3 Android APK '+RELEASE+'\n')
+    else:date_changed_sources()
     android_apk(tools())
     emit('complete',message='Android APK ready',detail=str(APK))
 
@@ -717,7 +1050,7 @@ def update_install():
     if not saved or not load_json(STATE/'ready.json'):raise SetupError('No earlier setup was found here. Run the first setup.')
     path=lambda key:Path(saved[key]) if saved.get(key) else Path()
     prepare(path('disc'),path('ttt1'),saved.get('include_ttt1',True),path('tekken3') if saved.get('tekken3') else None,
-            saved.get('jin_red',False),saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None)
+            saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None)
 
 def launch_game(settings=False):
     """The game opens on its launcher unless the player ticked its "Skip
@@ -734,9 +1067,8 @@ if __name__=='__main__':
     parser.add_argument('--ttt1',type=Path,default=Path())
     parser.add_argument('--no-ttt1',action='store_true')
     parser.add_argument('--tekken3',type=Path,help='tekken3.zip: the arcade difficulty levels and arcade stages')
-    parser.add_argument('--jin-red-lightning',action='store_true')
     parser.add_argument('--ttt-cinematics',action='store_true',help="TTT Cinematics, the Tekken Tag Tournament endings")
-    parser.add_argument('--ttt-disc',type=Path,help="Tekken Tag Tournament USA PS2 disc: the endings' music")
+    parser.add_argument('--ttt-disc',type=Path,help="Tekken Tag Tournament USA PS2 disc: the TTT stages' PS2 music and the endings' music")
     parser.add_argument('--wait-for-parent',action='store_true')
     parser.add_argument('--text',action='store_true',help='plain progress lines (terminal setup)')
     parser.add_argument('--play',action='store_true',help='start the game once setup is complete')
@@ -752,7 +1084,7 @@ if __name__=='__main__':
     if args.wait_for_parent and sys.stdin.readline().strip()!='START':sys.exit(1)
     try:
         if args.disc:prepare(args.disc.resolve(),args.ttt1.resolve(),not args.no_ttt1,
-                             args.tekken3.resolve() if args.tekken3 else None,args.jin_red_lightning,
+                             args.tekken3.resolve() if args.tekken3 else None,
                              args.ttt_cinematics,args.ttt_disc.resolve() if args.ttt_disc else None,
                              android=args.android or args.android_only,pc=not args.android_only)
         elif args.android:android_only()

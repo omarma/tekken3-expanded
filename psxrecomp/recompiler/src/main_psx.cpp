@@ -196,6 +196,7 @@ int main(int argc, char** argv) {
     std::set<uint32_t>    ds_funcs;             // [data_shards] funcs
     std::set<uint32_t>    mod_entry_funcs;      // trusted game-mod entry hooks
     std::set<uint32_t>    hot_funcs;            // [recompiler] hot_funcs
+    std::vector<std::pair<uint32_t, uint32_t>> precision_funcs; // [recompiler] precision_funcs
     std::set<uint32_t>    load_charge_batch_funcs; // [recompiler] load_charge_batch*
     std::map<uint32_t, std::array<uint32_t, 4>> vsync_query_hle_funcs;
     std::set<uint32_t>    ws_cull_bias, ws_cull_right_sub,
@@ -259,6 +260,8 @@ int main(int argc, char** argv) {
         mod_entry_funcs.insert(cfg.mod_function_entry_funcs.begin(),
                                cfg.mod_function_entry_funcs.end());
         hot_funcs.insert(cfg.hot_funcs.begin(), cfg.hot_funcs.end());
+        precision_funcs.insert(precision_funcs.end(), cfg.precision_funcs.begin(),
+                               cfg.precision_funcs.end());
         if (cfg.load_charge_batch) {
             load_charge_batch_funcs.insert(cfg.load_charge_batch_funcs.begin(),
                                            cfg.load_charge_batch_funcs.end());
@@ -1252,6 +1255,7 @@ int main(int argc, char** argv) {
     codegen_config.data_shard_funcs = ds_funcs;
     codegen_config.mod_function_entry_funcs = mod_entry_funcs;
     codegen_config.hot_funcs = hot_funcs;
+    codegen_config.precision_funcs = precision_funcs;
     codegen_config.load_charge_batch_funcs = load_charge_batch_funcs;
     codegen_config.vsync_query_hle_funcs = vsync_query_hle_funcs;
     codegen_config.ws_bg2d_init_func = ws_bg2d_init_func;

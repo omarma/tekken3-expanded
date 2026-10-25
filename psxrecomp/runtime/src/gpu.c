@@ -16,6 +16,7 @@
 #include "gpu_sw_renderer.h"
 #include "gpu_vram_dirty.h"
 #include "gpu_render.h"
+#include "gte_precision_diag.h"
 #include "text_xlate.h"
 #include "crash_trace.h"
 #include "debug_server.h"
@@ -45,6 +46,7 @@ extern uint8_t  psx_read_byte(uint32_t addr);
 extern uint32_t psx_read_word(uint32_t addr);
 
 /* ---- VRAM ---- */
+int g_psx_gpu_allow_oversize = 0;
 static uint16_t vram[1024 * 512];
 
 /* ---- GP0 state machine ---- */
@@ -181,7 +183,8 @@ static int32_t ws_disp_h(void);
 static void ws_clear_all_reveal_margins(void);
 static void parse_vertex(uint32_t word, int32_t* x, int32_t* y);
 extern int gte_precision_load_word(uint32_t addr, uint32_t packed,
-                                   int32_t *x16, int32_t *y16, uint16_t *z);
+                                   int32_t *x16, int32_t *y16, uint16_t *z,
+                                   uint8_t *derived);
 
 /* Gameplay vs full-2D screen. Character/billboard prims tag (psx_ws_sprite_tag)
  * within the last couple of frames => the actor render funnel is running =>
@@ -2367,7 +2370,7 @@ static int ws_nw_backdrop_quad(const int32_t *vx, const int32_t *vy,
         for (int i = 0; i < 4; i++) {
             int wi = word_indices[i];
             uint32_t addr = (gp0_cmd_source_addr + (uint32_t)wi * 4u) & 0x1FFFFCu;
-            if (gte_precision_load_word(addr, gp0_cmd_buf[wi], NULL, NULL, NULL))
+            if (gte_precision_load_word(addr, gp0_cmd_buf[wi], NULL, NULL, NULL, NULL))
                 gte_mask |= (uint8_t)(1u << i);
         }
     }
@@ -3392,6 +3395,7 @@ static void parse_vertex(uint32_t word, int32_t* x, int32_t* y) {
 extern int gte_geometry_correction_lookup(uint32_t packed,
                                           int32_t *x16, int32_t *y16);
 extern int gte_geometry_correction_enabled(void);
+extern int gte_geometry_position_fallback_enabled(void);
 static int s_texture_correction_enabled = 0;
 extern void gte_precision_tracking_set(int enabled);
 
@@ -3400,28 +3404,406 @@ void gpu_texture_correction_set(int enabled) {
     gte_precision_tracking_set(enabled);
 }
 
+int gpu_texture_correction_enabled(void) {
+    return s_texture_correction_enabled;
+}
+
 uint32_t gpu_texture_correction_hits(void) {
     return sw_perspective_triangle_count();
 }
 
-/* Match all three GP0 positions to recent GTE projections. Requiring a full
- * triangle match prevents screen-space HUD/sprites that happen to share one
- * coordinate from receiving world-geometry correction. The integer delta
- * folds in draw offsets and any widescreen adjustment already applied. */
-static void prepare_precise_triangle(uint32_t w0, uint32_t w1, uint32_t w2,
+/* Renderer-independent census of the enhancement seam (ENHANCEMENTS.md
+ * G1.10). gpu_texture_correction_hits above counts in the software backend
+ * only, so it reads 0 under OpenGL / Vulkan; these count in GP0 parsing. */
+static uint32_t s_precision_diag[GPU_PRECISION_DIAG_COUNT];
+
+void gpu_precision_diag_stats(uint32_t out[GPU_PRECISION_DIAG_COUNT]) {
+    memcpy(out, s_precision_diag, sizeof(s_precision_diag));
+}
+
+/* Geometry triangles with exact words, by the store PC of the first one (the
+ * packet builder), so a census can tell one renderer from another (G1.12).
+ * Saturates at 32 sites; later ones are not counted. */
+#define PRECISE_SITE_MAX 32
+static struct { uint32_t pc, exact, partial; } s_precise_sites[PRECISE_SITE_MAX];
+static int s_precise_site_count = 0;
+
+static void precise_site_note(uint32_t pc, int full) {
+    int i;
+    for (i = 0; i < s_precise_site_count; i++)
+        if (s_precise_sites[i].pc == pc) break;
+    if (i == s_precise_site_count) {
+        if (i == PRECISE_SITE_MAX) return;
+        s_precise_sites[i].pc = pc;
+        s_precise_sites[i].exact = s_precise_sites[i].partial = 0;
+        s_precise_site_count++;
+    }
+    if (full) s_precise_sites[i].exact++;
+    else s_precise_sites[i].partial++;
+}
+
+/* Seam census (G1.12). On the console a mesh is watertight because two
+ * triangles that share an edge carry the same two integer vertices. Every
+ * geometry triangle's edges go into a per-frame table keyed by those integer
+ * endpoints; an edge seen again whose sub-pixel endpoints differ is a seam
+ * the correction opened (or a corrected triangle meeting an uncorrected
+ * one). Counted each frame, with the last frame's first samples kept so the
+ * vertices involved can be traced (writer PC, derived). */
+#define SEAM_TABLE 16384u
+#define SEAM_TOLERANCE 1024      /* 1/64 pixel in 16.16 */
+typedef struct {
+    uint32_t frame;
+    uint64_t key;
+    int32_t px[2], py[2];        /* sub-pixel endpoints, key order */
+    uint32_t pc[2];              /* store PC of each endpoint, 0 = none */
+    uint8_t derived[2];
+} SeamEdge;
+static SeamEdge *s_seam_edges = NULL;
+static int s_seam_census = 0;     /* bench only: off, the census costs per edge */
+
+void gpu_geometry_seam_census_set(int enabled) { s_seam_census = enabled ? 1 : 0; }
+int gpu_geometry_seam_census_enabled(void) { return s_seam_census; }
+#define SEAM_SAMPLE_MAX 16
+static GpuSeamSample s_seam_samples[SEAM_SAMPLE_MAX];
+static int s_seam_sample_count = 0;
+static uint32_t s_seam_sample_frame = 0;
+
+static void seam_note_edge(const int32_t vx[2], const int32_t vy[2],
+                           const int32_t fx[2], const int32_t fy[2],
+                           const uint32_t pc[2], const uint8_t derived[2]) {
+    const uint32_t frame = (uint32_t)s_frame_count;
+    int a = 0, b = 1;
+    if (vx[1] < vx[0] || (vx[1] == vx[0] && vy[1] < vy[0])) { a = 1; b = 0; }
+    if (vx[a] == vx[b] && vy[a] == vy[b]) return;
+    const uint64_t key = ((uint64_t)(uint16_t)vx[a] << 48) | ((uint64_t)(uint16_t)vy[a] << 32) |
+                         ((uint64_t)(uint16_t)vx[b] << 16) | (uint64_t)(uint16_t)vy[b];
+    uint32_t h = (uint32_t)((key * 0x9E3779B97F4A7C15ull) >> 50) & (SEAM_TABLE - 1u);
+    for (int probe = 0; probe < 8; probe++, h = (h + 1u) & (SEAM_TABLE - 1u)) {
+        SeamEdge *e = &s_seam_edges[h];
+        if (e->frame != frame) {
+            e->frame = frame; e->key = key;
+            e->px[0] = fx[a]; e->py[0] = fy[a]; e->px[1] = fx[b]; e->py[1] = fy[b];
+            e->pc[0] = pc[a]; e->pc[1] = pc[b];
+            e->derived[0] = derived[a]; e->derived[1] = derived[b];
+            return;
+        }
+        if (e->key != key) continue;
+        const int32_t d = abs(e->px[0] - fx[a]) + abs(e->py[0] - fy[a]) +
+                          abs(e->px[1] - fx[b]) + abs(e->py[1] - fy[b]);
+        if (d <= SEAM_TOLERANCE) return;
+        s_precision_diag[GPU_DIAG_SEAM_EDGES]++;
+        if (s_seam_sample_frame != frame) { s_seam_sample_frame = frame; s_seam_sample_count = 0; }
+        if (s_seam_sample_count < SEAM_SAMPLE_MAX) {
+            GpuSeamSample *o = &s_seam_samples[s_seam_sample_count++];
+            o->frame = frame;
+            for (int k = 0; k < 2; k++) {
+                const int src = k ? b : a;
+                o->x[k] = (int16_t)vx[src]; o->y[k] = (int16_t)vy[src];
+                o->first_fx[k] = e->px[k]; o->first_fy[k] = e->py[k];
+                o->first_pc[k] = e->pc[k]; o->first_derived[k] = e->derived[k];
+                o->second_fx[k] = fx[src]; o->second_fy[k] = fy[src];
+                o->second_pc[k] = pc[src]; o->second_derived[k] = derived[src];
+            }
+        }
+        return;
+    }
+}
+
+static void seam_note_triangle(const int32_t vx[3], const int32_t vy[3],
+                               const int32_t fx[3], const int32_t fy[3],
+                               const uint32_t pc[3], const uint8_t derived[3]) {
+    if (!s_seam_edges) {
+        s_seam_edges = (SeamEdge *)calloc(SEAM_TABLE, sizeof(SeamEdge));
+        if (!s_seam_edges) return;
+    }
+    for (int i = 0; i < 3; i++) {
+        const int j = (i + 1) % 3;
+        const int32_t ex[2] = { vx[i], vx[j] }, ey[2] = { vy[i], vy[j] };
+        const int32_t px[2] = { fx[i], fx[j] }, py[2] = { fy[i], fy[j] };
+        const uint32_t epc[2] = { pc[i], pc[j] };
+        const uint8_t ed[2] = { derived[i], derived[j] };
+        seam_note_edge(ex, ey, px, py, epc, ed);
+    }
+}
+
+/* Pixel-cell merge (G1.12). Models often carry distinct vertices a fraction
+ * of a pixel apart where two parts meet (unwelded joints); the console's
+ * integer positions put them on the same pixel and the mesh is watertight.
+ * At sub-pixel precision they come apart and the gap shows (Tekken 3: thin
+ * lines between body parts, more of them as a fighter gets small on screen).
+ * So within a frame, every corrected vertex whose packet word lands on an
+ * integer pixel already used by a corrected vertex takes that vertex's
+ * sub-pixel position: wherever the console joins two vertices, they stay
+ * joined; a vertex alone on its pixel keeps its own position. Keyed by the
+ * drawn integer position (offsets included), reset every frame. */
+#define CELL_TABLE 16384u
+typedef struct { uint32_t frame; int32_t x, y; int32_t fx, fy; } PreciseCell;
+static PreciseCell *s_precise_cells = NULL;
+static int s_cell_merge = 1;
+
+void gpu_geometry_cell_merge_set(int enabled) { s_cell_merge = enabled ? 1 : 0; }
+int gpu_geometry_cell_merge_enabled(void) { return s_cell_merge; }
+
+static void precise_cell_merge(const int32_t vx[3], const int32_t vy[3],
+                               int32_t fx[3], int32_t fy[3]) {
+    if (!s_precise_cells) {
+        s_precise_cells = (PreciseCell *)calloc(CELL_TABLE, sizeof(PreciseCell));
+        if (!s_precise_cells) return;
+    }
+    const uint32_t frame = (uint32_t)s_frame_count + 1u;   /* 0 = empty */
+    for (int i = 0; i < 3; i++) {
+        uint32_t h = ((uint32_t)vx[i] * 0x9E3779B1u ^ (uint32_t)vy[i] * 0x85EBCA77u) >> 18;
+        for (int probe = 0; probe < 8; probe++, h = (h + 1u) & (CELL_TABLE - 1u)) {
+            PreciseCell *c = &s_precise_cells[h];
+            if (c->frame != frame) {
+                c->frame = frame; c->x = vx[i]; c->y = vy[i];
+                c->fx = fx[i]; c->fy = fy[i];
+                break;
+            }
+            if (c->x != vx[i] || c->y != vy[i]) continue;
+            if (c->fx != fx[i] || c->fy != fy[i]) {
+                fx[i] = c->fx; fy[i] = c->fy;
+                s_precision_diag[GPU_DIAG_PRECISE_VERTICES_MERGED]++;
+            }
+            break;
+        }
+    }
+}
+
+/* Triangle record (bench, G1.12): the geometry triangles drawn during each
+ * of the last two guest VBlank periods, with drawn integer and sub-pixel
+ * positions, store PC and derived flag per vertex. capture_plan arms it and
+ * dumps it beside a capture taken at the same VBlank, so a defect seen in
+ * one frame can be traced to the triangles that drew it. Off: one flag. */
+typedef struct {
+    int32_t vx[3], vy[3], fx[3], fy[3];
+    int32_t ix[3], iy[3];        /* ideal 16.16 position, INT32_MIN unknown */
+    uint32_t pc[3], addr[3], src, cmd;
+    uint8_t derived[3], exact;
+    /* Reference comparison (pgxp-vertex-log): packet word index, raw
+     * position word and tracked depth (0 = none) per vertex. */
+    uint32_t word[3];
+    uint8_t idx[3];
+    uint16_t z[3];
+} GpuTriRecord;
+#define TRI_RECORD_MAX 8192
+static GpuTriRecord *s_tri_rec[3];
+static int s_tri_rec_n[3];
+static int s_tri_rec_cur = 0;
+int g_gpu_tri_record = 0;
+
+void gpu_tri_record_vblank(void) {
+    s_tri_rec_cur = (s_tri_rec_cur + 1) % 3;
+    s_tri_rec_n[s_tri_rec_cur] = 0;
+}
+
+extern int gte_precision_word_ideal(uint32_t addr, uint32_t packed,
+                                    int32_t *ix16, int32_t *iy16);
+
+/* Address of word `index` of the current command for the precision store:
+ * RAM folded to 2 MiB as the DMA does, but a word in the mods' GPU-DMA
+ * aperture kept whole (mod_memory.h; the DMA reaches it with 24-bit tags),
+ * so that it is not taken for a RAM word (G1.13). */
+static uint32_t packet_word_addr(int index) {
+    const uint32_t a = (gp0_cmd_source_addr + (uint32_t)index * 4u) & 0x00FFFFFCu;
+    return a >= PSX_MOD_GPU_DMA_APERTURE_BASE ? a : (a & 0x1FFFFCu);
+}
+
+/* Packet word address of vertex i of the current command, 0 if unknown. */
+static uint32_t tri_word_addr(int index) {
+    if (gp0_cmd_source_addr == 0xFFFFFFFFu) return 0;
+    return packet_word_addr(index);
+}
+
+static void tri_record(const int indices[3], const int32_t vx[3], const int32_t vy[3],
+                       const int32_t fx[3], const int32_t fy[3], const uint32_t pc[3],
+                       const uint8_t derived[3], int exact, const uint16_t z[3]) {
+    if (!s_tri_rec[s_tri_rec_cur]) {
+        s_tri_rec[s_tri_rec_cur] = (GpuTriRecord *)calloc(TRI_RECORD_MAX, sizeof(GpuTriRecord));
+        if (!s_tri_rec[s_tri_rec_cur]) return;
+    }
+    if (s_tri_rec_n[s_tri_rec_cur] >= TRI_RECORD_MAX) return;
+    GpuTriRecord *r = &s_tri_rec[s_tri_rec_cur][s_tri_rec_n[s_tri_rec_cur]++];
+    for (int i = 0; i < 3; i++) {
+        r->vx[i] = vx[i]; r->vy[i] = vy[i]; r->fx[i] = fx[i]; r->fy[i] = fy[i];
+        r->pc[i] = pc[i]; r->derived[i] = derived[i];
+        r->addr[i] = tri_word_addr(indices[i]);
+        r->ix[i] = r->iy[i] = INT32_MIN;
+        int32_t ix, iy, raw_x, raw_y;
+        const uint32_t word = gp0_cmd_buf[indices[i]];
+        if (r->addr[i] && gte_precision_word_ideal(r->addr[i], word, &ix, &iy)) {
+            parse_vertex(word, &raw_x, &raw_y);
+            r->ix[i] = (int32_t)((int64_t)ix + (int64_t)(vx[i] - raw_x) * 65536);
+            r->iy[i] = (int32_t)((int64_t)iy + (int64_t)(vy[i] - raw_y) * 65536);
+        }
+        r->idx[i] = (uint8_t)indices[i]; r->word[i] = gp0_cmd_buf[indices[i]]; r->z[i] = z[i];
+    }
+    r->exact = (uint8_t)exact;
+    r->src = gp0_cmd_source_addr;
+    r->cmd = gp0_cmd_buf[0];
+}
+
+/* Text, one triangle a line: period (-1 = previous VBlank period, 0 = the
+ * one that just ended), exact words, source address, then per vertex the
+ * drawn integer x y, drawn x y (sub-pixel when corrected), store PC,
+ * derived, packet word address, ideal x y ("-" when unknown); then the
+ * packet's command word (opcode and colour: tells one surface from another
+ * in a census), and for tools/pgxp_ref_capture.py the three packet word
+ * indices, the three raw position words and the three tracked depths
+ * (0 = none). */
+const char *gpu_tri_record_dump(const char *path) {
+    FILE *f = fopen(path, "w");
+    if (!f) return "cannot open triangle dump";
+    for (int k = 1; k >= 0; k--) {
+        const int b = (s_tri_rec_cur + 3 - 1 - k) % 3;
+        for (int t = 0; t < s_tri_rec_n[b] && s_tri_rec[b]; t++) {
+            const GpuTriRecord *r = &s_tri_rec[b][t];
+            fprintf(f, "%d %d %08X", -k, r->exact, r->src);
+            for (int i = 0; i < 3; i++) {
+                fprintf(f, " %d %d %.4f %.4f %08X %d %06X", r->vx[i], r->vy[i],
+                        r->fx[i] / 65536.0, r->fy[i] / 65536.0, r->pc[i], r->derived[i],
+                        r->addr[i]);
+                if (r->ix[i] == INT32_MIN) fprintf(f, " - -");
+                else fprintf(f, " %.4f %.4f", r->ix[i] / 65536.0, r->iy[i] / 65536.0);
+            }
+            fprintf(f, " %08X %d %d %d %08X %08X %08X %u %u %u\n", r->cmd, r->idx[0], r->idx[1],
+                    r->idx[2], r->word[0], r->word[1], r->word[2], r->z[0], r->z[1], r->z[2]);
+        }
+    }
+    fclose(f);
+    return NULL;
+}
+
+int gpu_precision_diag_seams(GpuSeamSample *out, int max) {
+    int n = s_seam_sample_count < max ? s_seam_sample_count : max;
+    memcpy(out, s_seam_samples, (size_t)n * sizeof(*out));
+    return n;
+}
+
+int gpu_precision_diag_triangle_sites(uint32_t *pc, uint32_t *exact,
+                                      uint32_t *partial, int max) {
+    int n = s_precise_site_count < max ? s_precise_site_count : max;
+    for (int i = 0; i < n; i++) {
+        pc[i] = s_precise_sites[i].pc;
+        exact[i] = s_precise_sites[i].exact;
+        partial[i] = s_precise_sites[i].partial;
+    }
+    return n;
+}
+
+/* A tracked projection is usable for a packet word only if its integer part
+ * is the word itself: a saturated (off-screen) projection keeps its true
+ * 16.16 position, which no longer matches the clamped SXY. A vertex the CPU
+ * computed from packed words (G1.12, `derived`) is allowed one pixel per
+ * half-word: the game rounds each term before adding, the shadow does not.
+ * Every packet sharing that vertex reads the same shadow, so they agree.
+ * The word is read as the GPU reads it, 11 bits per coordinate: packed
+ * arithmetic on a negative X carries garbage into bits 11-15 (Tekken 3's
+ * joint welds give 0x7FFF for -1), which the console never sees. The
+ * comparison itself is plain, so a position that would wrap is refused. */
+static int precise_matches_word(uint32_t word, int32_t x16, int32_t y16,
+                                int derived) {
+    int32_t raw_x, raw_y;
+    parse_vertex(word, &raw_x, &raw_y);
+    const int32_t dx = (x16 >> 16) - raw_x;
+    const int32_t dy = (y16 >> 16) - raw_y;
+    const int32_t tol = derived ? 1 : 0;
+    return dx >= -tol && dx <= tol && dy >= -tol && dy <= tol;
+}
+
+/* Sub-pixel positions for one GP0 triangle (geometry_correction).
+ *
+ * Exact path first (ENHANCEMENTS.md G1.11): a position word whose packet
+ * address holds a tracked SWC2 projection store of that same value gets that
+ * projection's 16.16 position, the primary path of both reference PGXP
+ * implementations (G1.2). It is per vertex: a word without provenance keeps
+ * its integer position, and since a word's answer depends only on its own
+ * store, two packets that carry the same projected vertex agree on it. No
+ * screen-position guess is involved, so nothing on this path can be ambiguous.
+ *
+ * The position-keyed cache (G1.4) is only a fallback, off unless
+ * gte_geometry_position_fallback_set(1), used all three or nothing for a
+ * triangle with no exact word at all: requiring a full match keeps HUD and
+ * sprites that share one coordinate with a projection uncorrected. The
+ * integer delta folds in draw offsets and any widescreen adjustment. */
+static void prepare_precise_triangle(int i0, int i1, int i2,
                                      const int32_t vx[3], const int32_t vy[3]) {
-    uint32_t words[3] = { w0, w1, w2 };
+    const int indices[3] = { i0, i1, i2 };
     int32_t fx[3], fy[3];
     const int geometry_enabled = gte_geometry_correction_enabled();
     gr_set_perspective_triangle(0, 0.0f, 0.0f, 0.0f);
+    s_precision_diag[GPU_DIAG_PRECISE_TRIANGLES]++;
     if (!geometry_enabled) {
+        gr_set_precise_triangle(0, 0,0, 0,0, 0,0);
+        if (g_gpu_tri_record) {
+            /* Record the console's own positions too: the baseline the
+             * geometry gates are calibrated against (G1.12). */
+            const uint32_t no_pc[3] = { 0, 0, 0 };
+            const uint8_t no_derived[3] = { 0, 0, 0 };
+            const uint16_t no_z[3] = { 0, 0, 0 };
+            int32_t ix[3], iy[3];
+            for (int i = 0; i < 3; i++) {
+                ix[i] = (int32_t)((int64_t)vx[i] * 65536);
+                iy[i] = (int32_t)((int64_t)vy[i] * 65536);
+            }
+            tri_record(indices, vx, vy, ix, iy, no_pc, no_derived, 0, no_z);
+        }
+        return;
+    }
+    int exact = 0;
+    uint32_t first_exact_addr = 0;
+    uint32_t seam_pc[3] = { 0, 0, 0 };
+    uint8_t seam_derived[3] = { 0, 0, 0 };
+    uint16_t rec_z[3] = { 0, 0, 0 };
+    for (int i = 0; i < 3; i++) {
+        fx[i] = (int32_t)((int64_t)vx[i] * 65536);
+        fy[i] = (int32_t)((int64_t)vy[i] * 65536);
+    }
+    if (gp0_cmd_source_addr != 0xFFFFFFFFu) {
+        for (int i = 0; i < 3; i++) {
+            const uint32_t word = gp0_cmd_buf[indices[i]];
+            const uint32_t addr = packet_word_addr(indices[i]);
+            int32_t raw_x, raw_y, x16, y16;
+            uint8_t derived = 0;
+            parse_vertex(word, &raw_x, &raw_y);
+            uint16_t z16 = 0;
+            const int tracked = gte_precision_load_word(addr, word, &x16, &y16, &z16, &derived);
+            if (tracked && precise_matches_word(word, x16, y16, derived)) {
+                rec_z[i] = z16;
+                fx[i] = (int32_t)((int64_t)x16 + (int64_t)(vx[i] - raw_x) * 65536);
+                fy[i] = (int32_t)((int64_t)y16 + (int64_t)(vy[i] - raw_y) * 65536);
+                if (!exact) first_exact_addr = addr;
+                exact++;
+                seam_pc[i] = gte_precision_word_writer_pc(addr);
+                seam_derived[i] = derived;
+                if (derived) s_precision_diag[GPU_DIAG_PRECISE_WORDS_DERIVED]++;
+            } else {
+                if (tracked) s_precision_diag[GPU_DIAG_PRECISE_WORDS_REFUSED]++;
+                fx[i] = (int32_t)((int64_t)vx[i] * 65536);
+                fy[i] = (int32_t)((int64_t)vy[i] * 65536);
+            }
+        }
+    }
+    if (exact > 0 && s_cell_merge) precise_cell_merge(vx, vy, fx, fy);
+    if (s_seam_census) seam_note_triangle(vx, vy, fx, fy, seam_pc, seam_derived);
+    if (g_gpu_tri_record) tri_record(indices, vx, vy, fx, fy, seam_pc, seam_derived, exact, rec_z);
+    if (exact > 0) {
+        s_precision_diag[GPU_DIAG_PRECISE_WORDS_EXACT] += (uint32_t)exact;
+        s_precision_diag[exact == 3 ? GPU_DIAG_PRECISE_TRIANGLES_EXACT
+                                    : GPU_DIAG_PRECISE_TRIANGLES_PARTIAL]++;
+        precise_site_note(gte_precision_word_writer_pc(first_exact_addr), exact == 3);
+        gr_set_precise_triangle(1, fx[0],fy[0], fx[1],fy[1], fx[2],fy[2]);
+        return;
+    }
+    if (!gte_geometry_position_fallback_enabled()) {
         gr_set_precise_triangle(0, 0,0, 0,0, 0,0);
         return;
     }
     for (int i = 0; i < 3; i++) {
+        const uint32_t word = gp0_cmd_buf[indices[i]];
         int32_t raw_x, raw_y;
-        parse_vertex(words[i], &raw_x, &raw_y);
-        if (!gte_geometry_correction_lookup(words[i], &fx[i], &fy[i])) {
+        parse_vertex(word, &raw_x, &raw_y);
+        if (!gte_geometry_correction_lookup(word, &fx[i], &fy[i])) {
             gr_set_precise_triangle(0, 0,0, 0,0, 0,0);
             return;
         }
@@ -3430,7 +3812,73 @@ static void prepare_precise_triangle(uint32_t w0, uint32_t w1, uint32_t w2,
         fy[i] = (int32_t)((int64_t)fy[i] +
                           (int64_t)(vy[i] - raw_y) * 65536);
     }
+    s_precision_diag[GPU_DIAG_PRECISE_TRIANGLES_POSITION]++;
     gr_set_precise_triangle(1, fx[0],fy[0], fx[1],fy[1], fx[2],fy[2]);
+}
+
+/* Axis-aligned quads under geometry correction (G1.14). The textured-quad
+ * path and the semi-transparent mono-quad path draw a quad whose integer
+ * corners form a screen-aligned rectangle as a single rect, which has no
+ * sub-pixel corners. A world quad that faces the camera rounds to such a
+ * rectangle: drawn as a rect it stays on the integer grid while its
+ * corrected neighbours move by their fraction, and a crack up to a pixel
+ * wide opens along the shared edge (Tekken 3's arcade stages: the sky
+ * through a courtyard door). With geometry on, a quad with an exact
+ * position word is drawn as its two triangles instead; with geometry off,
+ * or without an exact word (2D, UI), the rect path is unchanged.
+ * video_enhancements geometry_rect_quads (on by default) switches it. */
+static int s_rect_quads_precise = 1;
+
+void gpu_geometry_rect_quads_set(int enabled) { s_rect_quads_precise = enabled ? 1 : 0; }
+int gpu_geometry_rect_quads_enabled(void) { return s_rect_quads_precise; }
+
+/* idx: the quad's four position word indices, in packet order. */
+static int precise_rect_quad(const int idx[4]) {
+    if (!s_rect_quads_precise || !gte_geometry_correction_enabled() ||
+        gp0_cmd_source_addr == 0xFFFFFFFFu)
+        return 0;
+    for (int i = 0; i < 4; i++) {
+        const uint32_t word = gp0_cmd_buf[idx[i]];
+        int32_t x16, y16;
+        uint8_t derived = 0;
+        if (gte_precision_load_word(packet_word_addr(idx[i]), word, &x16, &y16, NULL, &derived) &&
+            precise_matches_word(word, x16, y16, derived)) {
+            s_precision_diag[GPU_DIAG_PRECISE_RECT_QUADS]++;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* A quad the rect path keeps, in the triangle record: its two triangles
+ * (0 1 2, 2 1 3) at the integer corners it is drawn at, uncorrected, with
+ * the store PC of each tracked word so that the gates put it in its mesh.
+ * Without it the record has a hole wherever a rect was drawn and the gates
+ * cannot see a crack along its edge. vx, vy: drawn positions. */
+static void tri_record_rect_quad(const int idx[4], const int32_t vx[4], const int32_t vy[4]) {
+    static const int tri[2][3] = { { 0, 1, 2 }, { 2, 1, 3 } };
+    if (!g_gpu_tri_record) return;
+    for (int t = 0; t < 2; t++) {
+        int ind[3];
+        int32_t x[3], y[3], fx[3], fy[3];
+        uint32_t pc[3] = { 0, 0, 0 };
+        const uint8_t no_derived[3] = { 0, 0, 0 };
+        const uint16_t no_z[3] = { 0, 0, 0 };
+        for (int k = 0; k < 3; k++) {
+            const int i = tri[t][k];
+            ind[k] = idx[i];
+            x[k] = vx[i];
+            y[k] = vy[i];
+            fx[k] = (int32_t)((int64_t)vx[i] * 65536);
+            fy[k] = (int32_t)((int64_t)vy[i] * 65536);
+            if (gp0_cmd_source_addr != 0xFFFFFFFFu) {
+                const uint32_t addr = packet_word_addr(idx[i]);
+                if (gte_precision_load_word(addr, gp0_cmd_buf[idx[i]], NULL, NULL, NULL, NULL))
+                    pc[k] = gte_precision_word_writer_pc(addr);
+            }
+        }
+        tri_record(ind, x, y, fx, fy, pc, no_derived, 0, no_z);
+    }
 }
 
 /* Enable perspective UVs only when every position word came from an exact
@@ -3442,12 +3890,17 @@ static void prepare_texture_triangle(int i0, int i1, int i2) {
         return;
     int indices[3] = { i0, i1, i2 };
     uint16_t z[3];
+    int exact = 0;
+    s_precision_diag[GPU_DIAG_TEXTURE_TRIANGLES]++;
     for (int i = 0; i < 3; i++) {
-        uint32_t addr = (gp0_cmd_source_addr + (uint32_t)indices[i] * 4u) & 0x1FFFFCu;
-        if (!gte_precision_load_word(addr, gp0_cmd_buf[indices[i]], NULL, NULL, &z[i]) ||
-            z[i] == 0)
-            return;
+        uint32_t addr = packet_word_addr(indices[i]);
+        if (gte_precision_load_word(addr, gp0_cmd_buf[indices[i]], NULL, NULL, &z[i], NULL) &&
+            z[i] != 0)
+            exact++;
     }
+    s_precision_diag[GPU_DIAG_TEXTURE_WORDS_EXACT] += (uint32_t)exact;
+    if (exact != 3) return;
+    s_precision_diag[GPU_DIAG_TEXTURE_TRIANGLES_EXACT]++;
     float q[3] = { 1.0f / (float)z[0], 1.0f / (float)z[1], 1.0f / (float)z[2] };
     float qmax = q[0];
     if (q[1] > qmax) qmax = q[1];
@@ -3640,7 +4093,7 @@ static void gp0_exec_mono_tri(void) {
     }
     if (draw_area_out_bbox(vx, vy, 3)) return;
     gr_set_semi_transparency(semi_trans, (int)semi_transparency);
-    prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[2], gp0_cmd_buf[3],
+    prepare_precise_triangle(1, 2, 3,
                              vx, vy);
     gr_draw_flat_triangle(vx[0], vy[0], vx[1], vy[1], vx[2], vy[2], color);
 }
@@ -3687,7 +4140,8 @@ static void gp0_exec_mono_quad(void) {
     /* Semi axis-aligned mono quads (UI boxes/borders): one rect, not two tris.
      * Thin semi borders (e.g. CTR name-entry OT-1144 teal 3×H) otherwise double-
      * blend their shared diagonal — nearly the whole strip — and overpaint 3D. */
-    if (semi_trans && ws_axis_aligned_quad(vx, vy)) {
+    static const int mono_idx[4] = { 1, 2, 3, 4 };
+    if (semi_trans && ws_axis_aligned_quad(vx, vy) && !precise_rect_quad(mono_idx)) {
         int32_t min_x = vx[0], max_x = vx[0], min_y = vy[0], max_y = vy[0];
         for (int i = 1; i < 4; i++) {
             if (vx[i] < min_x) min_x = vx[i];
@@ -3698,6 +4152,7 @@ static void gp0_exec_mono_quad(void) {
         int w = (int)(max_x - min_x);
         int h = (int)(max_y - min_y);
         if (w > 0 && h > 0) {
+            tri_record_rect_quad(mono_idx, vx, vy);
             gr_draw_flat_rect(min_x, min_y, w, h, color);
             return;
         }
@@ -3705,15 +4160,13 @@ static void gp0_exec_mono_quad(void) {
     if (!rej_a) {
         int32_t tx[3] = { vx[0], vx[1], vx[2] };
         int32_t ty[3] = { vy[0], vy[1], vy[2] };
-        prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[2],
-                                 gp0_cmd_buf[3], tx, ty);
+        prepare_precise_triangle(1, 2, 3, tx, ty);
         gr_draw_flat_triangle(vx[0], vy[0], vx[1], vy[1], vx[2], vy[2], color);
     }
     if (!rej_b) {
         int32_t tx[3] = { vx[2], vx[1], vx[3] };
         int32_t ty[3] = { vy[2], vy[1], vy[3] };
-        prepare_precise_triangle(gp0_cmd_buf[3], gp0_cmd_buf[2],
-                                 gp0_cmd_buf[4], tx, ty);
+        prepare_precise_triangle(3, 2, 4, tx, ty);
         gr_draw_flat_triangle(vx[2], vy[2], vx[1], vy[1], vx[3], vy[3], color);
     }
 }
@@ -3736,7 +4189,7 @@ static void gp0_exec_shaded_tri(void) {
     }
     if (draw_area_out_bbox(vx, vy, 3)) return;
     gr_set_semi_transparency(semi_trans, (int)semi_transparency);
-    prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[3], gp0_cmd_buf[5],
+    prepare_precise_triangle(1, 3, 5,
                              vx, vy);
     gr_draw_gouraud_triangle(vx[0], vy[0], c[0],
                              vx[1], vy[1], c[1],
@@ -3785,8 +4238,7 @@ static void gp0_exec_shaded_quad(void) {
     if (!rej_a) {
         int32_t tx[3] = { vx[0], vx[1], vx[2] };
         int32_t ty[3] = { vy[0], vy[1], vy[2] };
-        prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[3],
-                                 gp0_cmd_buf[5], tx, ty);
+        prepare_precise_triangle(1, 3, 5, tx, ty);
         gr_draw_gouraud_triangle(vx[0], vy[0], c[0],
                                  vx[1], vy[1], c[1],
                                  vx[2], vy[2], c[2]);
@@ -3794,8 +4246,7 @@ static void gp0_exec_shaded_quad(void) {
     if (!rej_b) {
         int32_t tx[3] = { vx[2], vx[1], vx[3] };
         int32_t ty[3] = { vy[2], vy[1], vy[3] };
-        prepare_precise_triangle(gp0_cmd_buf[5], gp0_cmd_buf[3],
-                                 gp0_cmd_buf[7], tx, ty);
+        prepare_precise_triangle(5, 3, 7, tx, ty);
         gr_draw_gouraud_triangle(vx[2], vy[2], c[2],
                                  vx[1], vy[1], c[1],
                                  vx[3], vy[3], c[3]);
@@ -3866,7 +4317,7 @@ static void gp0_exec_textured_tri(void) {
     if (draw_area_out_bbox(vx, vy, 3)) return;
 
     setup_textured_draw(color24, semi_trans, raw_texture);
-    prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[3], gp0_cmd_buf[5],
+    prepare_precise_triangle(1, 3, 5,
                              vx, vy);
     prepare_texture_triangle(1, 3, 5);
     gr_draw_textured_triangle(vx[0], vy[0], u[0], v[0],
@@ -3919,10 +4370,11 @@ static void gp0_exec_textured_quad(void) {
 
     setup_textured_draw(color24, semi_trans, raw_texture);
 
+    static const int tex_idx[4] = { 1, 3, 5, 7 };
     if (vy[0] == vy[1] && vy[2] == vy[3] &&
         vx[0] == vx[2] && vx[1] == vx[3] &&
         u[0] == u[2] && u[1] == u[3] &&
-        v[0] == v[1] && v[2] == v[3]) {
+        v[0] == v[1] && v[2] == v[3] && !precise_rect_quad(tex_idx)) {
         int x = vx[0] < vx[1] ? vx[0] : vx[1];
         int y = vy[0] < vy[2] ? vy[0] : vy[2];
         int w = vx[0] < vx[1] ? vx[1] - vx[0] : vx[0] - vx[1];
@@ -3932,6 +4384,7 @@ static void gp0_exec_textured_quad(void) {
         int top_v   = vy[0] < vy[2] ? v[0] : v[2];
         int bot_v   = vy[0] < vy[2] ? v[2] : v[0];
         if (w > 0 && h > 0) {
+            tri_record_rect_quad(tex_idx, vx, vy);
             if (right_u - left_u == w && bot_v - top_v == h) {
                 gr_draw_textured_rect(x, y, w, h, left_u, top_v,
                                       clut_x, clut_y, tpage);
@@ -3947,8 +4400,7 @@ static void gp0_exec_textured_quad(void) {
     if (!rej_a) {
         int32_t tx[3] = { vx[0], vx[1], vx[2] };
         int32_t ty[3] = { vy[0], vy[1], vy[2] };
-        prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[3],
-                                 gp0_cmd_buf[5], tx, ty);
+        prepare_precise_triangle(1, 3, 5, tx, ty);
         prepare_texture_triangle(1, 3, 5);
         gr_draw_textured_triangle(vx[0], vy[0], u[0], v[0],
                                   vx[1], vy[1], u[1], v[1],
@@ -3958,8 +4410,7 @@ static void gp0_exec_textured_quad(void) {
     if (!rej_b) {
         int32_t tx[3] = { vx[2], vx[1], vx[3] };
         int32_t ty[3] = { vy[2], vy[1], vy[3] };
-        prepare_precise_triangle(gp0_cmd_buf[5], gp0_cmd_buf[3],
-                                 gp0_cmd_buf[7], tx, ty);
+        prepare_precise_triangle(5, 3, 7, tx, ty);
         prepare_texture_triangle(5, 3, 7);
         gr_draw_textured_triangle(vx[2], vy[2], u[2], v[2],
                                   vx[1], vy[1], u[1], v[1],
@@ -4001,7 +4452,7 @@ static void gp0_exec_shaded_textured_tri(void) {
     if (draw_area_out_bbox(vx, vy, 3)) return;
 
     gr_set_semi_transparency(semi_trans, (int)semi_transparency);
-    prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[4], gp0_cmd_buf[7],
+    prepare_precise_triangle(1, 4, 7,
                              vx, vy);
     prepare_texture_triangle(1, 4, 7);
     gr_draw_shaded_textured_triangle(vx[0], vy[0], u[0], v[0], c[0],
@@ -4052,8 +4503,7 @@ static void gp0_exec_shaded_textured_quad(void) {
     if (!rej_a) {
         int32_t tx[3] = { vx[0], vx[1], vx[2] };
         int32_t ty[3] = { vy[0], vy[1], vy[2] };
-        prepare_precise_triangle(gp0_cmd_buf[1], gp0_cmd_buf[4],
-                                 gp0_cmd_buf[7], tx, ty);
+        prepare_precise_triangle(1, 4, 7, tx, ty);
         prepare_texture_triangle(1, 4, 7);
         gr_draw_shaded_textured_triangle(vx[0], vy[0], u[0], v[0], c[0],
                                          vx[1], vy[1], u[1], v[1], c[1],
@@ -4063,8 +4513,7 @@ static void gp0_exec_shaded_textured_quad(void) {
     if (!rej_b) {
         int32_t tx[3] = { vx[2], vx[1], vx[3] };
         int32_t ty[3] = { vy[2], vy[1], vy[3] };
-        prepare_precise_triangle(gp0_cmd_buf[7], gp0_cmd_buf[4],
-                                 gp0_cmd_buf[10], tx, ty);
+        prepare_precise_triangle(7, 4, 10, tx, ty);
         prepare_texture_triangle(7, 4, 10);
         gr_draw_shaded_textured_triangle(vx[2], vy[2], u[2], v[2], c[2],
                                          vx[1], vy[1], u[1], v[1], c[1],

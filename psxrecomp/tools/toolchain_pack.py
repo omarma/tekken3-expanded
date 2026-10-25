@@ -356,7 +356,14 @@ def _best_pack_under(base: Path, min_version: str = "") -> Optional[Path]:
     prefer_names = ("latest", "offline")
     candidates: list[Path] = []
     try:
-        kids = [p for p in base.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        # Skip ``*.broken``: packs the setup host quarantined (same rule there).
+        kids = [
+            p
+            for p in base.iterdir()
+            if p.is_dir()
+            and not p.name.startswith(".")
+            and not p.name.endswith(".broken")
+        ]
     except OSError:
         return None
     for name in prefer_names:

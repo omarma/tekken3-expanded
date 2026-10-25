@@ -18,6 +18,7 @@ class WidescreenModTests(unittest.TestCase):
         self.assertEqual(config["video"]["texture_filtering"], "nearest")
         self.assertTrue(config["video"]["perspective_texturing"])
         self.assertFalse(config["video"]["geometry_correction"])
+        self.assertTrue(config["video"]["offer_geometry_correction"])
         widescreen = config["widescreen"]
         self.assertTrue(widescreen["native_wide"])
         self.assertFalse(widescreen["full_2d"])
@@ -60,6 +61,24 @@ class WidescreenModTests(unittest.TestCase):
             self.assertNotIn(y_site, cull["bltz_sites"])
         self.assertFalse(widescreen["offer"])
         self.assertFalse(widescreen["offer_ultrawide"])
+
+    def test_precision_funcs_cover_the_pgxp_writers(self) -> None:
+        with (ROOT / "game.toml").open("rb") as source:
+            config = tomllib.load(source)
+        # Body renderer, shadows, PS1 floor, stage scenery, showcase overlay
+        # floor (PGXP J2 to J3, TIPS § 122, 123, 125).
+        entries = config["recompiler"]["precision_funcs"]
+        self.assertEqual(entries, [
+            "0x80036CAC-0x80037B24", "0x80037B28", "0x80048E58-0x80049848",
+            "0x8006CC48-0x8006D00C", "0x800D4ADC-0x800D55B8",
+        ])
+        for entry in entries:
+            bounds = [int(part, 16) for part in entry.split("-")]
+            self.assertIn(len(bounds), (1, 2))
+            for address in bounds:
+                self.assertEqual(address & 3, 0)
+                self.assertTrue(0x80000000 <= address < 0x80200000)
+            self.assertLessEqual(bounds[0], bounds[-1])
 
     def test_package_selects_native_visibility_and_defaults_on(self) -> None:
         package = (

@@ -6,6 +6,7 @@
 #include "psx_sha256.h"
 #include "spu.h"
 #include "tekken3_ttt1_assets.h"
+#include "tekken3_arcade_stages.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,8 +54,11 @@ typedef struct {
 static GuestBank banks[2];
 static GuestVoice voices[2][2];
 static int sfx_gain = 100, music_gain = 100, music_muted;
-/* The Embu's music of our own (tekken3_embu_scenes.c) mutes the game's. */
-extern int tekken3_embu_music_mix(int16_t *out,int frames,int audible,int gain);
+/* A cinematic's music (src/tekken3_cine.c) mutes the game's. */
+extern int tekken3_cine_music_mix(int16_t *out,int frames,int audible,int gain,int *mute);
+/* So does a TTT stage's music (tekken3_ttt_music.c, TTT Stages). */
+extern int tekken3_ttt_music_mix(int16_t *out,int frames,int audible,const int16_t main_volume[2],int gain);
+extern void tekken3_ttt_music_state_reset(void);
 static uint32_t telemetry;
 
 static uint32_t rd32(const unsigned char *p) {
@@ -231,7 +235,11 @@ void __wrap_spu_render(int16_t *out,int frames) {
     int audible=(g.ctrl&0xc000)==0xc000;
     int16_t main_volume[2]={(int16_t)spu_read(0x1f801db8),(int16_t)spu_read(0x1f801dba)};
     tekken3_ttt1_sfx_mix(out,frames,audible,main_volume,sfx_gain);
-    int embu_music=tekken3_embu_music_mix(out,frames,audible,music_gain);
+    /* TTT stage 4's thunder (src/tekken3_arcade_stages.c), with the sounds. */
+    tekken3_arcade_stages_thunder_mix(out,frames,audible,main_volume,sfx_gain);
+    int embu_music=0;
+    if(!tekken3_cine_music_mix(out,frames,audible,music_gain,&embu_music))embu_music=0;
+    if(!embu_music)embu_music=tekken3_ttt_music_mix(out,frames,audible,main_volume,music_gain);
     if(embu_music!=music_muted) {
         music_muted=embu_music;
         __real_spu_set_host_mix_volume(sfx_gain,embu_music?0:music_gain);
@@ -268,9 +276,9 @@ void __wrap_spu_set_host_mix_volume(int sfx,int music) {
     music_gain=music<0?0:music>100?100:music;
     __real_spu_set_host_mix_volume(sfx,music_muted?0:music);
 }
-void __wrap_spu_init(void) { stop_voices();__real_spu_init(); }
+void __wrap_spu_init(void) { stop_voices();tekken3_ttt_music_state_reset();tekken3_arcade_stages_thunder_stop();__real_spu_init(); }
 int __wrap_spu_snapshot_read(const uint8_t *p,uint32_t len) {
     int result=__real_spu_snapshot_read(p,len);
-    if(result)stop_voices();
+    if(result){stop_voices();tekken3_ttt_music_state_reset();tekken3_arcade_stages_thunder_stop();}
     return result;
 }

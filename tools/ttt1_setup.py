@@ -2,7 +2,7 @@
 """Import the TTT1 characters from your own arcade ROM, then rebuild the game.
 
     python3 tools/ttt1_setup.py [character ...] [--ttt1 tektagt.zip] [--jobs N]
-        [--jin-red-lightning] [--tekken3 tekken3.zip] [--no-rebuild]
+        [--tekken3 tekken3.zip] [--no-rebuild]
     python3 tools/ttt1_setup.py --update [--roster DIR]
     python3 tools/ttt1_setup.py --check-donor-reuse [--jobs N]
 
@@ -22,8 +22,8 @@ is imported, and with them everything built from those imports:
    TTT1_IMPORT_VERSION changes) lists again;
 3. Devil Jin (Jin confirmed with both punches): his model and his moves,
    once Jun, Devil and Unknown are imported;
-4. with --jin-red-lightning, Jin's red strong-hit effect for the
-   tekken3.visual.jin-ttt1-hit-effect mod;
+4. the TTT Hitspark mod's strong-hit effects of Tekken 3's own cast, read
+   from the ROM (tools/ttt1_hitspark.py), Jin's red lightning included;
 5. with --tekken3, the arcade difficulty levels (tools/difficulty/import.py,
    read from both program ROMs, no MAME either);
 6. the Practice move lists from the Tekken wiki (a warning only without a
@@ -210,6 +210,27 @@ def tarzan_crash():
         logged([sys.executable, ROOT / 'tools/ttt1_import.py', *args], LOGS / f"events-{'@'.join(args[::2][:2])}.log")
 
 
+def unknown_wolf():
+    """Unknown's wolf spirit (F08): its model and the glow of its effects, from
+    the ROM regions and Unknown's capture (tools/ttt1_import.py --spirit)."""
+    if not imported('unknown'):
+        print("Unknown's wolf: skipped (Unknown not imported)", flush=True)
+        return
+    print("Unknown's wolf...", flush=True)
+    logged([sys.executable, ROOT / 'tools/ttt1_import.py', 'unknown', '--spirit'], LOGS / 'unknown-wolf.log')
+
+
+def hit_effect_64():
+    """Guests' strong-hit effect in 64 x 64 (F12), from the ROM regions
+    (tools/ttt1_import.py hit_effect_64_update, no MAME), and the Tekken 3
+    natives' for the TTT Hitspark mod (tools/ttt1_hitspark.py)."""
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1')]
+    import ttt1_import as I, ttt1_hitspark
+    for key in [k for k in characters() if imported(k)]:
+        I.hit_effect_64_update(key, TABLE[key])
+    ttt1_hitspark.write()
+
+
 def has_work_files():
     """The import's work files are there: the ROM regions and the captures
     (gone once the setup's "free up disk space" deleted workspace/)."""
@@ -234,6 +255,23 @@ def hand_fists_step(roster, work):
     H.main([WORK if work else roster])     # WORK: the guests' own folders and the roster
 
 
+def half_welds_step(roster, work):
+    """Guests' models converted again with half welds on whole vertices (convert.half_welds, B70):
+    model, textures, face and springs of each costume, as a full import writes them (captures
+    and ROM regions reused), then Devil Jin's model."""
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1'), str(ROOT / 'tools/ttt1/model')]
+    import ttt1_import as I
+    for key in [k for k in characters() if imported(k)]:
+        report = json.loads((WORK / key / 'import-report.json').read_text())
+        ram, name, out = WORK / 'captures' / f'{key}-select-ram.bin', key.capitalize(), WORK / key / 'guest'
+        for c, slot in enumerate(TABLE[key].get('costumes') or [report['keys']['slot']], 1):
+            model = WORK / key / ('ttt1.3dm' if c == 1 else f'costume{c}/ttt1.3dm')
+            if slot is None or not model.is_file() or not (out / f'{name}-TTT1-arcade-P{c}.3dm').is_file(): continue
+            m = I.model(ram, slot, out, name, model.parent, c)
+            print(f'  {key} costume {c}: {m["bytes"]} bytes', flush=True)
+    devil_jin()
+
+
 def accessories_step(roster, work):
     """Springs of the guests' accessory bones from the arcade's table (tools/ttt1/accessories.py):
     a .acc per costume, next to its model, from the converted model's layout."""
@@ -253,6 +291,12 @@ def accessories_step(roster, work):
             print(f'  {key} costume {c}: springs on bones {", ".join(springs["swinging"]) or "none"}', flush=True)
 
 
+def mist_step(roster, work):
+    """The mist's hit limb in the move packs (tools/ttt1_retrofit_mist.py, B65)."""
+    import ttt1_retrofit_mist as M
+    M.main([WORK if work else roster])     # WORK: the guests' own folders and the roster
+
+
 UPDATE_STEPS = {'hands': hands_step,
                 'devil-jin': lambda roster, work: devil_jin(),
                 'panda-tiger': lambda roster, work: panda_tiger(),
@@ -260,7 +304,11 @@ UPDATE_STEPS = {'hands': hands_step,
                 'accessories': accessories_step,
                 'tarzan-crash': lambda roster, work: tarzan_crash(),
                 'jin-omen': lambda roster, work: jin_omen(moves=True),
-                'hand-fists': hand_fists_step}
+                'hand-fists': hand_fists_step,
+                'mist': mist_step,
+                'half-welds': half_welds_step,
+                'unknown-wolf': lambda roster, work: unknown_wolf(),
+                'hit-effect-64': lambda roster, work: hit_effect_64()}
 
 
 def update(roster):
@@ -296,7 +344,7 @@ def rebuild():
         raise ValueError('Import succeeded. Put cmake on PATH, then run: '
                          'cmake -S . -B build-release && cmake --build build-release --target psx-runtime')
     build = ROOT / 'build-release'
-    # The TTT1 package, the Jin effect and the difficulty levels are staged
+    # The TTT1 package and the difficulty levels are staged
     # only if present when CMake configures: configure again after an import.
     configure = [cmake, '-S', ROOT, '-B', build]
     if not (build / 'CMakeCache.txt').is_file():
@@ -312,8 +360,6 @@ def main():
     ap.add_argument('--ttt1', type=Path, help='non-merged tektagt.zip, World TEG2/VER.C1, US TEG3/VER.C1 or VER.B, Japan TEG1/VER.C1')
     ap.add_argument('--jobs', type=int, default=min(os.cpu_count() or 4, 12),
                     help='imports at a time (default: the CPU count, at most 12)')
-    ap.add_argument('--jin-red-lightning', action='store_true',
-                    help="Jin's red TTT1 strong-hit effect (optional mod)")
     ap.add_argument('--tekken3', type=Path,
                     help='tekken3.zip (Tekken 3 arcade, TET2/VER.E1): the arcade difficulty levels')
     ap.add_argument('--no-rebuild', action='store_true')
@@ -346,11 +392,10 @@ def main():
     devil_jin()
     jin_omen()
     panda_tiger()
-    if args.jin_red_lightning:
-        print("Jin's red lightning...", flush=True)
-        command = [sys.executable, ROOT / 'tools/ttt1_jin_hit_effect.py']
-        if args.ttt1: command += ['--ttt1', args.ttt1]
-        logged(command, LOGS / 'jin-red-lightning.log')
+    print("TTT Hitspark: the natives' strong-hit effects...", flush=True)
+    command = [sys.executable, ROOT / 'tools/ttt1_hitspark.py']
+    if args.ttt1: command += ['--ttt1', args.ttt1]
+    logged(command, LOGS / 'hitspark.log')
     if args.tekken3:
         print('Arcade difficulty levels...', flush=True)
         command = [sys.executable, ROOT / 'tools/difficulty/import.py', '--tekken3', args.tekken3]

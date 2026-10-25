@@ -1,9 +1,9 @@
 format_version = 5
 id = "tekken3.character.ttt1"
 version = "1.0.0"
-name = "TTT1 Characters"
+name = "Tekken Tag Tournament Content"
 author = "Tekken3Recomp"
-description = "Adds the Tekken Tag Tournament characters missing from Tekken 3 as a guest fighter, with their arcade model, moves, voices and interface. Requires the characters imported locally from your own TTT1 ROM."
+description = "Tekken Tag Tournament arcade content made locally from your own tektagt.zip: the characters missing from Tekken 3, with their arcade model, moves, voices and interface; the Embu played by them; and TTT's arcade stages with their music."
 resolver = "declarative"
 save_compatibility = "shared"
 
@@ -14,13 +14,28 @@ exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
 [[feature]]
 id = "ttt1-characters"
 name = "TTT1 Characters"
-description = "Adds the imported TTT1 characters as characters of their own. At the character selector, R2 / L2 switch between the Tekken 3 grid and the Tag page of guests; player 1 and player 2 can fight with two different guests. Team Battle offers one guest cell. Tag mechanics are excluded."
+description = "Adds the imported TTT1 characters as characters of their own. At the character selector, R2 / L2 switch between the Tekken 3 grid and the Tag page of guests; player 1 and player 2 can fight with two different guests. Team Battle offers one guest cell. Tag mechanics are excluded. With the TTT PS2 disc given to the setup, the PS2 EFFECTS row of GAME OPTION (ON by default) draws Devil's and Angel's lasers as Tekken Tag Tournament on the PS2 does; OFF keeps the arcade's."
 group = "Characters"
 default_enabled = true
 
 [[plugin]]
 feature = "ttt1-characters"
 id = "tekken3.ttt1-characters"
+
+[[plugin]]
+feature = "ttt1-characters"
+id = "tekken3.ttt1-ps2-laser"
+
+[[feature]]
+id = "ttt-stages"
+name = "TTT Stages"
+description = "Tekken Tag Tournament arcade stages and their music (arenas 0 to 12), picked for each fight by the STAGES row of GAME OPTION: TEKKEN 3, TEKKEN TAG TOURNAMENT, AUTO (the default: a TTT guest brings his TTT stage) or RANDOM. Works without TTT1 Characters too. Needs the stages and music the setup makes from your tektagt.zip, otherwise the row stays hidden. Restart after changing."
+group = "Characters"
+default_enabled = true
+
+[[plugin]]
+feature = "ttt-stages"
+id = "tekken3.ttt-stages"
 
 [[feature]]
 id = "ttt1-embu"

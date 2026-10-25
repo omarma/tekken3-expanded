@@ -1723,11 +1723,21 @@ std::string CodeGenerator::translate_instruction(uint32_t addr, uint32_t instr) 
                     // (op 0x32 is non-load), the GTE deadline stall via psx_gte_stall,
                     // then psx_cyc_lwc2_read does the ReadMemory timing (completion +1,
                     // no LDWhich arm — the dest is a GTE register).
+                    const uint32_t insn_pc = addr;
                     std::string addr = (offset == 0)
                         ? reg_name(rs)
                         : fmt::format("{} + {}", reg_name(rs), offset);
                     bool special = PSXRecompGTERegisters::data_write_needs_helper(static_cast<uint8_t>(rt));
-                    if (special) {
+                    if (rt >= 12 && rt <= 15) {
+                        // SXY0-2/SXYP: the precision tracker restores the
+                        // register's sub-pixel projection if the word read is
+                        // the one a SWC2 projection store left there
+                        // (ENHANCEMENTS.md G1.11). rs is not written by LWC2,
+                        // so the address expression is re-evaluated as is.
+                        code = gte_stall + fmt::format("gte_write_data(cpu, {}, psx_cyc_lwc2_read(cpu, {})); "
+                                           "gte_precision_lwc2_word({}, {}, cpu->gte_data[{}], 0x{:08X}u);  /* lwc2 gte[{}] */",
+                                           rt, addr, addr, rt, rt, insn_pc, rt);
+                    } else if (special) {
                         code = gte_stall + fmt::format("gte_write_data(cpu, {}, psx_cyc_lwc2_read(cpu, {}));  /* lwc2 gte[{}] */",
                                            rt, addr, rt);
                     } else {
@@ -1765,7 +1775,50 @@ std::string CodeGenerator::translate_instruction(uint32_t addr, uint32_t instr) 
         }
     }
 
+    if (precision_func_) code = precision_hooks(instr, code);
     return config_.indent + code + comment;
+}
+
+// [recompiler] precision_funcs (ENHANCEMENTS.md G1.12): wrap the few
+// instructions a renderer uses to copy or combine packed SXY words with the
+// runtime's value-propagation hooks. LW and the ALU ops call theirs BEFORE the
+// instruction, with the operand values it is about to read (so rd == rs and a
+// deferred load-delay writeback need no special case; the LW shadow is
+// validated by value where it is read). SW calls its hook AFTER the store,
+// which has already dropped the word's previous entry. Each call sits behind
+// one flag test. Every other instruction is emitted unchanged.
+std::string CodeGenerator::precision_hooks(uint32_t instr, const std::string& code) const {
+    const uint32_t opcode = (instr >> 26) & 0x3F;
+    const uint32_t funct = instr & 0x3F;
+    const uint32_t rs = get_rs(instr), rt = get_rt(instr), rd = get_rd(instr);
+    auto gpr = [](uint32_t r) { return fmt::format("cpu->gpr[{}]", r); };
+    auto guarded = [](const std::string& call) {
+        return "if (g_gte_precision_tracking) " + call;
+    };
+    if (opcode == 0x23 || opcode == 0x2B) {             // lw / sw
+        const int16_t offset = get_imm16(instr);
+        const std::string addr = offset == 0
+            ? gpr(rs) : fmt::format("{} + {}", gpr(rs), offset);
+        if (opcode == 0x23)
+            return guarded(fmt::format("gte_precision_cpu_lw({}u, {}); ", rt, addr)) + code;
+        return code + " " + guarded(fmt::format("gte_precision_cpu_sw({}, {}u, {});",
+                                                addr, rt, gpr(rt)));
+    }
+    if (opcode == 0x0C)                                 // andi: clears Y
+        return guarded(fmt::format("gte_precision_cpu_drop({}u); ", rt)) + code;
+    if (opcode != 0x00) return code;
+    const char* fn = nullptr;
+    switch (funct) {
+        case 0x20: case 0x21: fn = "gte_precision_cpu_add"; break;  // add / addu
+        case 0x24: fn = "gte_precision_cpu_and"; break;             // and
+        case 0x25: fn = "gte_precision_cpu_or"; break;              // or
+        case 0x03:                                                  // sra
+            return guarded(fmt::format("gte_precision_cpu_sra({}u, {}u, {}u, {}); ",
+                                       rd, rt, get_shamt(instr), gpr(rt))) + code;
+        default: return code;
+    }
+    return guarded(fmt::format("{}({}u, {}u, {}u, {}, {}); ",
+                               fn, rd, rs, rt, gpr(rs), gpr(rt))) + code;
 }
 
 std::string CodeGenerator::translate_basic_block(
@@ -2647,6 +2700,10 @@ GeneratedFunction CodeGenerator::generate_function(
     ws_auto_cull_func_ = config_.ws_auto_screen_x_cull &&
                          func_has_screen_extent_cull(cfg);
     detect_cull_bltz_sites(cfg);
+    // Value-propagation hooks (G1.12), per function; overlays never get them
+    // (the overlay ABI does not forward gte_precision_cpu_*).
+    precision_func_ = !config_.overlay_mode &&
+                      config_.is_precision_func(func.start_addr);
 
     // Widescreen backdrop preload (gated): detect each scrolling-backdrop column
     // window so translate_instruction rewrites its START/END finalize. Cleared +
@@ -2928,6 +2985,13 @@ std::vector<GeneratedFunction> CodeGenerator::generate_alias_group(
     ws_auto_cull_func_ = config_.ws_auto_screen_x_cull &&
                          func_has_screen_extent_cull(cfg);
     detect_cull_bltz_sites(cfg);
+
+    // Value-propagation hooks (G1.12): the shared body is instrumented when
+    // any alias is listed in precision_funcs. Set per group, like the above.
+    precision_func_ = false;
+    if (!config_.overlay_mode)
+        for (const Function* f : aliases)
+            if (config_.is_precision_func(f->start_addr)) precision_func_ = true;
 
     // Backdrop preload sites for this alias group's shared CFG (see
     // generate_function). Set per-group so a stale map can't leak in.

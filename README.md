@@ -2,7 +2,7 @@
 
 **Tekken 3 Expanded** puts the 18 characters Tekken Tag Tournament added to the roster into Tekken 3, playable in every mode and fought by the CPU. It runs on [Tekken3Recompiled](https://github.com/FishB0nes98/Tekken3Recompiled), the PC recompilation of Tekken 3.
 
-VIDEO 1.3.0 : https://www.youtube.com/watch?v=ROoNkLo7EyA
+VIDEO 1.4.0 : https://youtu.be/mjwkQr3cZCM
 
 > **No game files are included.** You provide your own Tekken 3 disc image and your own Tekken Tag Tournament and Tekken 3 arcade ROMs. The setup builds everything from them on your machine.
 
@@ -16,9 +16,11 @@ VIDEO 1.3.0 : https://www.youtube.com/watch?v=ROoNkLo7EyA
 - **ALL Costumes Available** by pressing Punch, Kick or Start.
 - **From TTT:** the voices, sounds, portraits and announcer calls, and each character's own strong-hit effect, fade-out included.
 - **Closer to the arcade:** hands that close into each character's own fist, Devil's and Angel's wings that flap (in the KO replay too), tails, hair, skirts and coat tails that swing with the arcade's own springs, faces that blink and shut their eyes when hit, metallic hit sounds for Jack-2 and P.Jack, the KO cry with Tekken 3's echo.
-- **Unknown** works as in Tekken Tag Tournament: she fights with the TTT movesets and switches style with **L1**, from 23 styles.
+- **TTT Hitspark:** every fighter's strong-hit effect, Tekken 3's cast included, at the arcade's 64 × 64 instead of the PS1's 32 × 32, with TTT's hit and guard sparks. Jin hits with his red TTT lightning. A mod on by default (*Visual Enhancements*).
+- **Unknown** works as in Tekken Tag Tournament: she fights with the TTT movesets and switches style with **L1**, from 23 styles, and goes back to Jun's style each round. Her wolf spirit follows her in every fight. As the CPU she switches style as in TTT, and in Arcade she regenerates like TTT's final boss: about 2 life points a second, up to 40% of each hit she takes.
 - **Tetsujin** draws a random moveset every round from the TTT characters added to the game, and wears gold on **Start**.
 - **Devil and Angel** fire the arcade's laser beams along their facing, Air Inferno upwards. The CPU side-steps them, and the Jacks go haywire when hit.
+- **PS2 effects:** with your Tekken Tag Tournament PS2 disc, Devil's and Angel's lasers are drawn as on the PS2 (the orb on the forehead, the textured beam), and Jin, Heihachi, Kazuya, Devil and Angel hit with their PS2 strong-hit sparks (Angel's in gold). Turn **PS2 EFFECTS** to ON in **Options → GAME OPTION** (off by default: the arcade's look).
 - **Panda and Tiger** show their own TTT portraits.
 - **A hidden skin** is waiting to be found.
 
@@ -38,34 +40,48 @@ The card also shows in Tekken Ball. The CPU draws its own moveset once per fight
 ### CPU and modes
 - **CPU opponents** in Arcade, Time Attack, Survival, Team Battle and Tekken Ball. Devil, Angel and Unknown are hidden sub-bosses.
 - **Tekken Force bosses of their own** for every guest, TTT characters included as bosses (Lee for Kazuya, Devil and Angel for each other…).
+- **Ogre lifts the stage 9 sub-boss** you just beat in his Arcade cutscene: Devil, Angel or Unknown when one of them took Heihachi's place.
+- **The attract mode's demo fights** draw TTT characters, TTT movesets and TTT stages.
 
 ### Embu TTT
-The attract-mode kata is performed by the TTT cast.
+Tekken Tag Tournament's own Embu, the attract-mode kata, plays on its TTT stage with the storm, second in the attract's rotation of Embu. Hold **L2** on the title screen to start it at once. Tekken 3's Embu are performed by the TTT cast.
 
 ### Arcade Stages
 With your `tekken3.zip`, the stages of Tekken 3 arcade replace the PS1 ones: arenas 0 to 12, with their animations (torches, moving objects, a helicopter). Gon's and Dr. B's arenas keep their PS1 stage. The setup converts them from your ROM in a few seconds; without `tekken3.zip`, the PS1 stages stay. Turn them off with **Arcade Stages** on the **Mods** page of the game's launcher, then restart the game. They work with both renderers, OpenGL and software.
+
+### TTT Stages
+Tekken Tag Tournament's arcade stages come with the characters, from the same `tektagt.zip`, with their animated scenery, their own light on the fighters and **each stage's own TTT music**. The **STAGES** row of **Options → GAME OPTION** (the page now scrolls) picks them for each fight:
+- **AUTO** (the default): TTT stages for the TTT characters, Tekken 3's for Tekken 3's cast.
+- **TEKKEN TAG TOURNAMENT** or **TEKKEN 3**: always that version.
+- **RANDOM**: one or the other, drawn each fight. A Continue keeps the stage of the fight it replays.
+
+The music of a TTT stage follows **BGM SELECT** in the same **GAME OPTION** page, as Tekken 3's does: **ARCADE** plays the TTT arcade piece, **REMIXED** (the default) plays its Tekken Tag Tournament PS2 version if you gave the setup your **Tekken Tag Tournament (USA) PS2 disc**, the arcade piece otherwise, and **SILENT** plays none. **RANDOM** draws one of the two versions at the start of each fight, on Tekken 3's stages (its console or its arcade soundtrack, both on the PS1 disc) as on TTT's (the PS2 version only if you gave the setup the PS2 disc): the draw lasts the whole fight, a Continue keeps it, and so does a save state. The memory card keeps REMIXED while RANDOM is chosen, so a game without this mod still reads it.
+
+Gon's and Dr. B's arenas keep their PS1 stage, and Tekken Ball and Tekken Force their own. Tekken 3's stage is the arcade one with [Arcade Stages](#arcade-stages) and `tekken3.zip`, the PS1 one otherwise. The setup makes the TTT stages and their music from your ROM in a few seconds, no MAME. Turn them off with **TTT Stages** on the **Mods** page of the game's launcher (in **Tekken Tag Tournament Content**), then restart the game; they also work with **TTT1 Characters** turned off.
 
 ### Options
 - **Difficulty:** the arcade levels, EASY to EX SUPER HARD, are in the Options menu.
 - **16:9:** fixes for the stages, Tekken Ball and the VS handicap screen.
 - **Unlocks:** everything is unlocked from the start.
+- **Steadier 3D:** **Perspective textures** (on by default) stop floors, walls and fighters' textures from swimming as the camera moves. **Geometry correction** (off by default, PGXP-style) draws polygons between whole pixels so models stop wobbling; tiny gaps can flicker at some joints. Both are in the launcher's display settings.
 - **Character skins** inherited from the original recomp are off by default: turn them on with **Mods** in the game's launcher (not maintained).
 
 ---
 
 ## Optional add-on
 
-The setup offers them as checkboxes. Leave them unticked and nothing changes.
+The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 | Add-on | What it does | Extra file needed |
 |---|---|---|
-| **Jin's red lightning** | Jin's strong hits use his red TTT lightning instead of the blue one. | None, the arcade ROM is enough |
-| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu or Baek: their Tekken Tag Tournament ending plays in Tekken 3's engine, in place of the ending movie. Five endings for now, more to come. | None: it plays over Tekken 3's music |
-| **TTT Cinematics music** | The ending's original music. | Your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
+| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu, Baek, Angel or Jun: their Tekken Tag Tournament ending plays in Tekken 3's engine, on its TTT stage, in place of the ending movie. Seven endings for now, more to come. | None: it plays over Tekken 3's music, or the ending's original music with your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
+
+Jin's red lightning, an add-on until 1.3.0, is now part of **TTT Hitspark** (see [Features](#the-tag-tournament-roster)).
 
 ## Coming in a future release
 
 - **More Tekken Tag Tournament endings** for TTT Cinematics.
+- **PS2 strong-hit sparks** for the rest of the cast.
 - **Devil Jin, with his Tekken 5 moveset.**
 
 ---
@@ -75,15 +91,17 @@ The setup offers them as checkboxes. Leave them unticked and nothing changes.
 | File | Details |
 |---|---|
 | **Tekken 3** (PlayStation) | USA, **SLUS-00402** (Redump "Tekken 3 (USA)"): a `.cue` with its `.bin` files, one `.bin` per track or a single `.bin` holding all three |
-| **Tekken Tag Tournament arcade ROM** | `tektagt.zip`: MAME set `tektagt`, *Tekken Tag Tournament (World, TEG2/VER.C1, set 1)*, or `tektagtuc1` *(US, TEG3/VER.C1)*, `tektagtub` *(US, TEG3/VER.B)*, `tektagtjc1` *(Japan, TEG1/VER.C1)*, **non-merged** (a merged zip holding one of them works too) |
+| **Tekken Tag Tournament arcade ROM** | For the TTT characters, the [TTT stages](#ttt-stages) and their music. `tektagt.zip`: MAME set `tektagt`, *Tekken Tag Tournament (World, TEG2/VER.C1, set 1)*, or `tektagtuc1` *(US, TEG3/VER.C1)*, `tektagtub` *(US, TEG3/VER.B)*, `tektagtjc1` *(Japan, TEG1/VER.C1)*, **non-merged** (a merged zip holding one of them works too) |
 | **Tekken 3 arcade ROM** *(optional)* | `tekken3.zip`: MAME set `tekken3`, *Tekken 3 (World, TET2/VER.E1)*, for the arcade difficulty levels and the [arcade stages](#arcade-stages) |
-| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**: a `.cue`/`.bin` or `.iso`, only for the TTT Cinematics music |
+| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**: a `.cue`/`.bin` or `.iso`. Adds the PS2 version of the [TTT stages](#ttt-stages)' music (BGM SELECT: REMIXED; about 60 MB copied beside the game), the PS2 effects (PS2 EFFECTS: Devil's and Angel's lasers, the Mishimas' strong-hit sparks) and the TTT Cinematics music. Without it, the TTT stages play their arcade music and the effects stay the arcade's |
 
 The exact versions:
 
 - **Tekken 3 disc**: its Track 1 `.bin` is 632,532,768 bytes, SHA-1 `68f32a8657376cb4d4504c160fd5e8ae4a4f18d6`.
 - **`tektagt.zip`**: every chip included (non-merged: the set does not borrow files from a parent). Its program ROMs are `teg2verc1.2e` (SHA-1 `9e01ae64710d85eb9899d6fa6fd0a2152aee8c11`) and `teg2verc1.2j` (SHA-1 `529a11a1bbb8655534d7ec371f1c09e9e387ed11`) for the World set, or `teg3verc1.2l` (SHA-1 `0623bb6571caf046ff7b4f83f11ee84a92c4b462`) and `teg3verc1.2p` (SHA-1 `5c56d69ba2f723d0a4fbe4902196efc6ba9d5094`) for the US C1 set, or `teg3verb.2l` (SHA-1 `c1b61df8e79348424f4bd2660ab5179ef21bdb07`) and `teg3verb.2p` (SHA-1 `af464caa03fdd12024ad482e9c853a36510bfba7`) for the US B set, or `teg1verc1.2e` (SHA-1 `e18458efb0f9b341970132b512d2e5104a942c6e`) and `teg1verc1.2j` (SHA-1 `e15f4c8cc4309ebb90d8d015b1f17f75ce5c8879`) for the Japan C1 set; all four import the same characters. Other revisions (World set 2, Japan VER.A3 and VER.B) are not supported.
 - **`tekken3.zip`**: its program ROMs are `tet2vere1.2e` (SHA-1 `3a5638c6ad40bfde6e12fdfd6d469f6ea5e9f4fb`) and `tet2vere1.2j` (SHA-1 `554d1e42886d6a6c9c5857e9cbd5d7c37d7a6e67`). A zip with only `tet1vere.2e` / `tet1vere.2j` as program ROMs is the TET1 revision: not supported.
+
+If an optional file (`tekken3.zip`, the TTT PS2 disc) is not one of these, or can no longer be found, the setup says so before it starts: what is left out without it and the version expected. You choose another file, or go on without it. A `tektagt.zip` that is not supported stops the setup.
 
 What counts is the content of the files, not their names: sets made for older MAME versions name the same chips differently (for example `tet2vere.2e` for `tet2vere1.2e`) and work. The zip's own name does not matter either (a `tekken3ae.zip` holding the TET2 chips works).
 
@@ -249,7 +267,15 @@ Update the folder you already set up: no full reinstall. The setup keeps its too
 1. Get the new files into your existing `tekken3-expanded` folder:
    - with git: `git pull` in the folder;
    - with a ZIP (the one for your system: Windows, macOS, Linux or Android): extract it, then copy **the contents** of its `tekken3-expanded-x.y.z` folder into your existing folder, replacing every file (7-Zip: *Yes to All*).
-2. Start **Setup Tekken 3.cmd** (or **Setup Tekken 3.command**, or **Setup Tekken 3.sh**). The setup window opens with your files already filled in: click **Update & play**. Changes to the TTT1 characters are applied to your install, without a new import when the update allows it; otherwise the setup imports them again from your `tektagt.zip`. When the arcade stages change, the setup converts them again from your `tekken3.zip` (a few seconds). An install set up with `tekken3.zip` before the arcade stages existed gets them at its next update; to add them to an install set up without it, choose `tekken3.zip` in the setup window.
+2. Start **Setup Tekken 3.cmd** (or **Setup Tekken 3.command**, or **Setup Tekken 3.sh**). The setup window opens with your files already filled in: click **Update & play**. Changes to the TTT1 characters are applied to your install, without a new import when the update allows it; otherwise the setup imports them again from your `tektagt.zip`. When the arcade stages change, the setup converts them again from your `tekken3.zip` (a few seconds). An install set up with `tekken3.zip` before the arcade stages existed gets them at its next update; to add them to an install set up without it, choose `tekken3.zip` in the setup window. The same goes for the TTT stages and their music with your `tektagt.zip`: an install with the TTT1 characters gets them at its next update.
+
+**From 1.3.0:**
+- The mod **TTT1 Characters** is now called **Tekken Tag Tournament Content** on the launcher's **Mods** page. Only its name changes: your settings (features turned off, the Embu's cast) are kept.
+- **Update & play** makes the [TTT stages](#ttt-stages) and their music from your `tektagt.zip` (keep it where the setup found it; if it has moved, the update still finishes and the game keeps Tekken 3's stages).
+- If you gave the setup your Tekken Tag Tournament PS2 disc for the TTT Cinematics music, **Update & play** also copies the PS2 music of the TTT stages and the PS2 effects from it. The disc now has its own optional field under **Include Tekken Tag Tournament Content**: choose it there to add them to an install set up without it, clear the field to remove them.
+- The TTT1 characters are brought up to date without a new import (four update steps), and the TTT endings are rebuilt.
+- The **Jin's red lightning** add-on is gone: **TTT Hitspark** (on by default) gives Jin his red lightning and every fighter their TTT effect. The update removes the old one.
+- Save states made with 1.3.0 don't load in 1.4.0 (the recompiled code changed). Memory cards are not affected.
 
 Don't move `.setup`, `workspace` or `build-release` to a new folder: they remember their location, and the build would fail there.
 
@@ -276,7 +302,7 @@ A finished install takes several GB, but only part of it is the game. Inside the
 | `.setup/android` | Android only: the Android tools and **the APK's signing key** (keep `release.keystore`) | For the APK |
 | `.setup/android/downloads` | Android only: the Android tools' archives, already unpacked | No |
 | `build-android`, `Tekken3Expanded.apk` | Android only: the Android build and the APK | No |
-| `workspace` | The TTT1 import's intermediate files and the arcade stages' first copy (the results are in `build-release`) | No |
+| `workspace` | The TTT1 import's intermediate files and the first copy of the arcade stages, the TTT stages and their music (the results are in `build-release`) | No |
 | `generated` | The recompiled game code: the game checks for it at every start | Yes |
 | `.setup/disc-tracks` | Only for a single-`.bin` disc: its tracks, split for the setup | No |
 | `build-release/**/CMakeFiles` | The build's intermediate files (`.o`, `.obj`) | No |
@@ -294,6 +320,7 @@ At the end of the setup, it offers to delete what is marked **No** for you (it a
 
 | Where | Button | Action |
 |---|---|---|
+| Title screen | L2 (held) | Start the TTT Embu |
 | Select screen | L2 / R2 | Switch to the Tag page and back |
 | Select screen | Punch / Kick / Start | Pick a costume |
 | MOVESET card | ← / → | Choose TEKKEN 3 or TEKKEN TAG TOURNAMENT |

@@ -13,6 +13,7 @@
 
 #include "psx_interpreter.h"
 #include "cpu_state.h"
+#include "gte_precision_interp.h"
 #include "gpu.h"
 #include "sio.h"
 #include "timers.h"
@@ -204,6 +205,10 @@ static void exec_one(CPUState* cpu) {
     uint32_t op = OP(insn);
     uint32_t rs_val = cpu->gpr[RS(insn)];
     uint32_t rt_val = cpu->gpr[RT(insn)];
+
+    /* Value propagation in [recompiler] precision_funcs ranges (G1.15). */
+    if (GTE_PRECISION_INTERP(pc))
+        gte_precision_interp_before(insn, rs_val, rt_val);
 
     switch (op) {
     case 0x00: { /* SPECIAL */
@@ -464,6 +469,8 @@ static void exec_one(CPUState* cpu) {
     case 0x29: { /* SH */
         uint32_t addr = rs_val + (uint32_t)SIMM(insn);
         cpu->write_half(addr, (uint16_t)(rt_val & 0xFFFF));
+        if (GTE_PRECISION_INTERP(pc))
+            gte_precision_cpu_sh(addr, (uint8_t)RT(insn), rt_val);
         break;
     }
     case 0x2A: { /* SWL */
@@ -482,6 +489,8 @@ static void exec_one(CPUState* cpu) {
     case 0x2B: { /* SW */
         uint32_t addr = rs_val + (uint32_t)SIMM(insn);
         cpu->write_word(addr, rt_val);
+        if (GTE_PRECISION_INTERP(pc))
+            gte_precision_cpu_sw(addr, (uint8_t)RT(insn), rt_val);
         break;
     }
     case 0x2E: { /* SWR */
@@ -502,6 +511,8 @@ static void exec_one(CPUState* cpu) {
     case 0x32: { /* LWC2 */
         uint32_t addr = rs_val + (uint32_t)SIMM(insn);
         gte_write_data(cpu, RT(insn), cpu->read_word(addr));
+        if (RT(insn) >= 12 && RT(insn) <= 15)   /* SXY: precision tracker (G1.11) */
+            gte_precision_lwc2_word(addr, RT(insn), cpu->gte_data[RT(insn)], pc);
         break;
     }
     case 0x3A: { /* SWC2 */

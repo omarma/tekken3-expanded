@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A static body of a TTT (PS2) ending (tools/ps2/ttt_static_bodies.py) as a
 player of the converted cutscene: a retarget file (tools/ps2/ttt_retarget.py's
-format) for ttt_ending_pack.py --p2, the body out of sight until the shot
+format) for the old ttt_ending_pack.py --p2 (removed with the old way of the
+TTT cinematics, docs/CINE-LEGACY-REMOVAL.md), the body out of sight until the shot
 it lies in, then still in its pose.
 
     ~/TekkenProject/venv-import/bin/python3 tools/ps2/ttt_body_actor.py \\
