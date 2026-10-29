@@ -196,12 +196,14 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     src, tex = load(work / 'ttt1.3dm'), bank[to:to + tn]
     face = faces(d, slot)
     shown, sources, (blink, flag_a, flag_b) = face or ((), [], (0, 0, 0))
+    import hilt
+    extra = hilt.prims(d, slot)                  # poignee de la lame d'Unknown, dessinee hors du modele
     try:
-        report = texpack.plan(tex, src, [shown] + [(x, y) + shown[2:] for x, y in sources] if face else ())
+        report = texpack.plan(tex, src, [shown] + [(x, y) + shown[2:] for x, y in sources] if face else (), extra)
     except ValueError as e:
         if not str(e).startswith('visage'): raise
         print(f'ATTENTION : {e} ; costume sans expressions du visage')
-        face = None; report = texpack.plan(tex, src)
+        face = None; report = texpack.plan(tex, src, (), extra)
     ps1, relocs = convert.convert(src)
     base = out / f'{name}-{stem or f"TTT1-arcade-P{costume}"}'
     base.with_suffix('.3dm').write_bytes(ps1)
@@ -226,6 +228,7 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     import accessories
     springs = accessories.write(base.with_suffix('.acc'), d, slot, layout)
     if not springs['swinging']: base.with_suffix('.acc').unlink()
+    if hilt.write(base.with_suffix('.hilt'), d, slot, convert.ps1_uv): print('poignee de la lame : 14 quads')
     print(f'modele : {len(ps1)} o, {len(relocs)} relocalisations, lignes 21..26 <- {layout}, '
           f'seconds maillages {convert.SECOND}')
     lost = convert.unplaced(src)
@@ -308,7 +311,7 @@ def costumes(ram, keys, entry, records, limbs, out, name, work):
     null dans la liste : pas de costume a ce rang (Tetsujin au Pied)."""
     slots = entry.get('costumes', [keys['slot']])
     for c in (2, 3):
-        for e in ('3dm', 'relocs', 'tim', 'face', 'acc'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
+        for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
         for f in (f'{name}-TTT1-combat-P{c}.jmv', f'{name}-TTT1-tables-P{c}.jst'): (out / f).unlink(missing_ok=True)
     report = {'1': dict(slot=slots[0])}
     for c, slot in enumerate(slots[1:], 2):
@@ -318,7 +321,7 @@ def costumes(ram, keys, entry, records, limbs, out, name, work):
             m = model(ram, slot, out, name, work / f'costume{c}', c)
         except ValueError as e:
             print(f'ATTENTION : costume {c} non converti, ecarte : {str(e).splitlines()[-1]}')
-            for e in ('3dm', 'relocs', 'tim', 'face', 'acc'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
+            for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
             report[str(c)] = dict(slot=slot, error=str(e))
             continue
         mv = moves(ram, keys, records, m['limbs'], out, name, f'-P{c}') if m['limbs'] != limbs else dict(shared=True)
@@ -529,6 +532,10 @@ def native(key, entry):
     (work / 'ttt1.3dm').write_bytes(bank[mo:mo + mn])
     convert.convert(load(work / 'ttt1.3dm'))
     limbs = convert.limb_map(load(work / 'ttt1.3dm'))
+    # Le natif joue sur son modele Tekken 3 : ses membres d'accessoire a lui
+    # (Ogre 19 = main gauche, True Ogre 19 = bout du bras, 23 = bout des
+    # cornes, B106).
+    limbs.update({int(k): v for k, v in entry.get('limbs', {}).items()})
     report = dict(native=key, label=entry['label'], keys=keys)
     report['motion'] = motion(ram, witness, work, name, work / 'motion')
     records = report['motion'].pop('manifest')['records']

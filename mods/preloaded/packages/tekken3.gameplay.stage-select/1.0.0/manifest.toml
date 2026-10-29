@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.gameplay.stage-select"
+version = "1.0.0"
+name = "Stage Select"
+author = "Tekken3Recomp"
+description = "Pick the stage of a VS or Practice fight at the character select, as in Tekken Tag Tournament on PS2."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "stage-select"
+name = "Stage Select (VS, Practice)"
+description = "A STAGE line on the VS select: once you have chosen, left and right change the stage while the other player chooses (up and down: Tekken 3's or TTT's). In Practice, picking the dummy opens it under the clock: left and right, then cross. AUTO keeps the game's choice, RANDOM draws one at each fight. The last stage is kept for the next fights."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "stage-select"
+id = "tekken3.stage-select"

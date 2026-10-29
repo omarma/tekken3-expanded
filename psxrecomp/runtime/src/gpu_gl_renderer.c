@@ -289,6 +289,25 @@ static PFN_glQueryCounter        p_glQueryCounter;
 static void gl_perf_init(void);   /* frame_perf — defined below, called from init_gpu_raster */
 static void gl_perf_mirror_begin(void); /* frame_perf: GPU-time bracket around ONE native-wide */
 static void gl_perf_mirror_end(void);   /* mirror pass (timestamp pair; splits scene canonical/mirror) */
+/* Reference bench GPU pass (PSX_GL_DRAW_TIMES=1, tools/perf/ref_bench.py): a
+ * GL_TIMESTAMP pair around each draw, blit, clear, texture upload and copy,
+ * summed per present = the GPU's busy time for the frame, without the idle
+ * gaps a frame-long TIME_ELAPSED query also counts (the emulation feeds the
+ * GPU over the whole frame). The pairs serialise the GPU a little and cost
+ * the CPU a few microseconds each: a pass of its own, not the CPU one. */
+static void gl_dt_begin(void);
+static void gl_dt_end(void);
+#define GL_DT(call) do { gl_dt_begin(); call; gl_dt_end(); } while (0)
+/* The same operations counted by kind since boot, whatever PSX_GL_DRAW_TIMES
+ * says (debug cmd gl_ops, gl_renderer_op_counts). */
+enum { GLOP_DRAW, GLOP_CLEAR, GLOP_UPLOAD, GLOP_COPY, GLOP_BLIT, GLOP_KINDS };
+static uint64_t s_glop[GLOP_KINDS];
+static uint64_t s_glop_presents, s_glop_mirrors, s_glop_flat_flushes, s_glop_semi_tris;
+#define GL_DTK(k, call) do { s_glop[k]++; GL_DT(call); } while (0)
+#define glDrawArrays(m, f, n)     GL_DTK(GLOP_DRAW, (glDrawArrays)(m, f, n))
+#define glClear(b)                GL_DTK(GLOP_CLEAR, (glClear)(b))
+#define glTexSubImage2D(...)      GL_DTK(GLOP_UPLOAD, (glTexSubImage2D)(__VA_ARGS__))
+#define glCopyTexSubImage2D(...)  GL_DTK(GLOP_COPY, (glCopyTexSubImage2D)(__VA_ARGS__))
 /* Native-wide mirror ABLATION (perf attribution, debug cmd gl_ws_ablate):
  * 0 = normal, 1 = skip the whole mirror pass, 2 = full mirror state churn but no
  * draw calls, 3 = mirror draws land in the hr FBO (no per-pass FBO rebind; wide
@@ -430,7 +449,7 @@ static GLuint s_tex_prog = 0, s_tex_vao = 0, s_tex_vbo = 0;
  * PS1-faithful default, which makes the vertex shader's w exactly 1.0 and the
  * fragment shader read the noperspective varying — i.e. bit-identical to the
  * pre-feature pipeline. */
-#define TEXV 23 /* plus HD UV(2), replacement kind(1) */
+#define TEXV 27 /* plus HD UV(2), replacement kind(1), texture window(4) */
 static HdTextureMap s_hd_map;
 #define HD_SKIN_COUNT T3_SKIN_COUNT
 static HdTextureMap s_skin_map[HD_SKIN_COUNT];
@@ -628,7 +647,7 @@ static float   s_pq[3];
 /* TEX program uniforms. */
 static GLint s_uVram = -1, s_uTpage = -1, s_uClut = -1, s_uDepth = -1;
 static GLint s_uRaw = -1, s_uSemipass = -1, s_uSemimode = -1;
-static GLint s_uTwin = -1, s_uMaskset = -1, s_uFilter = -1;
+static GLint s_uMaskset = -1, s_uFilter = -1;
 static GLint s_uLimits = -1;
 /* Native-wide x-projection uniforms (per program). u_xoff = x translation in
  * native px (0 canonical), u_xhalf = x clip half-extent in native px (512
@@ -1011,9 +1030,9 @@ static void hold_capture_native_fbo(GLuint src_fbo, int dx, int dy, int dw, int 
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, src_fbo);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, s_hold_fbo);
     glDisable(GL_SCISSOR_TEST);
-    p_glBlitFramebuffer(dx * S, dy * S, (dx + dw) * S, (dy + dh) * S,
+    GL_DTK(GLOP_BLIT, p_glBlitFramebuffer(dx * S, dy * S, (dx + dw) * S, (dy + dh) * S,
                         0, 0, dw * S, dh * S,
-                        GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                        GL_COLOR_BUFFER_BIT, GL_NEAREST));
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, 0);
     s_hold_kind = HOLD_NATIVE;
@@ -1280,9 +1299,12 @@ static const char *GEO_FS =
 /* Textured program. Per-prim texture state (texpage, clut, depth, raw, uv
  * limits) is carried in FLAT vertex attributes — constant across a prim's
  * vertices — instead of uniforms, so consecutive textured prims with the same
- * blend/mask/texture-window state batch into one draw (see flush_tex_batch).
- * The remaining uniforms (u_twin/u_maskset/u_filter/u_semipass) are the batch
- * keys + per-pass state. */
+ * blend/mask/filter state batch into one draw (see flush_tex_batch).
+ * The remaining uniforms (u_maskset/u_filter/u_semipass) are the batch keys +
+ * per-pass state. The texture window (GP0 E2) rides in the vertex too: a
+ * uniform made it a batch key, and Tekken 3's arcade and TTT stages, whose
+ * tiles each set their own window and reset it, cut a batch at nearly every
+ * primitive (about 270 draws a frame, B116). */
 static const char *TEX_VS =
     "#version 330\n"
     "layout(location=0) in vec2 a_pos;\n"
@@ -1296,6 +1318,7 @@ static const char *TEX_VS =
     "layout(location=8) in float a_semi;\n"
     "layout(location=9) in float a_q;   /* persp weight; 0 = affine (default) */\n"
     "layout(location=10) in vec2 a_hd_uv; layout(location=11) in float a_hd_kind;\n"
+    "layout(location=12) in vec4 a_twin; /* texture window: mask_x, mask_y, off_x, off_y */\n"
     "noperspective out vec2 v_hd_uv; smooth out vec2 v_hd_uv_p; flat out int v_hd_kind;\n"
     "uniform float u_shift;\n"
     "uniform float u_xoff;   /* native-wide x translation (px); 0 canonical */\n"
@@ -1306,7 +1329,7 @@ static const char *TEX_VS =
     "smooth out vec2 v_uv_p;  /* perspective-correct UV (used when v_persp!=0) */\n"
     "flat out int v_persp;\n"
     "flat out ivec2 v_tpage; flat out ivec2 v_clut; flat out int v_depth;\n"
-    "flat out int v_raw; flat out ivec4 v_limits; flat out int v_semi;\n"
+    "flat out int v_raw; flat out ivec4 v_limits; flat out int v_semi; flat out ivec4 v_twin;\n"
     "void main(){ v_uv = a_uv; v_uv_p = a_uv; v_col = a_col;\n"
     "  v_hd_uv = a_hd_uv; v_hd_uv_p = a_hd_uv; v_hd_kind = int(a_hd_kind + 0.5);\n"
     "  v_persp = (a_q > 0.0) ? 1 : 0;\n"
@@ -1314,6 +1337,7 @@ static const char *TEX_VS =
     "  v_depth = int(a_depth + 0.5); v_raw = int(a_raw + 0.5);\n"
     "  v_semi = int(a_semi + 0.5);\n"
     "  v_limits = ivec4(floor(a_limits + 0.5));\n"
+    "  v_twin = ivec4(a_twin + 0.5);\n"
     "  /* u_shift: align GL's center-sample grid with the PS1 integer grid (see\n"
     "   * GEO_VS) so interpolated uv at a fragment equals the PS1 DDA value. */\n"
     "  float xb = a_pos.x;\n"
@@ -1346,7 +1370,7 @@ static const char *TEX_FS =
     "uniform usampler2D u_vram;\n"
     "uniform int u_semipass;  /* 0=all texels, 1=STP=0 only, 2=STP=1 only */\n"
     "uniform int u_semimode;  /* PS1 blend mode; drives dual-source factors */\n"
-    "uniform ivec4 u_twin;    /* texture window: mask_x, mask_y, off_x, off_y */\n"
+    "flat in ivec4 v_twin;    /* texture window: mask_x, mask_y, off_x, off_y */\n"
     "uniform int u_maskset;   /* GP0(E6h) set-mask: OR bit15 into output */\n"
     "uniform int u_filter;    /* 1 = bilinear */\n"
     "int vram_at(int x, int y){\n"
@@ -1354,9 +1378,9 @@ static const char *TEX_FS =
     "}\n"
     "int fetch_texel(int u, int v){\n"
     "  u &= 255; v &= 255;\n"
-    "  if ((u_twin.x | u_twin.y) != 0) {\n"
-    "    u = (u & ~(u_twin.x * 8)) | ((u_twin.z & u_twin.x) * 8);\n"
-    "    v = (v & ~(u_twin.y * 8)) | ((u_twin.w & u_twin.y) * 8);\n"
+    "  if ((v_twin.x | v_twin.y) != 0) {\n"
+    "    u = (u & ~(v_twin.x * 8)) | ((v_twin.z & v_twin.x) * 8);\n"
+    "    v = (v & ~(v_twin.y * 8)) | ((v_twin.w & v_twin.y) * 8);\n"
     "  } else {\n"
     "    u = clamp(u, v_limits.x, v_limits.z);\n"
     "    v = clamp(v, v_limits.y, v_limits.w);\n"
@@ -1773,8 +1797,8 @@ static void flush_cpu_upload(void) {
 static void rebuild_target_stencil(GLuint target_fbo, int target_w, int target_h) {
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, target_fbo);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, s_scratch_fbo);
-    p_glBlitFramebuffer(0, 0, target_w, target_h, 0, 0, target_w, target_h,
-                        GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    GL_DTK(GLOP_BLIT, p_glBlitFramebuffer(0, 0, target_w, target_h, 0, 0, target_w, target_h,
+                        GL_COLOR_BUFFER_BIT, GL_NEAREST));
 
     p_glBindFramebuffer(PSXGL_FRAMEBUFFER, target_fbo);
     glViewport(0, 0, target_w, target_h);
@@ -1992,6 +2016,7 @@ static void wide_scissor_x(int x0, int x1) {
     glScissor(x0 * s_scale, sy * s_scale, (x1 - x0) * s_scale, sh * s_scale);
 }
 static void wide_target_begin_fbo(GLuint fbo, int dx, GLint uXoff, GLint uXhalf) {
+    s_glop_mirrors++;
     if (s_ws_ablate != 3)   /* ablate 3: no FBO rebind (draws land in hr — perf probe) */
         p_glBindFramebuffer(PSXGL_FRAMEBUFFER, fbo);
     glViewport(0, 0, g_wide_w * s_scale, VRAM_H * s_scale);
@@ -2123,10 +2148,10 @@ static void wide_clear_bd_scale(GLint uScale, GLint uCenter) {
 }
 
 /* ---- textured-prim batching -------------------------------------------- *
- * Consecutive textured prims sharing blend/mask/texwindow/filter coalesce into
- * one draw. Per-prim texture state (texpage/clut/depth/raw/uv-limits) rides in
- * the vertex (TEXV flat attributes), so only `semi` (blend) and the global
- * mask/twin/filter are batch keys. flush_tex_batch() draws the queued verts; it
+ * Consecutive textured prims sharing blend/mask/filter coalesce into one draw.
+ * Per-prim texture state (texpage/clut/depth/raw/uv-limits/texture window)
+ * rides in the vertex (TEXV flat attributes), so only `semi` (blend) and the
+ * global mask/filter are batch keys. flush_tex_batch() draws the queued verts; it
  * is called before any op that reads VRAM, writes it outside the batch, or
  * changes batch state (see callers: flush_cpu_upload, flush_pack_if_sampling,
  * every non-textured glb_ wrapper, and the present path). Drawing reads only the
@@ -2137,12 +2162,20 @@ static float s_tb[TEXBATCH_MAXV * TEXV];
 static int   s_tb_n = 0;                    /* verts queued */
 static int   s_tb_semi = -2;
 static int   s_tb_mask = 0, s_tb_filter = 0;
-static int   s_tb_twin[4] = {0, 0, 0, 0};
+/* reasons: isolated semi prim, blend, mask, filter, gate, (5: the texture
+ * window, a key until B116, kept at 0 for the counters' layout), full */
 static uint64_t s_batch_total = 0, s_batch_reason[7];
 
 void gl_renderer_batch_diag(uint64_t out[8]) {
     out[0] = s_batch_total;
     for (int i = 0; i < 7; i++) out[i + 1] = s_batch_reason[i];
+}
+
+void gl_renderer_op_counts(uint64_t out[GL_OP_COUNTS]) {
+    out[0] = s_glop_presents;
+    for (int i = 0; i < GLOP_KINDS; i++) out[1 + i] = s_glop[i];
+    out[6] = s_glop_mirrors; out[7] = s_glop_flat_flushes; out[8] = s_glop_semi_tris;
+    gl_renderer_batch_diag(out + 9);
 }
 
 /* Draw the queued textured batch with correct PSX mask-bit handling AND correct
@@ -2263,7 +2296,6 @@ static void flush_tex_batch(void) {
         p_glUniform1i(s_uHdSkin[i], 3 + i);
     }
     p_glActiveTexture(PSXGL_TEXTURE0);
-    p_glUniform4i(s_uTwin, s_tb_twin[0], s_tb_twin[1], s_tb_twin[2], s_tb_twin[3]);
     p_glUniform1i(s_uMaskset, s_tb_mask);
     p_glUniform1i(s_uFilter, s_tb_filter);
     p_glBindVertexArray(s_tex_vao);
@@ -2342,6 +2374,7 @@ static int mirror_flat_batch_center_only(int nverts) {
 
 static void flush_flat_batch(void) {
     if (s_fb_n == 0) return;
+    s_glop_flat_flushes++;
     int nverts = s_fb_n, semi = s_fb_semi, mask = s_fb_mask, gate = s_fb_gate;
     int xdelta = s_fb_xdelta;
     int suppressed = s_fb_suppressed;
@@ -2503,6 +2536,7 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
         lim = lim_buf;
     }
     s_scene_prims_tex++;
+    if (semi >= 0) s_glop_semi_tris++;
     int base_x = (texpage & 0xF) * 64;
     int base_y = ((texpage >> 4) & 1) * 256;
     int depth  = (texpage >> 7) & 3; if (depth > 2) depth = 2;
@@ -2525,7 +2559,7 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
         fflush(stdout);
     }
 
-    /* Append to the textured batch. Flush first if this prim's blend/mask/twin/
+    /* Append to the textured batch. Flush first if this prim's blend/mask/
      * filter differ from the open batch, or the buffer is full. Per-prim texture
      * state goes in the vertex; only these keys force a new draw. */
     {
@@ -2549,13 +2583,16 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
          * path draws pass 1 = every prim's STP=0 texels then pass 2 = every
          * prim's STP=1 texels — a behind prim's semi texels then overwrite a
          * front prim's opaque texels (Tomba AP-block / CTR intro flaps). The
-         * dual-source single-pass path avoids that WITHIN one prim, but
-         * batching many overlapping semi quads (digit particles + glow) still
-         * mis-orders against neighbouring opaque geometry. Isolate EVERY
-         * semi-transparent textured prim: drain the open batch, draw this
-         * prim alone (composited fully before the next), let opaque prims
-         * keep batching. Cost is one draw per semi prim. */
-        int isolate = (semi >= 0);
+         * dual-source single-pass path avoids that WITHIN one prim. On the
+         * two-pass paths (mode 2, mask check, no dual source), isolate each
+         * semi-transparent textured prim: drain the open batch, draw this prim
+         * alone (composited fully before the next), let opaque prims keep
+         * batching; one draw per semi prim. The single-pass batch (key 4) is
+         * one draw call, and GL blends a draw's primitives in their order:
+         * the same pixels as one draw each, a key change against opaque
+         * neighbours still cuts the batch. Isolating those too cost Tekken 3's
+         * additive wolf about 850 draws a frame (B113). */
+        int isolate = (semi >= 0) && batch_semi != 4;
         int reason = -1;
         if (s_tb_n > 0) {
             if (isolate) reason = 0;
@@ -2566,8 +2603,6 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
                      s_wide_prim_suppressed != s_tb_suppressed ||
                      s_wide_prim_split_lo != s_tb_split_lo ||
                      s_wide_prim_split_hi != s_tb_split_hi) reason = 4;
-            else if (twx != s_tb_twin[0] || twy != s_tb_twin[1] ||
-                     tox != s_tb_twin[2] || toy != s_tb_twin[3]) reason = 5;
         }
         if (reason >= 0) {
             s_batch_reason[reason]++;
@@ -2579,7 +2614,6 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
             s_tb_xdelta = s_wide_prim_dx;
             s_tb_split_lo = s_wide_prim_split_lo; s_tb_split_hi = s_wide_prim_split_hi;
             s_tb_suppressed = s_wide_prim_suppressed;
-            s_tb_twin[0] = twx; s_tb_twin[1] = twy; s_tb_twin[2] = tox; s_tb_twin[3] = toy;
         }
         float *vp = &s_tb[s_tb_n * TEXV];
         for (int i = 0; i < 3; i++, vp += TEXV) {
@@ -2600,6 +2634,8 @@ static void gpu_textured_triangle(const int *xs, const int *ys,
             vp[20] = hd ? hd->map[0]*hu + hd->map[1]*hv + hd->map[2] : 0.0f;
             vp[21] = hd ? hd->map[3]*hu + hd->map[4]*hv + hd->map[5] : 0.0f;
             vp[22] = hd ? (float)hd->kind : 0.0f;
+            vp[23] = (float)twx;     vp[24] = (float)twy;           /* a_twin */
+            vp[25] = (float)tox;     vp[26] = (float)toy;
         }
         s_tb_n += 3;
         if (isolate) flush_tex_batch();   /* draw this semi prim alone, in submission order */
@@ -2773,9 +2809,9 @@ static void gpu_copy_rect(int sx,int sy,int dx,int dy,int w,int h) {
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_hr_fbo);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, s_scratch_fbo);
     glDisable(GL_SCISSOR_TEST);
-    p_glBlitFramebuffer(sx*S, sy*S, (sx+w)*S, (sy+h)*S,
+    GL_DTK(GLOP_BLIT, p_glBlitFramebuffer(sx*S, sy*S, (sx+w)*S, (sy+h)*S,
                         sx*S, sy*S, (sx+w)*S, (sy+h)*S,
-                        GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                        GL_COLOR_BUFFER_BIT, GL_NEAREST));
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, 0);
 
@@ -3287,7 +3323,6 @@ static int init_gpu_raster(void) {
     s_uRaw   = p_glGetUniformLocation(s_tex_prog, "u_raw");
     s_uSemipass = p_glGetUniformLocation(s_tex_prog, "u_semipass");
     s_uSemimode = p_glGetUniformLocation(s_tex_prog, "u_semimode");
-    s_uTwin     = p_glGetUniformLocation(s_tex_prog, "u_twin");
     s_uMaskset  = p_glGetUniformLocation(s_tex_prog, "u_maskset");
     s_uFilter   = p_glGetUniformLocation(s_tex_prog, "u_filter");
     s_uLimits   = p_glGetUniformLocation(s_tex_prog, "u_limits");
@@ -3367,6 +3402,7 @@ static int init_gpu_raster(void) {
         p_glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, st, (void*)(19*sizeof(float))); p_glEnableVertexAttribArray(9); /* q      */
         p_glVertexAttribPointer(10, 2, GL_FLOAT, GL_FALSE, st, (void*)(20*sizeof(float))); p_glEnableVertexAttribArray(10);
         p_glVertexAttribPointer(11, 1, GL_FLOAT, GL_FALSE, st, (void*)(22*sizeof(float))); p_glEnableVertexAttribArray(11);
+        p_glVertexAttribPointer(12, 4, GL_FLOAT, GL_FALSE, st, (void*)(23*sizeof(float))); p_glEnableVertexAttribArray(12); /* twin   */
     }
 
     p_glGenVertexArrays(1, &s_blit_vao);
@@ -4374,8 +4410,80 @@ static void gl_perf_present_enter(void) {
     p_glBeginQuery(GL_TIME_ELAPSED, s_pf_present_q[s_pf_b]);                         /* time frame b's present */
 }
 
+/* PSX_GL_DRAW_TIMES (see gl_dt_begin's declaration): per buffered frame, the
+ * timestamp pairs of its GPU work, read back GLDT_NBUF - 1 presents later
+ * into a ring the debug server's frame_times drains. */
+#define GLDT_NBUF 4
+#define GLDT_MAX  2048
+#define GLDT_RING 1024
+static int      s_dt_on = -1;           /* -1 not decided, 0 off, 1 on */
+static GLuint   s_dt_q[GLDT_NBUF][GLDT_MAX * 2];
+static int      s_dt_n[GLDT_NBUF], s_dt_over[GLDT_NBUF], s_dt_b = 0, s_dt_open = 0;
+static uint64_t s_dt_vframe[GLDT_NBUF], s_dt_frames = 0;
+static struct { uint64_t frame; uint32_t busy_us, works; } s_dt_ring[GLDT_RING];
+static uint64_t s_dt_seq = 0;
+
+static int gl_dt_ready(void) {
+    if (s_dt_on < 0) {
+        const char *e = getenv("PSX_GL_DRAW_TIMES");
+        s_dt_on = e && e[0] == '1' && p_glQueryCounter && p_glGenQueries && p_glGetQueryObjectui64v;
+        if (s_dt_on)
+            for (int i = 0; i < GLDT_NBUF; i++) p_glGenQueries(GLDT_MAX * 2, s_dt_q[i]);
+    }
+    return s_dt_on;
+}
+static void gl_dt_begin(void) {
+    if (s_dt_on == 0 || !gl_dt_ready()) return;
+    int b = s_dt_b;
+    if (s_dt_n[b] >= GLDT_MAX) { s_dt_over[b]++; return; }
+    p_glQueryCounter(s_dt_q[b][s_dt_n[b] * 2], GL_TIMESTAMP);
+    s_dt_open = 1;
+}
+static void gl_dt_end(void) {
+    if (s_dt_on <= 0 || !s_dt_open) return;
+    int b = s_dt_b;
+    p_glQueryCounter(s_dt_q[b][s_dt_n[b] * 2 + 1], GL_TIMESTAMP);
+    glFlush();   /* the pair and its work leave together: no pair waits for the next frame's flush */
+    s_dt_n[b]++;
+    s_dt_open = 0;
+}
+static void gl_dt_frame_end(void) {
+    if (s_dt_on <= 0) return;
+    extern uint64_t s_frame_count;
+    s_dt_vframe[s_dt_b] = s_frame_count;
+    int rd = (s_dt_b + 1) % GLDT_NBUF;  /* the oldest buffer, GLDT_NBUF - 1 presents ago */
+    if (s_dt_frames >= GLDT_NBUF - 1) {
+        GLuint64 busy = 0;
+        for (int i = 0; i < s_dt_n[rd]; i++) {
+            GLuint64 t0 = 0, t1 = 0;
+            p_glGetQueryObjectui64v(s_dt_q[rd][i * 2],     GL_QUERY_RESULT, &t0);
+            p_glGetQueryObjectui64v(s_dt_q[rd][i * 2 + 1], GL_QUERY_RESULT, &t1);
+            if (t1 > t0) busy += t1 - t0;
+        }
+        s_dt_ring[s_dt_seq % GLDT_RING].frame = s_dt_vframe[rd];
+        s_dt_ring[s_dt_seq % GLDT_RING].busy_us = (uint32_t)(busy / 1000u);
+        s_dt_ring[s_dt_seq % GLDT_RING].works = (uint32_t)(s_dt_n[rd] + s_dt_over[rd]);
+        s_dt_seq++;
+    }
+    s_dt_n[rd] = 0; s_dt_over[rd] = 0;
+    s_dt_b = rd;
+    s_dt_frames++;
+}
+
+int gl_renderer_draw_times_next(uint64_t *cursor, uint64_t *frame, uint32_t *busy_us, uint32_t *works) {
+    if (s_dt_on <= 0 || *cursor >= s_dt_seq) return 0;
+    if (s_dt_seq - *cursor > GLDT_RING) *cursor = s_dt_seq - GLDT_RING;   /* overwritten: skip ahead */
+    *frame = s_dt_ring[*cursor % GLDT_RING].frame;
+    *busy_us = s_dt_ring[*cursor % GLDT_RING].busy_us;
+    *works = s_dt_ring[*cursor % GLDT_RING].works;
+    (*cursor)++;
+    return 1;
+}
+
 /* End of present (after SwapWindow). wide = native-wide path. */
 static void gl_perf_present_exit(int wide) {
+    s_glop_presents++;
+    gl_dt_frame_end();
     if (!s_pf_on) return;
     uint64_t now = SDL_GetPerformanceCounter();
     p_glEndQuery(GL_TIME_ELAPSED);   /* end present_q[b] */
@@ -5215,11 +5323,11 @@ static void wide_blit_center(GLuint wide_fbo, int base_x, int disp_y, int disp_h
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, s_hr_fbo);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, wide_fbo);
     glDisable(GL_SCISSOR_TEST);
-    p_glBlitFramebuffer(base_x * S, 0,
+    GL_DTK(GLOP_BLIT, p_glBlitFramebuffer(base_x * S, 0,
                         (base_x + native_w) * S, VRAM_H * S,
                         g_wide_off * S, 0,
                         (g_wide_off + native_w) * S, VRAM_H * S,
-                        GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                        GL_COLOR_BUFFER_BIT, GL_NEAREST));
     p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
     p_glBindFramebuffer(PSXGL_DRAW_FRAMEBUFFER, 0);
 }

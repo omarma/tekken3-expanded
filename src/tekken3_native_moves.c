@@ -18,6 +18,7 @@
 #include "memcard.h"
 #include "tekken3_moveset_draw.h"
 #include "tekken3_game_options.h"
+#include "tekken3_stage_select.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -657,6 +658,32 @@ static void page_packet(Packet *k,int page) {
     trigger(k,left+PAGE_W-6-TRIGGER_W,top+PAGE_H-TRIGGER_H-2,"R2");
 }
 
+/* The STAGE SELECT band (F18, src/tekken3_stage_select.c), only while the
+ * stage can be changed: a dark band as wide as the CHARACTER SELECT card,
+ * STAGE SELECT on top (the user's, 2026-10-27: what the band is for), the
+ * label (GAME, or the game) small and white, the value under it. VS BATTLE
+ * SELECT: under the names, over the whole score (its digits and DRAW, y 335
+ * to 380), three times darker, as TTT's PS2 SCENE line takes the middle. The
+ * Practice grid: under the clock, over the bottom of the portraits (the gap
+ * between them is 48 px wide), down to the name plates (y 287). The arrows
+ * sway in the colour of the player who changes it; in VS both do, player 1's
+ * red on the left, player 2's yellow on the right (B127). */
+enum { STAGE_VS_TOP=299, STAGE_VS_H=82, STAGE_PRACTICE_TOP=240, STAGE_PRACTICE_H=46, STAGE_BAND_W=PAGE_W };
+static void stage_packet(Packet *k,int kind,const char *label,const char *name,int arrows,unsigned frame) {
+    int t=(int)(frame%60),sway=(t<30?t:60-t)/8,vs=kind==1,top=vs?STAGE_VS_TOP:STAGE_PRACTICE_TOP;
+    int h=vs?STAGE_VS_H:STAGE_PRACTICE_H,gap=(h-12-12-14)/4,value=top+3*gap+24;
+    int left=CENTRE_X-STAGE_BAND_W/2,half=STAGE_BAND_W/2-6,y=value+7;
+    room(k,10);
+    put(k,0xe1000600|FONT_PAGE);                   /* semi-transparency B/2 + F/2 */
+    for(int layer=0;layer<1+2*vs;layer++){put(k,0x62000000);put(k,xy(left,top));put(k,xy(STAGE_BAND_W,h));}
+    text(k,"STAGE SELECT",CENTRE_X,top+gap,1,2,0x808080);
+    text_in(k,label,CENTRE_X,top+2*gap+12,1,2,0x808080,WHITE_CLUT);
+    text(k,name,CENTRE_X,value,3,5,0x808080);
+    if(arrows<0 || arrows>3)return;
+    arrow(k,CENTRE_X-half-sway,y,1,colours[arrows==3?0:arrows].arrow);
+    arrow(k,CENTRE_X+half+sway,y,-1,colours[arrows==3?1:arrows].arrow);
+}
+
 /* 8007E0B8 hands the GPU the display list (a0) of a frame. With a card
  * open, the cards are linked after its last packet: drawn over the rest,
  * in the drawing area the list leaves. The selector keeps packets from one
@@ -664,7 +691,7 @@ static void page_packet(Packet *k,int page) {
  * the card: it is cut in the lists of the next frames once no card is open.
  * Two buffers, one per list in flight. */
 extern void __real_func_8007E0B8(CPUState *cpu);
-enum { CARD_BYTES=1024*4, BUFFER_BYTES=3*CARD_BYTES };
+enum { CARD_BYTES=1024*4, BUFFER_BYTES=4*CARD_BYTES };
 static uint32_t buffers[2];
 static int ours(uint32_t at) {
     return buffers[0] && ((at>=buffers[0] && at<buffers[0]+BUFFER_BYTES) ||
@@ -684,7 +711,9 @@ static uint32_t list_tail(uint32_t at) {
 void __wrap_func_8007E0B8(CPUState *cpu) {
     static unsigned flip,frame,linked;
     int state[2]={card_state(0),card_state(1)},page=page_state(),options=tekken3_game_options_scrolls();
-    int open=state[0]>=0 || state[1]>=0 || page>=0 || options;
+    const char *stage_label=NULL,*stage_name=NULL;
+    int stage_arrows=-1,stage=tekken3_stage_select_line(&stage_label,&stage_name,&stage_arrows);
+    int open=state[0]>=0 || state[1]>=0 || page>=0 || options || stage;
     if((cpu->pc==0 || cpu->pc==0x8007e0b8) && (open || linked)) {
         if(!buffers[0])
             for(unsigned b=0;b<2;b++)buffers[b]=psx_mod_alloc_gpu_dma_memory(BUFFER_BYTES,16);
@@ -693,6 +722,12 @@ void __wrap_func_8007E0B8(CPUState *cpu) {
             uint32_t link=0xffffff,base=buffers[flip^=1];
             if(options)                                /* GAME OPTION's arrows */
                 link=tekken3_game_options_arrows(base+2*CARD_BYTES,CARD_BYTES,link,frame);
+            if(stage) {                                /* the STAGE line */
+                uint32_t pkt=base+3*CARD_BYTES;
+                Packet k;begin(&k,pkt,CARD_BYTES);
+                stage_packet(&k,stage,stage_label,stage_name,stage_arrows,frame);
+                link=finish(&k,pkt,link);
+            }
             if(page>=0) {                              /* drawn last */
                 uint32_t pkt=base+2*CARD_BYTES;
                 Packet k;begin(&k,pkt,CARD_BYTES);

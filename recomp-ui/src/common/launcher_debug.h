@@ -13,6 +13,7 @@
 //   size:WxH                             resize the window (tests live reflow)
 //   click:X,Y                            synthetic click at logical coords
 //   key:escape                           synthetic key press
+//   vpad:PRODUCT:NAME                    attach an SDL3 virtual gamepad (hex product id)
 //   wait:N                               idle N frames (let layout settle)
 //   shot:PATH                            write a PNG of the current frame
 //   quit                                 exit the launcher

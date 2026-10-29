@@ -1,7 +1,8 @@
 """Build the arcade-camera variants of the PS1's end-of-round cameras (B87).
 
-On a T3 arcade stage (Arcade Stages), the winner's pose, the K.O. replay and
-the view of the loser follow Tekken 3 arcade's cameras (src/tekken3_arcade_cameras.c).
+On a T3 arcade stage (Arcade Stages), the winner's pose and the K.O. replay
+follow Tekken 3 arcade's cameras (src/tekken3_arcade_cameras.c); the view of
+the loser stays the PS1's (B110).
 The two games share these routines, only constants and a few choices differ
 (workspace notes: B87 cams/REPORT.md). Each routine here is copied from the
 recompiled source and renamed __wrap_func_<address>; a few statements, found
@@ -24,8 +25,6 @@ FUNCTIONS = {
     'func_8006870C': 'SLUS_004.02_full_27.c',   # camera_end_scene_update
     'func_8006953C': 'SLUS_004.02_full_27.c',   # camera_replay_start
     'func_80069414': 'SLUS_004.02_full_27.c',   # camera_replay_update
-    'func_8006875C': 'SLUS_004.02_full_27.c',   # camera_end_view_start
-    'func_8006895C': 'SLUS_004.02_full_27.c',   # camera_end_view_update
 }
 
 # (function, address, MIPS word or None, old text in the statement, new text)
@@ -101,59 +100,6 @@ SITES = [
     ('func_80069414', 0x800694E4, 0x2403113D,
      'cpu->gpr[3] = 4413;',
      'cpu->gpr[3] = tk3_arccam_v(4413, ARCREP_DIST);'),
-    # the loser's view, start: distance (cos, sin; move 0xB's too), eye height, fixed view angle
-    ('func_8006875C', 0x80068804, 0x84840000,
-     'cpu->gpr[4] = (int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[4], 4, 0x10u);',
-     'cpu->gpr[4] = tk3_arccam_cap((int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[4], 4, 0x10u), ARCCAP_SIN);'),
-    ('func_8006875C', 0x8006880C, 0x84630800,
-     'cpu->gpr[3] = (int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[3] + 2048, 3, 0x8u);',
-     'cpu->gpr[3] = tk3_arccam_cap((int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[3] + 2048, 3, 0x8u), ARCCAP_COS);'),
-    ('func_8006875C', 0x8006882C, 0x00021840,
-     'cpu->gpr[3] = cpu->gpr[2] << 1;',
-     'cpu->gpr[3] = tk3_arccam_k(cpu->gpr[2] << 1, tk3_arccam_got(ARCCAP_COS), ARCCAM_LOSER_RADIUS);'),
-    ('func_8006875C', 0x80068858, 0x00022040,
-     'cpu->gpr[4] = cpu->gpr[2] << 1;',
-     'cpu->gpr[4] = tk3_arccam_k(cpu->gpr[2] << 1, tk3_arccam_got(ARCCAP_SIN), ARCCAM_LOSER_RADIUS);'),
-    ('func_8006875C', 0x800688A0, 0x00022880,
-     'cpu->gpr[5] = cpu->gpr[2] << 2;',
-     'cpu->gpr[5] = tk3_arccam_k(cpu->gpr[2] << 2, tk3_arccam_got(ARCCAP_COS), ARCCAM_LOSER_RADIUS);'),
-    ('func_8006875C', 0x800688CC, 0x00022080,
-     'cpu->gpr[4] = cpu->gpr[2] << 2;',
-     'cpu->gpr[4] = tk3_arccam_k(cpu->gpr[2] << 2, tk3_arccam_got(ARCCAP_SIN), ARCCAM_LOSER_RADIUS);'),
-    ('func_8006875C', 0x80068900, 0x2403FA24,
-     'cpu->gpr[3] = -1500;',
-     'cpu->gpr[3] = tk3_arccam_v((uint32_t)-1500, ARCCAM_LOSER_EYE_Y);'),
-    ('func_8006875C', 0x8006893C, 0x3042007F,
-     'cpu->gpr[2] = cpu->gpr[2] & 0x007F;',
-     'cpu->gpr[2] = cpu->gpr[2] & tk3_arccam_v(0x007F, ARCCAM_LOSER_FIXED_MASK);'),
-    ('func_8006875C', 0x80068940, 0x2442FFC0,
-     'cpu->gpr[2] = cpu->gpr[2] + -64;',
-     'cpu->gpr[2] = cpu->gpr[2] + tk3_arccam_v((uint32_t)-64, ARCCAM_LOSER_FIXED_BIAS);'),
-    # the loser's view, update: target height, distance kept, step, pitch, fixed view height
-    ('func_8006895C', 0x800689D0, 0x8E480994,
-     'cpu->gpr[8] = psx_cyc_load_word(cpu, cpu->gpr[18] + 2452, 8, 0x40000u);',
-     'cpu->gpr[8] = tk3_arccam_v(psx_cyc_load_word(cpu, cpu->gpr[18] + 2452, 8, 0x40000u), ARCCAM_LOSER_TARGET_Y);'),
-    ('func_8006895C', 0x800689D8, 0x2482F1B0,
-     'cpu->gpr[2] = cpu->gpr[4] + -3664;',
-     'cpu->gpr[2] = cpu->gpr[4] - tk3_arccam_v(3664, ARCCAM_LOSER_FAR);'),
-    ('func_8006895C', 0x800689DC, 0x2482E776,
-     'cpu->gpr[2] = cpu->gpr[4] + -6282;',
-     'cpu->gpr[2] = cpu->gpr[4] - tk3_arccam_v(6282, ARCCAM_LOSER_FAR);'),
-    ('func_8006895C', 0x800689E4, 0x00112840,
-     'cpu->gpr[5] = cpu->gpr[17] << 1;',
-     'cpu->gpr[5] = tk3_arccam_k(cpu->gpr[17] << 1, cpu->gpr[17], ARCCAM_LOSER_STEP);'),
-    ('func_8006895C', 0x800689F0, 0x00103040,
-     'cpu->gpr[6] = cpu->gpr[16] << 1;',
-     'cpu->gpr[6] = tk3_arccam_k(cpu->gpr[16] << 1, cpu->gpr[16], ARCCAM_LOSER_STEP);'),
-    ('func_8006895C', 0x80068AC0, 0x84438CDC,
-     'cpu->gpr[3] = (int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[2] + -29476, 3, 0x4u);',
-     'cpu->gpr[3] = tk3_arccam_v((int32_t)(int16_t)psx_cyc_load_half(cpu, cpu->gpr[2] + -29476, 3, 0x4u), ARCCAM_NO_PITCH);'),
-    ('func_8006895C', 0x80068B00, 0x27A40010,
-     'cpu->gpr[4] = cpu->gpr[29] + 16;',
-     'tk3_arccam_loser_pitch(cpu); cpu->gpr[4] = cpu->gpr[29] + 16;'),
-    ('func_8006895C', 0x80068B60, 0x2402E153,
-     'cpu->gpr[2] = -7853;',
-     'cpu->gpr[2] = tk3_arccam_v((uint32_t)-7853, ARCCAM_LOSER_FIXED_HEIGHT);'),
 ]
 
 # direct calls in the same shard, which the linker's --wrap does not redirect

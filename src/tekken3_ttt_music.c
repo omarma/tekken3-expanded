@@ -16,7 +16,9 @@
  * (0x800A068C, DsMix's matrix, mono option). T3 starts its music at each
  * round's setup (0x8006AE14) and keeps it when it is already playing: the
  * piece starts when T3's XA becomes audible and goes on over the rounds; a
- * stop (end of match, quitting) ends it, unless T3 kept a resume point.
+ * stop (end of match, quitting) ends it, unless T3 kept a resume point. The
+ * next fight decided while that music still fades (its round music, stage
+ * and version already others) does not: the piece fades out with it.
  *
  * The stage is the fight's (tekken3_stage_ttt_stage, the STAGES row decided
  * per fight): only a fight given a TTT stage plays its piece. In such a
@@ -549,13 +551,19 @@ static int gain_percent(void) {
 /* Returns 1 while a piece replaces T3's music (then mute T3's). */
 int tekken3_ttt_music_mix(int16_t *out, int frames, int audible, const int16_t main_volume[2], int gain) {
     int stage = wanted_stage();
-    /* REMIXED: the PS2 piece when installed; else, and with ARCADE, the arcade one */
-    int ps2_piece = remixed() ? ps2_of_stage(stage) : -1;
-    int piece = ps2_piece >= 0 ? -1 : piece_of_stage(stage);
-    if (piece < 0 && ps2_piece < 0) { if (playing_piece()) stop("no TTT stage"); return 0; }
     int cur = (int16_t)psx_mod_read_half(0x800a0620), state = psx_mod_read_half(0x800a05d8);
     int round = psx_mod_read_half(0x800add08), xa = (int16_t)psx_mod_read_half(0x800a061c);
-    int playing = cur >= 0 && cur == round && (state == 2 || state == 3);
+    /* The next fight may be decided while T3's music of this one still
+     * plays, fading out (Team Battle: the next fighter's loading screen
+     * comes during the fade). The piece goes on with that music, whatever
+     * the next fight's stage and version, until T3 stops it (B118). */
+    int tail = playing_piece() && !pl.paused && cur >= 0 && cur == pl.last_cur && cur != round
+               && (state == 2 || state == 3);
+    /* REMIXED: the PS2 piece when installed; else, and with ARCADE, the arcade one */
+    int ps2_piece = tail ? pl.ps2 : remixed() ? ps2_of_stage(stage) : -1;
+    int piece = tail ? pl.piece : ps2_piece >= 0 ? -1 : piece_of_stage(stage);
+    if (piece < 0 && ps2_piece < 0) { if (playing_piece()) stop("no TTT stage"); return 0; }
+    int playing = cur >= 0 && (cur == round || tail) && (state == 2 || state == 3);
     if (!playing) {
         /* 0x8006B54C(1): stopped with a resume point that 0x8006AE14 takes back */
         if (playing_piece() && !pl.paused && cur < 0 && (int32_t)psx_mod_read_word(0x800a0630) == pl.last_cur

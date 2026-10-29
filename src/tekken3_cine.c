@@ -993,16 +993,31 @@ static void storms(void) {
 /* The prepared cinematic's TTT arcade stage, -1 none (src/tekken3_cine_trigger.c). */
 int tekken3_cine_ttt_stage(void) { return cine?cine->ttt_stage:-1; }
 
-static void finish(void) {
+/* What the cinematic took, let go: at its end, or when the game leaves the
+ * fight under it. */
+static void let_go(void) {
     for(unsigned p=0;p<PLAYED && p<(unsigned)cine->actor_count;p++) {
         uint32_t x=ACTOR0+p*ACTOR_SIZE;
         if(saved_record[p][0]) { psx_mod_write_word(x+0x54,saved_record[p][0]); psx_mod_write_word(x+0x4c,saved_record[p][1]); }
     }
-    playing=0;
+    playing=0; line=0;
     if(stage_forced) { tekken3_ttt_stage_force(-1); stage_forced=0; }
     g_psx_gpu_allow_oversize=0;
     tekken3_cine_swap_forget();
     tekken3_ttt1_embu_effects_reset();
+}
+/* The game left the fight under it (Start in the demo fight's mode, which
+ * the scene borrows: 0x8005101C, the fight's first call, goes to the modes
+ * menu, src/tekken3_cine_scene.c): no frame of its comes again, the wrapper
+ * below is not called out of state 8. Let go, nobody called. */
+void tekken3_cine_abandon(void) {
+    if(!playing) return;
+    let_go(); done=NULL;
+    fprintf(stderr,"Cine: \"%s\" left after %d frames\n",cine->name,tick-2-preroll);
+}
+
+static void finish(void) {
+    let_go();
     fprintf(stderr,"Cine: \"%s\" over after %d frames\n",cine->name,tick-2-preroll);
     void (*then)(void)=done; done=NULL;
     if(then) { then(); return; }
@@ -1084,7 +1099,7 @@ static int held(void) {
 void __wrap_func_80050450(CPUState *cpu) {
     if(playing && (cpu->pc==0 || cpu->pc==ENTRY) && (line || !cpu->gpr[2])) {
         if(!line) {                 /* the phase machine's turn, not paused: a frame begins */
-            if(psx_mod_read_word(STATE)!=8) { playing=0; g_psx_gpu_allow_oversize=0; fprintf(stderr,"Cine: the fight ended under it\n"); }
+            if(psx_mod_read_word(STATE)!=8) { tekken3_cine_abandon(); fprintf(stderr,"Cine: the fight ended under it\n"); }
             else {
                 cpu->gpr[29]-=FRAME; psx_mod_write_half(PHASE,17);
                 caller_prims=psx_mod_read_word(0x800adf64);

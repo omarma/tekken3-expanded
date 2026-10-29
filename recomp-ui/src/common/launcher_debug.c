@@ -199,6 +199,29 @@ void launcher_debug_step(LauncherPlatform* p, LauncherModel* m) {
             if (k != SDLK_UNKNOWN) synth_key(k);
             else fprintf(stderr, "[dbg] unknown key: %s\n", c + 4);
         }
+#if defined(LNG_SDL3)
+    } else if (strncmp(c, "vpad:", 5) == 0) {
+        // vpad:<product id, hex>:<name> attaches an SDL virtual gamepad, so
+        // the Input source list can be tested without hardware. Same product
+        // and name = same GUID (two pads of one model); another product with
+        // the same name = same label, other GUID (DualSense USB / Bluetooth).
+        unsigned product = 0;
+        const char* name = strchr(c + 5, ':');
+        if (sscanf(c + 5, "%x", &product) == 1 && name && name[1]) {
+            SDL_VirtualJoystickDesc desc;
+            SDL_INIT_INTERFACE(&desc);
+            desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+            desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+            desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+            desc.vendor_id = 0x054C;
+            desc.product_id = (Uint16)product;
+            desc.name = name + 1;
+            if (!SDL_AttachVirtualJoystick(&desc))
+                fprintf(stderr, "[dbg] vpad failed: %s\n", SDL_GetError());
+        } else {
+            fprintf(stderr, "[dbg] bad vpad: %s\n", c);
+        }
+#endif
     } else if (strncmp(c, "wait:", 5) == 0) {
         g_wait_frames = atoi(c + 5);
     } else if (strncmp(c, "shot:", 5) == 0) {

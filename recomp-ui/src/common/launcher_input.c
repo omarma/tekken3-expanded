@@ -119,6 +119,15 @@ int launcher_input_poll(LauncherPad* out, int max, int enable_gyro) {
                     }
                 }
             }
+            if (opened && opened->handle) {
+                // Tells apart two pads of the same name (DualSense on USB and
+                // on Bluetooth) in the Input source list.
+                const SDL_JoystickConnectionState cs =
+                    SDL_GetGamepadConnectionState(opened->handle);
+                out[n].connection = cs == SDL_JOYSTICK_CONNECTION_WIRED ? 1
+                                  : cs == SDL_JOYSTICK_CONNECTION_WIRELESS ? 2
+                                  : 0;
+            }
             if (!enable_gyro && opened && opened->handle && opened->has_gyro) {
                 SDL_SetGamepadSensorEnabled(
                     opened->handle, SDL_SENSOR_GYRO, false);

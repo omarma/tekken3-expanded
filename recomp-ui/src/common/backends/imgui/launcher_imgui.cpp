@@ -1817,6 +1817,17 @@ void pad_mode_selector(LauncherModel* m, const LauncherTheme& th, int p, float w
 // keyboard entry splits into "Keyboard + Mouse" (mouse-aim on) and "Keyboard"
 // (off); otherwise it is the single legacy "Keyboard" entry, byte-for-byte
 // identical to before for every non-mouse game.
+// Input source combo preview: a pad shows its list label, so two pads of the
+// same name read differently on the player cards ("... (1)", "... (2)").
+const char* player_src_preview(const LauncherModel* m, int p) {
+    static char buf[LNG_MAX_PLAYERS][96];
+    if (p >= 0 && p < LNG_MAX_PLAYERS && m->s.player_src[p] == 2 &&
+        launcher_binds_player_pad_label(m, p, g_pads, g_pad_count, buf[p],
+                                        (int)sizeof(buf[p])))
+        return buf[p];
+    return launcher_model_player_src_label(m, p);
+}
+
 void draw_source_selectables(LauncherModel* m, int p) {
     const SystemProfile* src_prof = (const SystemProfile*)m->profile;
     const bool psx = src_prof && src_prof->id && !strcmp(src_prof->id, "psx");
@@ -1838,103 +1849,19 @@ void draw_source_selectables(LauncherModel* m, int p) {
         }
     }
 
-    // Unified pad list (no duplicates): saved mappings + live devices.
-    // Pads already selected on another player are disabled (keyboard is not).
-    struct PadOpt {
-        char guid[40];
-        char name[64];
-        uint32_t id;
-        bool live;
-    };
-    constexpr int kMaxOpts = LNG_MAX_PADS + 16 + LNG_MAX_PLAYERS;
-    PadOpt opts[kMaxOpts]{};
-    int nopt = 0;
-    auto already = [&](const char* guid) -> bool {
-        if (!guid || !guid[0]) return true;
-        for (int i = 0; i < nopt; ++i)
-            if (std::strcmp(opts[i].guid, guid) == 0) return true;
-        return false;
-    };
-    auto push_opt = [&](const char* guid, const char* name, uint32_t id,
-                        bool live) {
-        if (!guid || !guid[0] || already(guid) || nopt >= kMaxOpts) return;
-        std::snprintf(opts[nopt].guid, sizeof(opts[nopt].guid), "%s", guid);
-        const char* nm = (name && name[0] && std::strcmp(name, "Gamepad") != 0)
-                             ? name : "Controller";
-        std::snprintf(opts[nopt].name, sizeof(opts[nopt].name), "%s", nm);
-        opts[nopt].id = id;
-        opts[nopt].live = live;
-        ++nopt;
-    };
-
-    if (psx) {
-        const int known = launcher_binds_psx_known_count();
-        for (int i = 0; i < known; ++i) {
-            char guid[40] = {}, name[64] = {};
-            if (!launcher_binds_psx_known_at(i, guid, (int)sizeof(guid),
-                                             name, (int)sizeof(name)))
-                continue;
-            uint32_t id = 0;
-            bool live = false;
-            const bool custom = launcher_binds_psx_name_is_custom(guid) != 0;
-            for (int j = 0; j < g_pad_count; ++j) {
-                if (g_pads[j].guid[0] &&
-                    std::strcmp(g_pads[j].guid, guid) == 0) {
-                    live = true;
-                    id = g_pads[j].id;
-                    // Custom rename wins; otherwise prefer the live driver name.
-                    if (!custom && g_pads[j].name[0] &&
-                        std::strcmp(g_pads[j].name, "Gamepad") != 0)
-                        std::snprintf(name, sizeof(name), "%s", g_pads[j].name);
-                    break;
-                }
-            }
-            push_opt(guid, name, id, live);
-        }
-        // Settings-restored GUID that isn't in the registry yet.
-        if (m->s.player_src[p] == 2 && m->s.player_gamepad_guid[p][0]) {
-            bool live = false;
-            uint32_t id = m->player_pad_id[p];
-            for (int j = 0; j < g_pad_count; ++j) {
-                if (g_pads[j].guid[0] &&
-                    std::strcmp(g_pads[j].guid,
-                                m->s.player_gamepad_guid[p]) == 0) {
-                    live = true;
-                    id = g_pads[j].id;
-                    break;
-                }
-            }
-            push_opt(m->s.player_gamepad_guid[p], m->player_pad_name[p], id,
-                     live);
-        }
-    }
-
-    for (int i = 0; i < g_pad_count; ++i)
-        push_opt(g_pads[i].guid, g_pads[i].name, g_pads[i].id, true);
-
-    const int claim_n = launcher_model_visible_player_count(m);
+    // Unified pad list: saved mappings + one entry per live device (two pads
+    // of the same model share a name and a GUID). Pads already selected on
+    // another player are disabled (keyboard is not).
+    LauncherPadOption opts[LNG_MAX_PADS + 16 + LNG_MAX_PLAYERS];
+    const int nopt = launcher_binds_pad_options(
+        m, p, g_pads, g_pad_count, opts, (int)(sizeof(opts) / sizeof(opts[0])));
     for (int i = 0; i < nopt; ++i) {
-        bool claimed = false;
-        for (int o = 0; o < claim_n; ++o) {
-            if (o == p) continue;
-            if (m->s.player_src[o] == 2 && m->s.player_gamepad_guid[o][0] &&
-                std::strcmp(m->s.player_gamepad_guid[o], opts[i].guid) == 0) {
-                claimed = true;
-                break;
-            }
-        }
-        char label[96];
-        if (opts[i].live)
-            std::snprintf(label, sizeof(label), "%s", opts[i].name);
-        else
-            std::snprintf(label, sizeof(label), "%s (disconnected)",
-                          opts[i].name);
-        const bool sel = m->s.player_src[p] == 2 &&
-                         m->s.player_gamepad_guid[p][0] &&
-                         std::strcmp(m->s.player_gamepad_guid[p],
-                                     opts[i].guid) == 0;
-        if (claimed) ImGui::BeginDisabled();
-        if (ImGui::Selectable(label, sel) && !claimed) {
+        // The label is unique in the list, but the ID must not depend on it
+        // alone (GH#153: two "DualSense Wireless Controller" entries collided).
+        ImGui::PushID(i);
+        if (opts[i].claimed) ImGui::BeginDisabled();
+        if (ImGui::Selectable(opts[i].label, opts[i].selected != 0) &&
+            !opts[i].claimed) {
             launcher_model_set_source(m, p, 2, opts[i].id, opts[i].name,
                                      opts[i].guid);
             if (psx) {
@@ -1942,7 +1869,8 @@ void draw_source_selectables(LauncherModel* m, int p) {
                 launcher_binds_refresh(m);
             }
         }
-        if (claimed) ImGui::EndDisabled();
+        if (opts[i].claimed) ImGui::EndDisabled();
+        ImGui::PopID();
     }
 
     if (nopt == 0) {
@@ -2032,7 +1960,7 @@ void draw_player_panel(LauncherModel* m, const LauncherTheme& th, int p, float w
     }
 
     ImGui::SetNextItemWidth(cw);
-    if (ImGui::BeginCombo("##src", launcher_model_player_src_label(m, p))) {
+    if (ImGui::BeginCombo("##src", player_src_preview(m, p))) {
         draw_source_selectables(m, p);
         ImGui::EndCombo();
     }
@@ -3382,7 +3310,7 @@ void draw_controller_config_view(LauncherModel* m, const LauncherTheme& th) {
         ImGui::Text("CONTROLLER - PLAYER %d", p + 1); ImGui::PopStyleColor(); ImGui::Spacing();
         row_label("Input source", th);
         ImGui::SetNextItemWidth(px(200));
-        if (ImGui::BeginCombo("##csrc", launcher_model_player_src_label(m, p))) {
+        if (ImGui::BeginCombo("##csrc", player_src_preview(m, p))) {
             draw_source_selectables(m, p);
             ImGui::EndCombo();
         }
@@ -3527,10 +3455,13 @@ void draw_controller_config_view(LauncherModel* m, const LauncherTheme& th) {
                         g_pads[i].guid[0] &&
                         std::strcmp(m->s.player_gamepad_guid[p],
                                     g_pads[i].guid) == 0;
-                    if (id_match || guid_match) {
+                    // The device wins over its GUID: two pads of one model
+                    // share the GUID.
+                    if (id_match) {
                         motion_pad = &g_pads[i];
                         break;
                     }
+                    if (guid_match && !motion_pad) motion_pad = &g_pads[i];
                 }
             }
 

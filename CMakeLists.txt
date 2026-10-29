@@ -66,6 +66,7 @@ target_sources(psx-runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_main_menu.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_game_options.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_stage_source.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_stage_select.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_bgm_select.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_new_skin_mods.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_selector_timer_mod.c"
@@ -258,10 +259,13 @@ tekken3_wrap_symbol(func_80048240)
 tekken3_wrap_symbol(func_80048208)
 # B79: the scripted camera's copy, held level as the arcade's after the K.O.
 tekken3_wrap_symbol(func_8004610C)
+# B126: TTT stage 11's wind in the accessory solver's pull (ApplyRotMatrix).
+tekken3_wrap_symbol(func_80081FD8)
 # B87: the end-of-round cameras, complete replacements built by
-# tools/build_arcade_cameras.py (as the fight camera's).
+# tools/build_arcade_cameras.py (as the fight camera's). B110: not the
+# loser's view (0x8006875C, 0x8006895C), the PS1's.
 foreach(_arccam func_80046270 func_80046460 func_80046464 func_800465BC func_800686B0 func_8006870C
-        func_8006953C func_80069414 func_8006875C func_8006895C)
+        func_8006953C func_80069414)
     tekken3_wrap_symbol(${_arccam} WRAPPER "${TEKKEN3_ARCADE_CAMERAS_SOURCE}")
 endforeach()
 set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS
@@ -309,6 +313,9 @@ if(TEKKEN3_TTT1_CHARACTERS)
     # TTT Hitspark (F12): the strong-hit effect's quads, once linked (src/tekken3_ttt1_combat.c).
     tekken3_wrap_symbol(func_8007745C)
     tekken3_wrap_symbol(func_80077524)
+    # and the knockdown smoke's (F22): fx_scatter_tick, fx_scatter_advance.
+    tekken3_wrap_symbol(func_8004AC24)
+    tekken3_wrap_symbol(func_8004ACB4)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_voices.c")
     # TTT stage music (TTT Stages S5), mixed by the voices' spu_render wrapper.
     # Its file is made from the player's tektagt.zip

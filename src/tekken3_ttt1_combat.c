@@ -133,6 +133,9 @@ typedef struct {
     uint32_t native_base,native_common,alias_table,original_alias,header,records,source,hit_bones;
     unsigned char *lasers;     /* beam type per record, 0 when not a laser */
     uint32_t *blades;          /* limbs of a record hitting with Unknown's blade, else 0 */
+    /* True Ogre's breath on Gon (gon_breath_rule): the scratch copy of the
+     * breath record, and the breath's list with T3's rule first. */
+    uint32_t gon_breath,gon_rules;unsigned gon_rule_room;
     /* What the records were built for: the slot's identity, its offsets in
      * the merged tables, the other player's guest records, and the engine's
      * last link of the two alias tables (__wrap_func_8002D07C). */
@@ -699,6 +702,60 @@ static void keep_native_reactions(const GuestCombat *c,uint32_t aliases,uint32_t
         }
     }
 }
+/* True Ogre's 1+2 breath on Gon (B120, GH#170). Gon breathes fire himself:
+ * in T3 he takes a scratch. The breath 0x137 opens on an automatic rule
+ * (command 0x0010, frames 1..10) towards 0xF7A when the opponent's move key
+ * is Gon's (key test 0x42 = 0x2F + 19, cancel_next 0x8002DE24): the same
+ * breath, for 1 damage and reaction row 0x220 (Gon's 0xA57, then his
+ * stance). TTT1 has no Gon: its breath (Hell's Flame, active on 0x137's
+ * frames 58..126) burnt him for 39 and floored him. The pack's breath takes
+ * T3's rule first, towards a copy of itself with 0xF7A's damage and
+ * reaction, which alias 0xF7A names. T3 always enters 0x137 at frame 1;
+ * the pack enters its breath at frame 12 from the rising states (records
+ * 492..517), so the rule holds up to the frame before the flames. The
+ * other breath (0x16E, d/f+1+2) has no such rule: it passes over Gon in
+ * both games. */
+enum { T3_BREATH=0x137 };
+static void gon_breath_rule(unsigned player) {
+    const GuestCombat *c=&slots[player];
+    PlayerCombat *p=&players[player];
+    if(tekken3_native_moves_id(player)!=TRUE_OGRE)return;
+    uint32_t breath=psx_mod_read_word(p->original_alias+T3_BREATH*4),rule=0;
+    if(breath<0x80010000 || breath>0x801fffc8)return;
+    uint32_t list=psx_mod_read_word(breath+12);
+    for(unsigned k=0;k<64 && list>=0x80010000 && list<=0x801ffff4;k++,list+=12) {
+        unsigned command=psx_mod_read_half(list),key=psx_mod_read_byte(list+2);
+        if(command==0xc000)break;
+        if(command==0x10 && key>=0x2f && key<0x46){rule=list;break;}  /* the opponent's key */
+    }
+    unsigned target=rule?psx_mod_read_half(rule+6):4023;
+    uint32_t scratch=target<4023?psx_mod_read_word(p->original_alias+target*4):0;
+    if(scratch<0x80010000 || scratch>0x801fffc8)return;
+    for(unsigned i=0;i<c->count;i++) {
+        uint32_t dst=p->records+i*56,own=psx_mod_read_word(dst+12);
+        if(psx_mod_read_byte(psx_mod_read_word(dst+40))!=EFFECT_FIRE_LIMB ||
+           psx_mod_read_byte(dst+45)!=psx_mod_read_byte(breath+45) || psx_mod_read_byte(dst+46)!=psx_mod_read_byte(breath+46))continue;
+        unsigned n=1;
+        while(n<1024 && psx_mod_read_half(own+(n-1)*12)!=0xc000)n++;
+        if(!p->gon_breath)p->gon_breath=tekken3_guest_pool_alloc(player,56,16);
+        if(p->gon_rule_room<n+1){p->gon_rules=tekken3_guest_pool_alloc(player,(n+1)*12,4);p->gon_rule_room=p->gon_rules?n+1:0;}
+        if(!p->gon_breath || !p->gon_rules)return;
+        for(unsigned j=0;j<56;j+=4)psx_mod_write_word(p->gon_breath+j,psx_mod_read_word(dst+j));
+        psx_mod_write_half(p->gon_breath+0x14,psx_mod_read_half(scratch+0x14));    /* damage */
+        psx_mod_write_byte(p->gon_breath+0x2c,psx_mod_read_byte(scratch+0x2c));    /* hitstun */
+        psx_mod_write_half(p->gon_breath+0x32,psx_mod_read_half(scratch+0x32));    /* reaction row */
+        psx_mod_write_half(p->gon_breath+0x34,psx_mod_read_half(scratch+0x34));    /* counter index */
+        for(unsigned j=0;j<12;j+=4)psx_mod_write_word(p->gon_rules+j,psx_mod_read_word(rule+j));
+        unsigned last=psx_mod_read_byte(dst+45)-1u;
+        if(last>psx_mod_read_byte(rule+10) && last<255)psx_mod_write_byte(p->gon_rules+10,(unsigned char)last);
+        for(unsigned j=0;j<n*12;j+=4)psx_mod_write_word(p->gon_rules+12+j,psx_mod_read_word(own+j));
+        psx_mod_write_word(dst+12,p->gon_rules);
+        psx_mod_write_word(p->alias_table+target*4,p->gon_breath);
+        fprintf(stderr,"%s combat: P%u breath record %u takes T3's rule on Gon (0x%X -> 0x%X, %d damage)\n",
+                tekken3_guest_name_for(player),player+1,i,T3_BREATH,target,(int16_t)psx_mod_read_half(scratch+0x14));
+        return;
+    }
+}
 static int ready(unsigned player) {
     /* Diagnostic ponctuel sous TEKKEN3_GUEST_WHY=1 : dire QUELLE garde bloque.
      * load_combat() a plusieurs sorties muettes. */
@@ -804,6 +861,7 @@ static int ready(unsigned player) {
             unsigned index=c->native_aliases[i]==3?c->neutral:c->native_aliases[i]-SLOT_BASE;
             psx_mod_write_word(p->alias_table+i*4,p->records+index*56);
         }
+        gon_breath_rule(player);
         psx_mod_write_word(p->header+12,p->alias_table);
         /* A guest's moves go by key 23; a native on its TTT1 moves and Devil
          * Jin keep their own key, which the other fighter's rules test. */
@@ -1117,15 +1175,24 @@ int tekken3_ttt1_has_lasers(unsigned p) {
  * (103, -723, 0) / (102, -362, 0) in that hand's frame; they are not
  * refreshed every frame, so the hand's matrix with that offset gives the
  * points. */
+/* True Ogre's horn tip, TTT1 limb 23 (Buffalo Horn, the end of Demon's
+ * Feast): joint 2 moved by (800, 0, 600), the point TTT1 computes on every
+ * frame (MAME: fighter + 0xA8C + 23 * 0x50, 1000 from joint 2) and T3 as
+ * joint 23 (0x80041F4C, offset 0x8001DC40), but only outside the move's
+ * active window: read from the joint, the hit took the horn where it was the
+ * frame before the window, up to 1800 below the tip that tosses (B106). */
+enum { TTT1_HORN_TIP=23, HORN_BONE=2 };
 static void limb_position(uint32_t actor,unsigned limb,uint32_t out[3]) {
-    if(limb!=TTT1_PACK_BLADE_MID && limb!=TTT1_PACK_BLADE_TIP) {
+    int horn=limb==TTT1_HORN_TIP && tekken3_native_moves_id(actor==0x800a9228?0:1)==TRUE_OGRE;
+    if(limb!=TTT1_PACK_BLADE_MID && limb!=TTT1_PACK_BLADE_TIP && !horn) {
         for(unsigned axis=0;axis<3;axis++)out[axis]=psx_mod_read_word(actor+0x908+limb*68+axis*4);
         return;
     }
-    uint32_t m=actor+0x8f4+BLADE_BONE*68;
+    uint32_t m=actor+0x8f4+(horn?HORN_BONE:BLADE_BONE)*68;
     int32_t length=limb==TTT1_PACK_BLADE_TIP?727:364;
     int native=tekken3_native_moves_id(actor==0x800a9228?0:1)==YOSHIMITSU;
-    const int32_t l[3]={100,native?-length:0,native?0:length};
+    const int32_t blade[3]={100,native?-length:0,native?0:length},tip[3]={800,0,600};
+    const int32_t *l=horn?tip:blade;
     for(unsigned i=0;i<3;i++) {
         int32_t v=(int32_t)psx_mod_read_word(m+0x14+i*4);
         for(unsigned j=0;j<3;j++)v+=((int16_t)psx_mod_read_half(m+(i*3+j)*2)*l[j])>>12;
@@ -1587,8 +1654,9 @@ static void place_hit_effect(unsigned player) {
 }
 /* TTT Hitspark (F12, GH#112): every fighter's strong-hit effect at TTT1's
  * 64 x 64. The guests' come with their import (<Name>-TTT1-hiteffect64.hfx),
- * Tekken 3's own cast's are read from TTT1 too (tools/ttt1_hitspark.py; not
- * Gon's nor Dr. B's, who are not in it), all in the catalogue
+ * Tekken 3's own cast's are read from TTT1 too (tools/ttt1_hitspark.py; Gon
+ * and Dr. B, who are not in it, take Heihachi's: the 22-image packs of the
+ * disc are all the same, F22), all in the catalogue
  * (tools/ttt1/hit_effect.py, hfx_pack: 'HFX6', version, images, side 64,
  * palettes 1 or one per image, flags, then the palettes and the 4-bit
  * images). They lie in the upper VRAM half (System 12 bits, mod_plugins.h),
@@ -1597,7 +1665,8 @@ static void place_hit_effect(unsigned player) {
  * measured, 73 free cells; tools/arcade_stages/pack.py keeps them free).
  * Player 1 takes row 768 and (544, 896), player 2 row 832, both palettes
  * the cell (560, 896); up to 36 images a player (F13), the rest of row 896.
- * TTT1's common sparks too (a landed hit's spray, a guard), below.
+ * TTT1's common sparks too (a landed hit's spray, a throw, a guard, the
+ * knockdown smoke) and the poison mist, below.
  *
  * The game still draws its 32 x 32 sprite: fx_sprites_update (0x80076E70,
  * from 0x8007745C and the replay's 0x80077524) links one POLY_FT4 a living
@@ -1622,7 +1691,7 @@ static struct { int on,tried; uint32_t packets; const unsigned char *placed[2]; 
 extern unsigned tekken3_stage_high_vram_generation(void);
 extern int tekken3_stage_high_vram_used(int x,int y,int w,int h);
 /* Tekken 3's cast by ID (tools/ttt1_hitspark.py NATIVES): Gon (17) and Dr. B
- * (19) have none. */
+ * (19) have none of their own, Heihachi's is theirs (native_hfx). */
 static const char *const hfx_native_names[]={"Paul","Law","Lei","King","Yoshimitsu","Nina","Hwoarang","Xiaoyu",
     "Eddy","Jin","Julia","Kuma","Bryan","Heihachi","Ogre","Mokujin","Gunjack",NULL,"Anna",NULL,"Trueogre"};
 enum { HFX_NATIVES=sizeof hfx_native_names/sizeof *hfx_native_names };
@@ -1677,6 +1746,7 @@ static void load_hit_effect_64(unsigned s,const char *root) {
     read_hfx(root,prefix,tekken3_guest_name_for(s),&slots[s].hfx);
 }
 static const Hfx *native_hfx(unsigned id) {
+    if(id==17 || id==19)id=13;            /* Gon and Dr. B: their T3 pack is Heihachi's, byte for byte */
     if(id>=HFX_NATIVES || !hfx_native_names[id])return NULL;
     if(!hfx_native_tried[id]) {
         char prefix[64];
@@ -1762,14 +1832,20 @@ static void ps2_hfx_lengths(void) {
         }
     }
 }
-/* The 64 x 64 of the 32 x 32 now in player p's VRAM rectangle. */
+/* The 64 x 64 of the 32 x 32 now in player p's VRAM rectangle. An Embu
+ * guest in Jin's or Yoshimitsu's part has its own there, whatever
+ * hit_effect_in_fight says: the fight tick clears that for a player off TTT1
+ * moves, which an Embu guest is, once a fight with a guest has left the
+ * TTT1 characters on (Kunimitsu drew Yoshimitsu's 64 x 64, Kazuya Jin's red
+ * lightning: GH#29 again, B115). */
+extern int tekken3_ttt1_embu_effect_guest(unsigned player);
 static const Hfx *hit_effect_64_pack(unsigned p) {
     if(tekken3_ttt1_tiles_up())return NULL;
     const char *own=embu_effect_file(p);
     if(own && *own && tekken3_cine_frame()>=0)return cine_hfx(own);
     const Hfx *ps2=ps2_hfx_for(p);
     if(ps2)return ps2;
-    if(hit_effect_in_fight[p])return slots[p].hfx.data?&slots[p].hfx:NULL;
+    if(hit_effect_in_fight[p] || tekken3_ttt1_embu_effect_guest(p))return slots[p].hfx.data?&slots[p].hfx:NULL;
     return native_hfx(psx_mod_read_half(FX_IDS+p*0x188c));
 }
 /* A pack in its cells (image k at cells[k], palette p at row pal_y + p of
@@ -1804,26 +1880,37 @@ static const HfxCell *player_cells(unsigned p) {
         }
     return hfx_player_cells[p];
 }
-/* TTT1's common sparks (tools/ttt1_hitspark.py COMMON): a landed hit's spray
- * in place of T3's box 0 of set 2 ((896, 256), every landed hit: 0x80076C28)
- * and a guarded hit's sparks in place of box 2 ((896, 448): 0x800448E0); the
- * other boxes stay T3's. Their 30 images each and their palettes take cells
- * of the upper half that the loaded stage leaves free
- * (tekken3_stage_high_vram_used), outside the F12 cells and Unknown's wolf,
- * chosen again with each stage pack: 61 of the 75 free with the fullest
- * stage (TTT 14). T3 plays 27 and 21 images: the spray's header is box 0's
- * (0x800279D4, 6 bytes a box), but 0x8007641C points the guard's entry
- * (0x800A3600) at box 1's header (21), which the "no attack" spark of box 1
- * plays too. While ours can be drawn, both play 30 images, as TTT1 (the
- * user's choice): box 0's header, and the guard's entry on box 2's (25,
- * read by no one else). Their own lengths otherwise. */
-enum { SPARK_FRAMES=30, SPARK_CELLS=2*SPARK_FRAMES+1,
-       SPARK_HEADER0=0x800279d4, SPARK_HEADER1=0x800279da, SPARK_HEADER2=0x800279e0, GUARD_ENTRY=0x800a3600 };
-static const struct { const char *name; unsigned clut_x,vram_x,vram_y; uint32_t header; unsigned stock; } hfx_sparks[2]={
-    {"Spark",32,896,256,SPARK_HEADER0,27},{"Guard",64,896,448,SPARK_HEADER2,25}};
+/* TTT1's common sparks (tools/ttt1_hitspark.py COMMON), in place of the
+ * boxes of T3's set 2 (fighter_tim_vram_table 0x800279EC + 2 * 48: each its
+ * palette x and first image), each at its TTT1 length (the user's choice):
+ *   0 a landed hit's spray ((896, 256), every landed hit: 0x80076C28), row 28;
+ *   1 a throw's pink spark ((920, 352), move property 9 and "no attack"
+ *     hits, 0x800448E0), row 29 (F22);
+ *   2 a guarded hit's sparks ((896, 448), 0x800448E0), row 30;
+ *   3 the knockdown smoke ((968, 288), property 10, and the six puffs of
+ *     fx_scatter at each fall, below), row 33 (F22).
+ * The poison mist (decor effect type 10, below) takes TTT1's: the smoke's
+ * images in a palette of its own (Mist-TTT1-hiteffect64.hfx).
+ * Their cells in the upper half are placed with each stage pack, around it
+ * (tekken3_stage_high_vram_used), outside the F12 cells and Unknown's wolf:
+ * the smoke's 30 images stay in theirs (the puffs and the mist share them);
+ * the spray, the throw and the guard are written image by image into a cell
+ * a sprite and a frame buffer (6: what one buffer drew is not written while
+ * the other is built; the renderers read the half at the next draw); one
+ * cell of palettes. 37 cells, of the 75 free with the fullest stage (TTT 14;
+ * F12 kept the spray's and the guard's 61 images in place). T3 plays 27, 21,
+ * 25 and 27 images (box k's header 0x800279D4 + 6 k), but 0x8007641C points
+ * the guard's entry (0x800A3600) at box 1's header: while ours can be drawn,
+ * box 1's header is the throw's and the guard's entry goes to box 2's, read
+ * by no one else. Their own lengths otherwise. */
+enum { SPARK_BOXES=4, SPARK_SMOKE=3, SMOKE_FRAMES=30, MIST_FRAMES=21, MIST_ROW=SPARK_BOXES,
+       SPARK_CELLS=2*3+SMOKE_FRAMES+1, SPARK_HEADER=0x800279d4, GUARD_ENTRY=0x800a3600 };
+static const struct { const char *name; unsigned clut_x,vram_x,vram_y,stock; } hfx_sparks[SPARK_BOXES]={
+    {"Spark",32,896,256,27},{"Throw",48,920,352,21},{"Guard",64,896,448,25},{"Smoke",80,968,288,27}};
 static struct {
-    Hfx pack[2]; int tried,ready; unsigned generation;
-    HfxCell cells[2][SPARK_FRAMES],pal; const unsigned char *placed[2];
+    Hfx pack[SPARK_BOXES],mist; int tried,ready; unsigned generation;
+    HfxCell stream[2][3],smoke[SMOKE_FRAMES],pal; const unsigned char *placed;
+    unsigned char mist_image[MIST_FRAMES];      /* the smoke's image of each of the mist's */
 } sparks={.ready=-1};
 static const uint16_t hfx_taken[][4]={{544,768,32,64},{592,768,432,64},{544,832,480,64},{544,896,224,64},
                                       {640,512,384,256} /* Unknown's wolf */};
@@ -1837,7 +1924,7 @@ static int spark_cell_free(int x,int y) {
 static int sparks_ready(void) {
     unsigned g=tekken3_stage_high_vram_generation();
     if(sparks.ready>=0 && g==sparks.generation)return sparks.ready;
-    sparks.generation=g;sparks.ready=0;sparks.placed[0]=sparks.placed[1]=NULL;
+    sparks.generation=g;sparks.ready=0;sparks.placed=NULL;
     HfxCell got[SPARK_CELLS];unsigned n=0;
     for(int page=512;page<1024;page+=256)
         for(int x=0;x<1024;x+=16)
@@ -1847,13 +1934,17 @@ static int sparks_ready(void) {
         fprintf(stderr,"TTT Hitspark: %u free cells beside this stage, the common sparks stay 32 x 32\n",n);
         return 0;
     }
-    for(unsigned s=0;s<2;s++)memcpy(sparks.cells[s],got+s*SPARK_FRAMES,sizeof sparks.cells[s]);
-    sparks.pal=got[2*SPARK_FRAMES];
+    memcpy(sparks.stream,got,sizeof sparks.stream);
+    memcpy(sparks.smoke,got+6,sizeof sparks.smoke);
+    sparks.pal=got[SPARK_CELLS-1];
     return sparks.ready=1;
+}
+static const HfxCell *spark_cell(unsigned k) {
+    return k<6?&sparks.stream[k/3][k%3]:k<6+SMOKE_FRAMES?&sparks.smoke[k-6]:&sparks.pal;
 }
 /* For other users of the upper half (the PS2 lasers of Devil and Angel): whether
  * rectangle x, y, w, h overlaps what TTT Hitspark takes there while it is on,
- * its fixed cells and the common sparks' 61 cells around the loaded stage
+ * its fixed cells and the common sparks' 37 cells around the loaded stage
  * (placed now for this stage if they were not yet). Unknown's wolf (x
  * 640..1023, y 512..767) is never ours. Call it again when
  * tekken3_stage_high_vram_generation() changes. */
@@ -1865,42 +1956,136 @@ int tekken3_hit_effect_high_vram_used(int x,int y,int w,int h) {
     }
     if(sparks_ready()!=1)return 0;
     for(unsigned k=0;k<SPARK_CELLS;k++) {
-        HfxCell c=k<2*SPARK_FRAMES?sparks.cells[k/SPARK_FRAMES][k%SPARK_FRAMES]:sparks.pal;
-        if(x<c.x+16 && c.x<x+w && y<c.y+HFX_SIDE && c.y<y+h)return 1;
+        const HfxCell *c=spark_cell(k);
+        if(x<c->x+16 && c->x<x+w && y<c->y+HFX_SIDE && c->y<y+h)return 1;
     }
     return 0;
+}
+/* Box s's pack, when ours can be drawn. */
+static const Hfx *spark_pack(unsigned s) {
+    return sparks.ready==1 && sparks.pack[s].data?&sparks.pack[s]:NULL;
 }
 /* Once a frame, before any spark is made: the packs, their cells, T3's lengths. */
 static void sparks_tick(void) {
     if(!sparks.tried) {
         sparks.tried=1;
-        for(unsigned s=0;s<2;s++) {
+        static const unsigned frames[SPARK_BOXES]={30,28,30,SMOKE_FRAMES};
+        for(unsigned s=0;s<SPARK_BOXES;s++) {
             char prefix[32];snprintf(prefix,sizeof prefix,"%s-TTT1",hfx_sparks[s].name);
-            if(read_hfx(tekken3_ttt1_asset_root(),prefix,hfx_sparks[s].name,&sparks.pack[s]) && sparks.pack[s].images!=SPARK_FRAMES) {
+            if(read_hfx(tekken3_ttt1_asset_root(),prefix,hfx_sparks[s].name,&sparks.pack[s]) &&
+               (sparks.pack[s].images!=frames[s] || sparks.pack[s].palettes!=1)) {
+                fprintf(stderr,"TTT Hitspark: %s has %u images (%u wanted), it stays 32 x 32\n",hfx_sparks[s].name,
+                        sparks.pack[s].images,frames[s]);
                 free(sparks.pack[s].data);memset(&sparks.pack[s],0,sizeof sparks.pack[s]);
+            }
+        }
+        /* The mist's images are the smoke's: each found there, or no mist. */
+        const Hfx *smoke=&sparks.pack[SPARK_SMOKE],*mist=&sparks.mist;
+        if(smoke->data && read_hfx(tekken3_ttt1_asset_root(),"Mist-TTT1","Mist",&sparks.mist)) {
+            unsigned found=0;
+            if(mist->images==MIST_FRAMES && mist->palettes==1)
+                for(unsigned k=0;k<MIST_FRAMES;k++)
+                    for(unsigned j=0;j<SMOKE_FRAMES;j++)
+                        if(!memcmp(mist->data+48+k*HFX_IMAGE,smoke->data+48+j*HFX_IMAGE,HFX_IMAGE)) {
+                            sparks.mist_image[k]=(unsigned char)j;found++;break;
+                        }
+            if(found!=MIST_FRAMES) {
+                fprintf(stderr,"TTT Hitspark: the mist's images are not the smoke's, it stays 32 x 32\n");
+                free(sparks.mist.data);memset(&sparks.mist,0,sizeof sparks.mist);
             }
         }
     }
     int ready=psx_mod_gpu_high_vram_ready() && sparks_ready();
-    for(unsigned s=0;s<2;s++) {
-        int ours=ready && sparks.pack[s].data;
-        unsigned want=ours?SPARK_FRAMES:hfx_sparks[s].stock;
-        if(psx_mod_read_half(hfx_sparks[s].header)!=want)psx_mod_write_half(hfx_sparks[s].header,(uint16_t)want);
-        if(s==1 && psx_mod_read_word(GUARD_ENTRY)!=(ours?SPARK_HEADER2:SPARK_HEADER1))
-            psx_mod_write_word(GUARD_ENTRY,ours?SPARK_HEADER2:SPARK_HEADER1);
+    int ours[SPARK_BOXES];
+    for(unsigned s=0;s<SPARK_BOXES;s++)ours[s]=ready && sparks.pack[s].data;
+    for(unsigned s=0;s<SPARK_BOXES;s++) {
+        unsigned want=ours[s]?sparks.pack[s].images:hfx_sparks[s].stock;
+        if(s==2 && !ours[2] && ours[1])want=21;         /* the guard's own length, off box 1's header */
+        uint32_t header=SPARK_HEADER+6*s;
+        if(psx_mod_read_half(header)!=want)psx_mod_write_half(header,(uint16_t)want);
+    }
+    uint32_t entry=ours[1] || ours[2]?SPARK_HEADER+12:SPARK_HEADER+6;
+    if(psx_mod_read_word(GUARD_ENTRY)!=entry)psx_mod_write_word(GUARD_ENTRY,entry);
+}
+/* The smoke's images and every palette in their cells, unless already there. */
+static void sparks_place(void) {
+    const Hfx *smoke=spark_pack(SPARK_SMOKE);
+    if(smoke)place_hfx(smoke,sparks.smoke,sparks.pal.x,sparks.pal.y+SPARK_SMOKE,&sparks.placed,"Smoke");
+    const uint16_t *hi=gpu_high_vram_pixels();
+    for(unsigned s=0;s<=SPARK_BOXES;s++) {
+        const Hfx *h=s<SPARK_BOXES?spark_pack(s):sparks.ready==1 && sparks.mist.data?&sparks.mist:NULL;
+        if(!h || !hi)continue;
+        const uint16_t *row=hi+(size_t)(sparks.pal.y-512+s)*1024+sparks.pal.x;
+        if(memcmp(row,h->data+16,32))psx_mod_gpu_high_vram_upload(sparks.pal.x,sparks.pal.y+s,16,1,(const uint16_t*)(h->data+16));
     }
 }
-/* Our packets: both buffers, three sprites; a source of the upper half. */
+/* Image k of pack h in cell c, unless it is there already. */
+static void spark_stream(const HfxCell *c,const Hfx *h,unsigned k) {
+    const uint16_t *hi=gpu_high_vram_pixels();
+    const unsigned char *img=h->data+16+32*h->palettes+(size_t)k*HFX_IMAGE;
+    if(!hi)return;
+    for(unsigned row=0;row<HFX_SIDE;row++)
+        if(memcmp(hi+(size_t)(c->y-512+row)*1024+c->x,img+row*32,32)) {
+            psx_mod_gpu_high_vram_upload(c->x,c->y,16,HFX_SIDE,(const uint16_t*)img);
+            return;
+        }
+}
+/* Our packets, a frame buffer each: the three hit sprites, the 18 puffs, the mists. */
+enum { SCATTER=0x8009e850, SCATTER_SLOT=0x370, SCATTER_PUFFS=18, MIST_MOST=16,
+       HFX_QUADS=3+SCATTER_PUFFS+MIST_MOST };
 static int hit_effect_64_packets(void) {
     if(hfx.tried)return hfx.packets!=0;
     hfx.tried=1;
-    uint32_t a=psx_mod_alloc_gpu_dma_memory(2*3*FX_PRIM,16);
-    if(!a || !psx_mod_gpu_high_vram_source(a,2*3*FX_PRIM)) {
+    uint32_t a=psx_mod_alloc_gpu_dma_memory(2*HFX_QUADS*FX_PRIM,16);
+    if(!a || !psx_mod_gpu_high_vram_source(a,2*HFX_QUADS*FX_PRIM)) {
         fprintf(stderr,"TTT Hitspark: no packet memory, the strong-hit effects stay 32 x 32\n");
         return 0;
     }
     hfx.packets=a;
     return 1;
+}
+/* A quad the game linked, and what ours reads instead: the cell, the palette
+ * (column, row), our packet's slot, and whether the pack fades by palettes. */
+typedef struct { uint32_t prim; const HfxCell *cell; unsigned pal_x,pal_y,slot,fade; } HfxSwap;
+/* Each quad's place in the ordering table (one walk from its last tag), then
+ * a copy in our packet memory takes it: same place, size and colour, the
+ * game's blending, the upper half's cell and palette. A quad linked right
+ * after another of the list hangs from that one's copy. */
+static void hfx_swap(const HfxSwap *s,unsigned n,unsigned buffer,int trace) {
+    uint32_t before[HFX_QUADS]={0},ours[HFX_QUADS]={0};
+    unsigned left=n;
+    uint32_t at=psx_mod_read_word(psx_mod_read_word(FX_OT)+0x10)&0xffffff;
+    for(unsigned g=0;left && g<0x10000 && at!=0xffffff && at;g++) {
+        uint32_t next=psx_mod_read_word(0x80000000u|at)&0xffffff;
+        for(unsigned k=0;k<n;k++)
+            if(!before[k] && next==(s[k].prim&0xffffff)) { before[k]=0x80000000u|at; left--; }
+        at=next;
+    }
+    for(unsigned k=0;k<n;k++) {
+        if(trace)fprintf(stderr,"TTT Hitspark trace: quad %08X slot %u, %s\n",s[k].prim,s[k].slot,
+                         before[k]?"replaced":"not found in the ordering table");
+        if(!before[k])continue;
+        uint32_t prim=s[k].prim,o=ours[k]=hfx.packets+(buffer*HFX_QUADS+s[k].slot)*FX_PRIM;
+        unsigned tpage=psx_mod_read_half(prim+22),u0=psx_mod_read_byte(prim+12),u1=psx_mod_read_byte(prim+20);
+        for(unsigned w=1;w<10;w++)psx_mod_write_word(o+4*w,psx_mod_read_word(prim+4*w));
+        psx_mod_write_word(o,9u<<24|(psx_mod_read_word(prim)&0xffffff));
+        const HfxCell *cell=s[k].cell;
+        unsigned u=(cell->x%64)*4,v=cell->y%256,flip=u0>u1;
+        unsigned clut=0x8000u|(s[k].pal_y-512)<<6|s[k].pal_x>>4;
+        unsigned page=0x800u|(cell->y>=768?0x10u:0)|(tpage&0x60)|cell->x/64;  /* upper half, the game's blending */
+        unsigned ul=flip?u+63:u,ur=flip?u:u+63;
+        psx_mod_write_word(o+12,clut<<16|v<<8|ul);
+        psx_mod_write_word(o+20,page<<16|v<<8|ur);
+        psx_mod_write_half(o+28,(uint16_t)((v+63)<<8|ul));
+        psx_mod_write_half(o+36,(uint16_t)((v+63)<<8|ur));
+        if(s[k].fade)psx_mod_write_word(o+4,(psx_mod_read_word(prim+4)&0xff000000u)|0x808080);
+    }
+    for(unsigned k=0;k<n;k++) {
+        if(!before[k])continue;
+        uint32_t link=before[k];
+        for(unsigned j=0;j<n;j++)if(before[j] && s[j].prim==link)link=ours[j];
+        psx_mod_write_word(link,(psx_mod_read_word(link)&0xff000000u)|(ours[k]&0xffffff));
+    }
 }
 /* Each sprite's life as fx_sprites_update starts: it draws the living ones,
  * then steps them (the last image drawn, its life is already 0). */
@@ -1911,11 +2096,36 @@ static void hit_effect_64_lives(void) {
     sparks_tick();
     ps2_hfx_lengths();
 }
-static void hit_effect_64(void) {
-    if(!hfx.on || psx_mod_read_word(FX_DRAW_SKIP) || !psx_mod_gpu_high_vram_ready())return;
-    unsigned buffer=psx_mod_read_word(FX_BUFFER)&1;
+static int hfx_trace(void) {
     static int trace=-1;
     if(trace<0)trace=getenv("TEKKEN3_HIT_EFFECT_TRACE")!=NULL;
+    return trace;
+}
+/* The mists (decor effects of type 10, made by fx_special_25 for Nina's and
+ * Yoshimitsu's limb 25) that fx_update_draw linked this frame, before the hit
+ * sprites in every loop of the game (0x8002AE58): image = the effect's
+ * frame (+0x48, 0..20, 0x80072D5C), from the smoke's cells; the mist's
+ * palette, the smoke's for limb 28's (+0x4C set: T3's grey). */
+enum { FX_ACTIVE=0x800a0988 };
+static unsigned mists_64(HfxSwap *s,unsigned buffer) {
+    if(sparks.ready!=1 || !sparks.mist.data || !spark_pack(SPARK_SMOKE))return 0;
+    unsigned n=0;
+    uint32_t e=psx_mod_read_word(FX_ACTIVE+4);
+    for(unsigned g=0;g<0x50 && e && e!=FX_ACTIVE && n<MIST_MOST;g++,e=psx_mod_read_word(e+4)) {
+        int32_t frame=(int32_t)psx_mod_read_word(e+0x48);
+        if(psx_mod_read_byte(e+0xc)!=10 || !(psx_mod_read_byte(e+0xd)&0x40) || frame<0 || frame>=MIST_FRAMES)continue;
+        unsigned row=psx_mod_read_word(e+0x4c)?SPARK_SMOKE:MIST_ROW;
+        s[n]=(HfxSwap){e+0x50+buffer*FX_PRIM,&sparks.smoke[sparks.mist_image[frame]],sparks.pal.x,sparks.pal.y+row,
+                       3+SCATTER_PUFFS+n,0};
+        n++;
+    }
+    return n;
+}
+static void hit_effect_64(void) {
+    if(!hfx.on || psx_mod_read_word(FX_DRAW_SKIP) || !psx_mod_gpu_high_vram_ready())return;
+    unsigned buffer=psx_mod_read_word(FX_BUFFER)&1,n=0;
+    int trace=hfx_trace();
+    HfxSwap s[3+MIST_MOST];
     for(unsigned i=0;i<3;i++) {
         uint32_t fx=FX_SPRITES+i*FX_SPRITE,prim=FX_PRIMS+(buffer*3+i)*FX_PRIM;
         if(trace && hfx_lives[i]>0)
@@ -1935,47 +2145,29 @@ static void hit_effect_64(void) {
             k=2*(y/32)+(x-base)/8;
             if(k>=h->images)k=h->images-1;
             cell=player_cells(p)+k;pal_x=HFX_PAL_X;pal_y=HFX_PAL_Y+32*p+(h->palettes>1?k:0);
-            if(!hit_effect_64_packets())continue;
             place_hfx(h,player_cells(p),HFX_PAL_X,HFX_PAL_Y+32*p,&hfx.placed[p],p?"P2":"P1");
         } else {
             /* A common spark: its image is its age. */
-            unsigned s=0,clut_x=psx_mod_read_half(fx+0x20),vram_y=psx_mod_read_half(fx+0x16);
-            while(s<2 && (hfx_sparks[s].clut_x!=clut_x || hfx_sparks[s].vram_x!=base || hfx_sparks[s].vram_y!=vram_y))s++;
-            if(s==2 || sparks.ready!=1 || !(h=sparks.pack[s].data?&sparks.pack[s]:NULL))continue;
+            unsigned b=0,clut_x=psx_mod_read_half(fx+0x20),vram_y=psx_mod_read_half(fx+0x16);
+            while(b<SPARK_BOXES && (hfx_sparks[b].clut_x!=clut_x || hfx_sparks[b].vram_x!=base || hfx_sparks[b].vram_y!=vram_y))b++;
+            if(b==SPARK_BOXES || !(h=spark_pack(b)))continue;
             k=(unsigned)hfx_lives[i]-1;
             if(k>=h->images)k=h->images-1;
-            cell=&sparks.cells[s][k];pal_x=sparks.pal.x;pal_y=sparks.pal.y+s;
-            if(!hit_effect_64_packets())continue;
-            place_hfx(h,sparks.cells[s],sparks.pal.x,sparks.pal.y+s,&sparks.placed[s],hfx_sparks[s].name);
+            sparks_place();
+            if(b==SPARK_SMOKE)cell=&sparks.smoke[k];
+            else spark_stream(cell=&sparks.stream[buffer][i],h,k);
+            pal_x=sparks.pal.x;pal_y=sparks.pal.y+b;
         }
-        /* Its link: walk the ordering table from its last tag. */
-        uint32_t at=psx_mod_read_word(psx_mod_read_word(FX_OT)+0x10)&0xffffff,before=0;
-        for(unsigned n=0;n<0x10000 && at!=0xffffff && at;n++) {
-            uint32_t next=psx_mod_read_word(0x80000000u|at)&0xffffff;
-            if(next==(prim&0xffffff)) { before=0x80000000u|at; break; }
-            at=next;
-        }
-        if(trace)fprintf(stderr,"TTT Hitspark trace: sprite %u image %u, %s\n",i,k,before?"replaced":"not found in the ordering table");
-        if(!before)continue;
-        uint32_t ours=hfx.packets+(buffer*3+i)*FX_PRIM;
-        for(unsigned w=1;w<10;w++)psx_mod_write_word(ours+4*w,psx_mod_read_word(prim+4*w));
-        psx_mod_write_word(ours,9u<<24|(psx_mod_read_word(prim)&0xffffff));
-        psx_mod_write_word(before,(psx_mod_read_word(before)&0xff000000u)|(ours&0xffffff));
-        unsigned u=(cell->x%64)*4,v=cell->y%256,flip=u0>u1;
-        unsigned clut=0x8000u|(pal_y-512)<<6|pal_x>>4;
-        unsigned page=0x800u|(cell->y>=768?0x10u:0)|(tpage&0x60)|cell->x/64;  /* upper half, the game's blending */
-        unsigned ul=flip?u+63:u,ur=flip?u:u+63;
-        psx_mod_write_word(ours+12,clut<<16|v<<8|ul);
-        psx_mod_write_word(ours+20,page<<16|v<<8|ur);
-        psx_mod_write_half(ours+28,(uint16_t)((v+63)<<8|ul));
-        psx_mod_write_half(ours+36,(uint16_t)((v+63)<<8|ur));
-        if(h->flags&HFX_PALETTE_FADE)
-            psx_mod_write_word(ours+4,(psx_mod_read_word(prim+4)&0xff000000u)|0x808080);
+        s[n++]=(HfxSwap){prim,cell,pal_x,pal_y,i,(h->flags&HFX_PALETTE_FADE)!=0};
     }
+    unsigned m=mists_64(s+n,buffer);
+    if(m)sparks_place();
+    if(n+m && hit_effect_64_packets())hfx_swap(s,n+m,buffer,trace);
 }
-/* hit_fx_update (0x8007745C) and its replay twin (0x80077524): entered (pc 0
- * or the entry, the dispatch's), then back from fx_sprites_update, the quads
- * linked (continuation 0x800774A8 / 0x80077570). */
+/* hit_fx_update (0x8007745C: a pause, a replay's fx_replay_update) and
+ * hit_fx_update_rec (0x80077524: a fight): entered (pc 0 or the entry, the
+ * dispatch's), then back from fx_sprites_update, the quads linked
+ * (continuation 0x800774A8 / 0x80077570). */
 extern void __real_func_8007745C(CPUState *cpu);
 extern void __real_func_80077524(CPUState *cpu);
 void __wrap_func_8007745C(CPUState *cpu) {
@@ -1989,6 +2181,53 @@ void __wrap_func_80077524(CPUState *cpu) {
     if(!at || at==0x80077524u)hit_effect_64_lives();
     __real_func_80077524(cpu);
     if(at==0x80077570u)hit_effect_64();
+}
+/* The knockdown smoke (F22): fx_scatter, three slots of six puffs at
+ * 0x8009E850 (0x370 bytes: the sprites at +0x10, 64 bytes each, a POLY_FT4
+ * each per frame buffer at +0x190 + 0xF0 buffer), box 3's sprites, started
+ * one every other frame and linked at slot 1 of the ordering table by
+ * fx_scatter_update (0x8004AA90), from fx_scatter_tick (0x8004AC24: a pause,
+ * a replay) and fx_scatter_advance (0x8004ACB4: a fight). Each puff from the
+ * smoke's cells. The image drawn, from the lives before and after: a puff
+ * started there is drawn at 1 and stepped. */
+static int16_t scatter_lives[SCATTER_PUFFS];
+static void scatter_64_lives(void) {
+    if(!hfx.on)return;
+    for(unsigned j=0;j<SCATTER_PUFFS;j++)
+        scatter_lives[j]=(int16_t)psx_mod_read_half(SCATTER+j/6*SCATTER_SLOT+0x10+j%6*FX_SPRITE+2);
+}
+static void scatter_64(void) {
+    const Hfx *h=hfx.on?spark_pack(SPARK_SMOKE):NULL;
+    if(!h || psx_mod_read_word(FX_DRAW_SKIP) || !psx_mod_gpu_high_vram_ready())return;
+    unsigned buffer=psx_mod_read_word(FX_BUFFER)&1,n=0;
+    HfxSwap s[SCATTER_PUFFS];
+    for(unsigned j=0;j<SCATTER_PUFFS;j++) {
+        uint32_t slot=SCATTER+j/6*SCATTER_SLOT,fx=slot+0x10+j%6*FX_SPRITE;
+        int life=(int16_t)psx_mod_read_half(fx+2),before=scatter_lives[j];
+        int k=life>0?(life==before?life-1:life-2):before-1;
+        if(k<0 || psx_mod_read_half(fx+0x20)!=hfx_sparks[SPARK_SMOKE].clut_x || psx_mod_read_half(fx+0x22)!=503 ||
+           psx_mod_read_half(fx+0x14)!=hfx_sparks[SPARK_SMOKE].vram_x || psx_mod_read_half(fx+0x16)!=hfx_sparks[SPARK_SMOKE].vram_y)
+            continue;
+        if((unsigned)k>=h->images)k=(int)h->images-1;
+        s[n++]=(HfxSwap){slot+0x190+buffer*0xf0+j%6*FX_PRIM,&sparks.smoke[k],sparks.pal.x,sparks.pal.y+SPARK_SMOKE,3+j,0};
+    }
+    if(!n || !hit_effect_64_packets())return;
+    sparks_place();
+    hfx_swap(s,n,buffer,hfx_trace());
+}
+extern void __real_func_8004AC24(CPUState *cpu);
+extern void __real_func_8004ACB4(CPUState *cpu);
+void __wrap_func_8004AC24(CPUState *cpu) {
+    uint32_t at=cpu->pc;
+    if(!at || at==0x8004ac24u)scatter_64_lives();
+    __real_func_8004AC24(cpu);
+    if(at==0x8004ac48u)scatter_64();
+}
+void __wrap_func_8004ACB4(CPUState *cpu) {
+    uint32_t at=cpu->pc;
+    if(!at || at==0x8004acb4u)scatter_64_lives();
+    __real_func_8004ACB4(cpu);
+    if(at==0x8004acd4u)scatter_64();
 }
 /* A cinematic does not run the fight's effect placing: a pack of the same
  * format is written there instead (its `effect`: a file, absolute or under
@@ -2081,9 +2320,15 @@ static void install_cpu_table(void) {
  * per guest ID whenever the overlay is loaded: the guest's own (F02, chosen
  * with the user, handoff/file-1.2.2.md), else Jin's. A guest boss is actor
  * 1 and loads as a CPU opponent does. A boss missing from the catalogue
- * gives way to Jin's boss of that stage. */
+ * gives way to Jin's boss of that stage. The overlay's code and routes
+ * (0x800B071C..0x800B088B, Jin's first) arrive a few frames before its
+ * table, zeros meanwhile: copied then (a guest's fight earlier, the
+ * attract's too, keeps this tick running through the load), every native
+ * read the route at address 0, Paul four times, and the patched code kept
+ * the copy (B112). Only a table whose native entries all point at a route
+ * is copied. */
 enum { FORCE_TABLE=0x800b6378, FORCE_NATIVE=92, FORCE_ENTRIES=64*4, FORCE_DEFAULT=9,
-       FORCE_JIN_ROUTE=0x800b071c, FORCE_STAGES=4, NO_BOSS=0xffffffffu };
+       FORCE_JIN_ROUTE=0x800b071c, FORCE_ROUTES_END=0x800b088c, FORCE_STAGES=4, NO_BOSS=0xffffffffu };
 static const struct { const char *guest,*boss[FORCE_STAGES]; } force_routes[]={
     {"kazuya",{"lee","paul","jin","heihachi"}},
     {"jun",{"kuma","lei","kazuya","heihachi"}},
@@ -2119,6 +2364,10 @@ static void install_force_bosses(void) {
     static uint32_t table,routes;
     if(psx_mod_read_word(0x800b2658)!=0x27bdffb8 || psx_mod_read_word(0x800b26d4)!=0x84720002 ||
        psx_mod_read_word(0x800b2694)!=0x3c05800b || psx_mod_read_word(0x800b2698)!=0x24a56378)return;
+    for(unsigned i=0;i<FORCE_NATIVE;i++) {
+        uint32_t route=psx_mod_read_word(FORCE_TABLE+i*4);
+        if(route<FORCE_JIN_ROUTE || route>=FORCE_ROUTES_END || (route-FORCE_JIN_ROUTE)%16)return;
+    }
     if(!table && !(table=psx_mod_alloc_guest_memory(FORCE_ENTRIES*4,16)))return;
     if(!routes && !(routes=psx_mod_alloc_guest_memory(ROUTES*FORCE_STAGES*4,16)))return;
     for(unsigned i=0;i<FORCE_ENTRIES;i++)

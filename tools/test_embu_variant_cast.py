@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Embu TTT's casting leaves variant 2 alone (GH#134, src/tekken3_ttt1_mod.c, embu_tick).
+"""Embu TTT's casting plays only the guests' Embu, T3's variants 0, 1, 2 left alone (GH#134, B104,
+src/tekken3_ttt1_mod.c embu_tick, src/tekken3_cine_trigger.c).
 
-    python tools/test_embu_variant_cast.py OUT --mods <dir> [--build build-rel-lite] [--embus 3] [--window]
+    python tools/test_embu_variant_cast.py OUT --mods <dir> [--build build-rel-lite] [--embus 4] [--window]
 
 Boots a private copy of a debug-server build (rel-lite: headless, software, x1; tools/test_guest_records_card.py's
 Game, its mods linked from the build then --mods, one with the TTT1 catalogue) on a new memory card in OUT/saves,
-"Unlock All Characters" and TTT Cinematics off (no TTT Embu in the rotation: every Embu is T3's), the Embu TTT
-casting at the launcher's defaults. Once the boot has read the card, the roster (0x80097EF0) and the tier
-(0x80097F1F) of a save with every character, so the game turns the Embu's variant (0x80097F20) through 0, 1, 2.
-No input: the attract alone (the Embu from the modes menu is not the natural one, TIPS § 28).
+"Unlock All Characters" and TTT Cinematics off (no TTT Embu in the rotation), the Embu TTT casting at the
+launcher's defaults. Once the boot has read the card, the roster (0x80097EF0) and the tier (0x80097F1F) of a save
+with every character: the rotation is guests (variant 0 with the casting), variants 2, 0, 1. No input: the attract
+alone (the Embu from the modes menu is not the natural one, TIPS § 28).
 
-For each Embu (state 6): its variant and the "TTT1 Embu: ... on ...'s model" grafts the log shows during it, plus
-the natives the two actors play (+0x14 >> 2). Checks (exit 1 otherwise): every variant seen, grafts in variants 0
-and 1, none in variant 2. OUT/embus.txt, OUT/game.log, OUT/states.txt. With PSX_FILM set (the local film patch),
-each Embu's first film frame is noted. Run through ressources/slot.py (--kind game).
+For each Embu (state 6): the rotation's turn ("Cine trigger: Embu rotation, ..." in the log), its variant and the
+"TTT1 Embu: ... on ...'s model" grafts the log shows during it, plus the natives the two actors play (+0x14 >> 2).
+Checks (exit 1 otherwise): every turn seen, grafts in the guests' Embu, none in variants 0, 1, 2. OUT/embus.txt,
+OUT/game.log, OUT/states.txt. With PSX_FILM set (the local film patch), each Embu's first film frame is noted. Run
+through ressources/slot.py (--kind game).
 """
 import argparse, os, shutil, sys, time
 from pathlib import Path
@@ -36,7 +38,7 @@ def main():
     ap.add_argument('out', type=Path)
     ap.add_argument('--build', default='build-rel-lite')
     ap.add_argument('--mods', type=Path, required=True)
-    ap.add_argument('--embus', type=int, default=3)
+    ap.add_argument('--embus', type=int, default=4)
     ap.add_argument('--window', action='store_true', help='a window instead of --headless (the film patch needs one)')
     a = ap.parse_args()
     a.out = a.out.resolve()
@@ -65,15 +67,17 @@ def main():
         g.wait(lambda: g.value(SCREEN, 2) == 3, 'no title after the boot', 120)
         g.write(ROSTER, 0x1fffff); g.write(TIER, 2, 1)
         rows.append(f'tier {g.value(TIER, 1)}, roster {g.value(ROSTER):#x}, variant {g.value(VARIANT, 1)}')
-        last, cur, log_at = None, None, 0
+        last, cur, log_at, turn = None, None, 0, None
         end = time.monotonic() + 900 + 400 * a.embus
         while time.monotonic() < end:
             st, ph = g.value(SCREEN, 2), g.value(PHASE, 2)
             if (st, ph) != last:
                 trace.append(f'{time.monotonic() - t0:8.2f} state {st:2d} phase {ph:3d} variant {g.value(VARIANT, 1)}')
             log = g.log(); new = log[log_at:log.rfind('\n') + 1]; log_at += len(new)
+            for line in new.splitlines():
+                if 'Cine trigger: Embu rotation, ' in line: turn = line.split('Embu rotation, ')[1].split(' ')[0]
             if st == 6 and cur is None:
-                cur = {'variant': g.value(VARIANT, 1), 'grafts': [], 'natives': set(),
+                cur = {'turn': turn, 'variant': g.value(VARIANT, 1), 'grafts': [], 'natives': set(),
                        'film': len(os.listdir(film)) if film else None}
             if cur is not None:
                 cur['grafts'] += [l.split('TTT1 Embu: ')[1] for l in new.splitlines() if "'s model at" in l]
@@ -83,7 +87,7 @@ def main():
                         cur['natives'].add(f'P{p + 1} {KEYS[n] if n < 20 else n}')
                 else:
                     embus.append(cur)
-                    rows.append(f'Embu {len(embus)}: variant {cur["variant"]}' +
+                    rows.append(f'Embu {len(embus)}: {cur["turn"]}, variant {cur["variant"]}' +
                                 (f', film from frame {cur["film"]}' if film else '') +
                                 f'\n  natives: {", ".join(sorted(cur["natives"]))}' +
                                 f'\n  grafts: {"; ".join(cur["grafts"]) or "none"}')
@@ -98,11 +102,12 @@ def main():
 
     problems = []
     if len(embus) < a.embus: problems.append(f'{len(embus)} Embus of {a.embus}')
-    for v in (0, 1, 2):
-        if not any(e['variant'] == v for e in embus): problems.append(f'no variant {v}')
+    for t in ('guests', 'v0', 'v1', 'v2'):
+        if not any(e['turn'] == t for e in embus): problems.append(f'no {t}')
     for e in embus:
-        if e['variant'] < 2 and not e['grafts']: problems.append(f'variant {e["variant"]}: no guest')
-        if e['variant'] == 2 and e['grafts']: problems.append(f'variant 2: guests {e["grafts"]}')
+        if e['turn'] == 'guests' and (e['variant'] != 0 or not e['grafts']):
+            problems.append(f'guests: variant {e["variant"]}, {len(e["grafts"])} grafts')
+        if e['turn'] != 'guests' and e['grafts']: problems.append(f'{e["turn"]}: guests {e["grafts"]}')
     rows.append('OK' if not problems else 'ECHEC: ' + '; '.join(problems))
     (a.out / 'embus.txt').write_text('\n'.join(rows) + '\n')
     print('\n'.join(rows))

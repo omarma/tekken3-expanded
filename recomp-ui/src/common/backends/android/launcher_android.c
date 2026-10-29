@@ -317,55 +317,38 @@ JNIEXPORT void JNICALL BRIDGE(nativeStep)(JNIEnv* env, jclass cls, jstring jid, 
 // ---- controllers -------------------------------------------------------------
 // The input sources a player can pick: None, Touch (player 1), then known and
 // connected pads. The ImGui dropdown's Keyboard is left out: a phone has none.
-typedef struct { int kind; char guid[40]; char name[64]; uint32_t id; int live; } Source;
+typedef struct { int kind; LauncherPadOption pad; } Source;
 
 static int list_sources(const LauncherModel* m, int p, Source* out, int max) {
     const SystemProfile* prof = (const SystemProfile*)m->profile;
     const int psx = prof && prof->id && strcmp(prof->id, "psx") == 0;
     int n = 0;
-    out[n++] = (Source){ 0, "", "None", 0, 1 };
-    if (p == 0 && psx) out[n++] = (Source){ 3, "", "Touch", 0, 1 };   // on-screen pad
-    #define PUSH_PAD(g, nm, pid, lv) do { \
-        int dup = 0; \
-        for (int k = 0; k < n; ++k) dup |= out[k].kind == 2 && strcmp(out[k].guid, (g)) == 0; \
-        if (!dup && (g)[0] && n < max) { \
-            Source src = { 2, "", "", (pid), (lv) }; \
-            snprintf(src.guid, sizeof(src.guid), "%s", (g)); \
-            snprintf(src.name, sizeof(src.name), "%s", \
-                     ((nm) && (nm)[0] && strcmp((nm), "Gamepad") != 0) ? (nm) : "Controller"); \
-            out[n++] = src; \
-        } } while (0)
-    if (psx) {
-        const int known = launcher_binds_psx_known_count();
-        for (int i = 0; i < known; ++i) {
-            char guid[40] = {0}, name[64] = {0};
-            if (!launcher_binds_psx_known_at(i, guid, (int)sizeof(guid), name, (int)sizeof(name)))
-                continue;
-            uint32_t id = 0; int live = 0;
-            for (int k = 0; k < g_pad_count; ++k)
-                if (strcmp(g_pads[k].guid, guid) == 0) { live = 1; id = g_pads[k].id; }
-            PUSH_PAD(guid, name, id, live);
-        }
+    memset(out, 0, (size_t)max * sizeof(*out));
+    out[n].kind = 0;
+    snprintf(out[n++].pad.label, sizeof(out[0].pad.label), "None");
+    if (p == 0 && psx) {   // on-screen pad
+        out[n].kind = 3;
+        snprintf(out[n++].pad.label, sizeof(out[0].pad.label), "Touch");
     }
-    for (int k = 0; k < g_pad_count; ++k)
-        PUSH_PAD(g_pads[k].guid, g_pads[k].name, g_pads[k].id, 1);
-    #undef PUSH_PAD
+    // Pads: the shared list (one entry per live device, unique labels).
+    LauncherPadOption pads[LNG_MAX_PADS + 16 + LNG_MAX_PLAYERS];
+    const int count = launcher_binds_pad_options(
+        m, p, g_pads, g_pad_count, pads, (int)(sizeof(pads) / sizeof(pads[0])));
+    for (int i = 0; i < count && n < max; ++i) {
+        out[n].kind = 2;
+        out[n++].pad = pads[i];
+    }
     return n;
 }
 
 static int source_selected(const LauncherModel* m, int p, const Source* s) {
     if (s->kind != 2) return m->s.player_src[p] == s->kind;
-    return m->s.player_src[p] == 2 && strcmp(m->s.player_gamepad_guid[p], s->guid) == 0;
+    return s->pad.selected;
 }
 
 static int source_claimed(const LauncherModel* m, int p, const Source* s) {
-    if (s->kind != 2) return 0;
-    const int n = launcher_model_visible_player_count(m);
-    for (int o = 0; o < n; ++o)
-        if (o != p && m->s.player_src[o] == 2 &&
-            strcmp(m->s.player_gamepad_guid[o], s->guid) == 0)
-            return 1;
-    return 0;
+    (void)m; (void)p;
+    return s->kind == 2 && s->pad.claimed;
 }
 
 static jstring players_json(JNIEnv* env) {
@@ -382,16 +365,17 @@ static jstring players_json(JNIEnv* env) {
             if (p) j_lit(&j, ",");
             j_lit(&j, "{"); j_key(&j, "player"); j_fmt(&j, "%d", p);
             j_lit(&j, ","); j_key(&j, "source");
-            j_str(&j, launcher_model_player_src_label(m, p));
+            char pad_label[96];
+            j_str(&j, m->s.player_src[p] == 2 &&
+                          launcher_binds_player_pad_label(m, p, g_pads, g_pad_count,
+                                                          pad_label, (int)sizeof(pad_label))
+                      ? pad_label : launcher_model_player_src_label(m, p));
             Source sources[LNG_MAX_PADS + 24];
             const int count = list_sources(m, p, sources, (int)(sizeof(sources) / sizeof(sources[0])));
             j_lit(&j, ","); j_key(&j, "sources"); j_lit(&j, "[");
             for (int i = 0; i < count; ++i) {
                 if (i) j_lit(&j, ",");
-                char label[96];
-                snprintf(label, sizeof(label), "%s%s", sources[i].name,
-                         sources[i].live ? "" : " (disconnected)");
-                j_lit(&j, "{"); j_key(&j, "label"); j_str(&j, label);
+                j_lit(&j, "{"); j_key(&j, "label"); j_str(&j, sources[i].pad.label);
                 j_lit(&j, ","); j_key(&j, "selected");
                 j_lit(&j, source_selected(m, p, &sources[i]) ? "true" : "false");
                 j_lit(&j, ","); j_key(&j, "claimed");
@@ -447,7 +431,7 @@ static void set_source(int p, int index) {
     const SystemProfile* prof = (const SystemProfile*)m->profile;
     const int psx = prof && prof->id && strcmp(prof->id, "psx") == 0;
     if (s->kind == 2) {
-        launcher_model_set_source(m, p, 2, s->id, s->name, s->guid);
+        launcher_model_set_source(m, p, 2, s->pad.id, s->pad.name, s->pad.guid);
         if (psx) launcher_binds_apply_psx_pad_profile(m, p);
     } else {
         launcher_model_set_source(m, p, s->kind, 0, NULL, NULL);

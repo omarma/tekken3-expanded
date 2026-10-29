@@ -298,11 +298,56 @@ static void draw_laser_beam(const uint32_t *ctrl,uint32_t ot,unsigned p) {
  *     garde (60, 30, -80), pointe z = -20 - compteur * 490 / 256.
  * Les lignes TTT1 passent aux os T3 comme le modele (convert.py : S2T, P2R,
  * PART_BONE), dont les reperes d'os sont ceux de TTT1. */
+/* Poignee de la lame (TTT1 0x801042B0, tools/ttt1/hilt.py) : 16 points dans le
+ * repere de la main, 14 quads textures opaques (0x2C) de la planche d'Unknown,
+ * faces arriere ecartees comme l'arcade, chacun a l'entree (z0 + z3) / 2 de la
+ * table d'ordre avec z = SZ >> 5, la regle du renderer natif (0x8003739C) : la
+ * poignee se range avec la main qui la tient. */
+extern int tekken3_ttt1_hilt(unsigned player,unsigned moveset,unsigned *bone,const int16_t (**points)[3],
+                             const unsigned char (**corners)[4],uint32_t words[][4]);
+enum { HILT_QUADS=14, HILT_POINTS=16 };
+static void draw_hilt(const uint32_t *ctrl,uint32_t ot,unsigned p,unsigned moveset) {
+    unsigned bone; const int16_t (*point)[3]; const unsigned char (*corner)[4]; uint32_t words[HILT_QUADS][4];
+    if(tekken3_ttt1_hilt(p,moveset,&bone,&point,&corner,words)!=HILT_QUADS) return;
+    static uint32_t bufs[2][2];
+    uint32_t *buf=bufs[p];
+    if(!buf[0]) { buf[0]=psx_mod_alloc_gpu_dma_memory(HILT_QUADS*40,16); buf[1]=psx_mod_alloc_gpu_dma_memory(HILT_QUADS*40,16); }
+    if(!buf[0] || !buf[1]) return;
+    uint32_t actor=0x800a9228+p*0x188c,m=actor+0x8f4+bone*68;
+    double r[9],s[HILT_POINTS][3];
+    for(unsigned i=0;i<9;i++) r[i]=(int16_t)psx_mod_read_half(m+i*2)/4096.0;
+    for(unsigned k=0;k<HILT_POINTS;k++) {
+        const int16_t *l=point[k]; int32_t w[3];
+        for(unsigned i=0;i<3;i++)
+            w[i]=(int32_t)psx_mod_read_word(m+0x14+i*4)+(int32_t)(r[i*3]*l[0]+r[i*3+1]*l[1]+r[i*3+2]*l[2]);
+        project_beam(ctrl,actor,w,s[k]);
+    }
+    uint32_t pkt=buf[(ot>>12)&1];
+    for(unsigned q=0;q<HILT_QUADS;q++,pkt+=40) {
+        const double *a=s[corner[q][0]],*b=s[corner[q][1]],*c=s[corner[q][2]],*d=s[corner[q][3]];
+        if(a[2]<=0 || b[2]<=0 || c[2]<=0 || d[2]<=0) continue;
+        int32_t x[4]={(int32_t)a[0],(int32_t)b[0],(int32_t)c[0],(int32_t)d[0]};
+        int32_t y[4]={(int32_t)a[1],(int32_t)b[1],(int32_t)c[1],(int32_t)d[1]};
+        /* le test de 0x801042B0 : (p2 - p0) x (p1 - p2) > 0 */
+        if((int64_t)(x[2]-x[0])*(y[1]-y[2])-(int64_t)(y[2]-y[0])*(x[1]-x[2])<=0) continue;
+        unsigned z=((((unsigned)a[2]>>5)+((unsigned)d[2]>>5))>>1)&0x3ff;
+        psx_mod_write_word(pkt+4,0x2C000000u|0x808080u);
+        for(unsigned k=0;k<4;k++) {
+            psx_mod_write_word(pkt+8+k*8,((uint32_t)y[k]&0xffff)<<16|((uint32_t)x[k]&0xffff));
+            psx_mod_write_word(pkt+12+k*8,words[q][k]);
+        }
+        uint32_t slot=ot+z*4;
+        psx_mod_write_word(pkt,(psx_mod_read_word(slot)&0xffffffu)|(9u<<24));
+        psx_mod_write_word(slot,pkt&0xffffffu);
+    }
+}
+
 static void draw_blade(const uint32_t *ctrl,uint32_t ot,unsigned p) {
     static unsigned grow[2],last[2];
     unsigned moveset=tekken3_guest_switches_on_button(p)?tekken3_guest_moveset(p):0;
     if(moveset!=last[p]) { last[p]=moveset; grow[p]=0; }
     if(moveset!=4 && moveset!=26) return;
+    draw_hilt(ctrl,ot,p,moveset);
     if(grow[p]<0x100) grow[p]+=0x20;
     int yoshimitsu=moveset==4;
     unsigned bone=yoshimitsu?10:6;

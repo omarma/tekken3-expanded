@@ -439,8 +439,10 @@ OBJECT_ARCHIVES = {3: 22, 11: 21}            # 0x8015FEF8: file 0 = TIMs (not pa
 EFFECTS, EFFECTS_EXTRA = 5, 6
 # 0x8015C4C0, files of archive 5 after its file 0 (the effects common to all
 # stages, low half, not the stage's), by stage. Stage 4's file 6 holds the
-# storm skies (far background entries 15-20); stage 7's file 11 (12 when
-# 0x8015F6A4 says True Ogre, character 0x17 or 0x5D) and archive 6 files 0-2
+# storm skies (far background entries 15-20); stage 7's file 11 (12, the
+# caged Panda's empty CLUT, when 0x8015F6A4 says True Ogre or Panda: her
+# models 0x5D / 0x17, Kuma's kick costumes in table 0x8001110C, among the
+# team members or fighters, 0x8015CE68; B114) and archive 6 files 0-2
 # its animated textures; stage 14's archive 6 files 3-8 its floor and veils.
 STAGE_EFFECTS = {3: [(5, 7), (5, 8)], 4: [(5, 6)], 6: [(5, 1), (5, 2), (5, 3)],
                  7: [(5, 11), (6, 0), (6, 1), (6, 2)], 11: [(5, 4), (5, 5)],
@@ -991,7 +993,7 @@ def object_commands(stage, models, cams, frame, framed=None):
 # rand() (0x8015F20C..0x8015F5AC, the 7 frame sequences 0x80028758..) that
 # copies one of 53 textures and its CLUT (0x80028834); stage 14: one CLUT of
 # 32 every frame (0x800289DC). Stage 7's runs only when 0x8015F6A4 is false
-# (no True Ogre, no character 0x17 or 0x5D).
+# (no True Ogre, no Panda: models 0x17 / 0x5D, see STAGE_EFFECTS).
 # ---------------------------------------------------------------------------
 ANIM_STAGE3, ANIM_STAGE6_EVEN, ANIM_STAGE6_ODD = 0x80028378, 0x800285F8, 0x80028478
 ANIM_STAGE6_MORE, ANIM_STAGE6_SWITCH, ANIM_STAGE6_CLUT = 0x80028678, 0x800286B8, 0x80028718

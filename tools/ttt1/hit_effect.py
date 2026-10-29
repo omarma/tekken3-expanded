@@ -96,7 +96,7 @@ HFX_MAGIC, HFX_VERSION, HFX_SIZE = b'HFX6', 1, 64
 HFX_PALETTE_FADE = 1                             # drapeau : fondu par les palettes, pas par la couleur de sommet
 
 
-def hfx_pack(vram_bytes, player=0, count=T3_FRAMES):
+def hfx_pack(vram_bytes, player=0, count=T3_FRAMES, order=None, palette=None):
     """Paquet 64 x 64 (F12) : les images TTT1 telles quelles, que le runtime
     met en VRAM haute (src/tekken3_ttt1_combat.c, hit_effect_64) au lieu du
     32 x 32 du paquet T3, qui reste le repli. Little-endian :
@@ -108,11 +108,16 @@ def hfx_pack(vram_bytes, player=0, count=T3_FRAMES):
       par ligne (pixel de gauche dans le quartet bas), 64 lignes.
 
     TTT1 : une palette, le fondu des 10 dernieres par la couleur de sommet
-    comme T3. Les etincelles de TTT PS2 (F13) ont une palette par image."""
+    comme T3. Les etincelles de TTT PS2 (F13) ont une palette par image.
+    order : les images de la planche dans cet ordre (le brouillard de TTT1,
+    pris dans la planche de la fumee) ; palette : 16 couleurs a la place de
+    celle de la planche."""
     idx, pal = sheet(vram_bytes, player)
-    head = struct.pack('<4s6H', HFX_MAGIC, HFX_VERSION, count, HFX_SIZE, 1, 0, 0)
+    if palette is not None: pal = np.frombuffer(palette, '<u2')
+    order = list(range(count)) if order is None else order
+    head = struct.pack('<4s6H', HFX_MAGIC, HFX_VERSION, len(order), HFX_SIZE, 1, 0, 0)
     images = b''.join((im[:, 0::2] | im[:, 1::2] << 4).astype(np.uint8).tobytes()
-                      for im in (image(idx, k) for k in range(count)))
+                      for im in (image(idx, k) for k in order))
     return head + pal.astype('<u2').tobytes() + images
 
 

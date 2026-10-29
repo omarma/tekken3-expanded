@@ -1,5 +1,6 @@
 #pragma once
-/* B87: Tekken 3 arcade's end-of-round cameras on its stages (Arcade Stages).
+/* B87: Tekken 3 arcade's end-of-round cameras on its stages (Arcade Stages),
+ * the loser's view excepted (B110).
  * Hooks of the routines tools/build_arcade_cameras.py rebuilds from the
  * recompiled source: each returns the PS1's operand unchanged unless a T3
  * arcade stage is drawn in a fight (or, for the replay, the replay was
@@ -17,17 +18,9 @@ enum {
     ARCREP_LOAD,                /* replay angles: halfwords at a quarter scale */
     ARCREP_STORE,
     ARCREP_DIST,                /* the distance the replay camera eases to */
-    ARCCAM_LOSER_RADIUS,        /* the loser's view: start distance, x sin / cos */
-    ARCCAM_LOSER_EYE_Y,
-    ARCCAM_LOSER_FIXED_MASK,    /* the fixed view's drawn angle: rand & mask, + bias */
-    ARCCAM_LOSER_FIXED_BIAS,
-    ARCCAM_LOSER_TARGET_Y,      /* the loser's height the view eases to */
-    ARCCAM_LOSER_FAR,           /* the eye follows past this distance */
-    ARCCAM_LOSER_STEP,          /* by this much x the difference / distance */
-    ARCCAM_LOSER_FIXED_HEIGHT,
 };
 
-enum { ARCCAP_BASE, ARCCAP_FLIP, ARCCAP_YAW, ARCCAP_FROM, ARCCAP_TO, ARCCAP_SIGN, ARCCAP_SIN, ARCCAP_COS, ARCCAP_COUNT };
+enum { ARCCAP_BASE, ARCCAP_FLIP, ARCCAP_YAW, ARCCAP_FROM, ARCCAP_TO, ARCCAP_SIGN, ARCCAP_COUNT };
 
 uint32_t tk3_arccam_v(uint32_t value, int which);
 uint32_t tk3_arccam_k(uint32_t value, uint32_t factor, int which);
@@ -35,4 +28,3 @@ int tk3_arccam_bc(int taken, int which);
 uint32_t tk3_arccam_cap(uint32_t value, int which);
 uint32_t tk3_arccam_got(int which);
 void tk3_arccam_replay_start(CPUState *cpu);
-void tk3_arccam_loser_pitch(CPUState *cpu);

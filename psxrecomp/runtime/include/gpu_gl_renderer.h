@@ -206,6 +206,13 @@ int gl_renderer_pres_get(uint64_t seq, GlPresEvent *out);
  * GL_TIME_ELAPSED times (CPU-overhead independent). Returns the count. */
 int gl_renderer_perf_aggregate(int wide_filter, double out[18]);
 
+/* Reference bench GPU pass (PSX_GL_DRAW_TIMES=1): the next present's GPU busy
+ * time (the sum of its draws', blits', clears', uploads' and copies' timestamp
+ * pairs) and how many there were, in order from *cursor (0 at first; records
+ * the ring overwrote are skipped). Returns 0 when none is ready. */
+int gl_renderer_draw_times_next(uint64_t *cursor, uint64_t *frame, uint32_t *busy_us,
+                                uint32_t *works);
+
 /* Native-wide mirror ablation (perf attribution, debug cmd gl_ws_ablate):
  * 0 = normal, 1 = skip the whole mirror pass (incl. wide_clear), 2 = full mirror
  * state churn without the draw calls, 3 = mirror draws stay on the hr FBO (no
@@ -219,6 +226,12 @@ uint64_t gl_renderer_perf_prim_split(double *out_tex_frac);
 /* Cumulative textured-batch diagnostics: total, then flushes caused by
  * isolation, blend-mode, mask, filter, backdrop-gate, texture-window, capacity. */
 void gl_renderer_batch_diag(uint64_t out[8]);
+/* GL operations since boot (debug cmd gl_ops, the reference bench's
+ * breakdown): presents; draws, clears, texture uploads, copies, blits; native-
+ * wide mirror passes, flat-batch flushes, semi-transparent textured
+ * triangles; then gl_renderer_batch_diag's eight. */
+#define GL_OP_COUNTS 17
+void gl_renderer_op_counts(uint64_t out[GL_OP_COUNTS]);
 
 #ifdef __cplusplus
 }

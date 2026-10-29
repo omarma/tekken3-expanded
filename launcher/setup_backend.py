@@ -822,9 +822,10 @@ def needs(include_ttt1,tekken3=None,cinematics=False):
     return not game_current(),rom
 
 def ttt_disc_supported(path):
-    """A Tekken Tag Tournament USA PS2 disc with the endings' music, the
-    stages' music (tools/ttt_stages/ps2_music_install.py checks the same) and
-    Devil's and Angel's laser textures (tools/ps2/ttt_laser_install.py)."""
+    """A Tekken Tag Tournament USA PS2 disc (version 1.00 or 2.00: the same
+    music, tools/ps2/ttt_disc.py TABLES) with the endings' music, the stages'
+    music (tools/ttt_stages/ps2_music_install.py checks the same) and Devil's
+    and Angel's laser textures (tools/ps2/ttt_laser_install.py)."""
     tools=Path(__file__).resolve().parents[1]/'tools'
     if str(tools) not in sys.path:sys.path.insert(0,str(tools))
     import ttt_cinematics
@@ -853,7 +854,8 @@ def ttt_disc_supported(path):
 TEKKEN3_EXPECTED=('Expected: MAME set tekken3, Tekken 3 (World, TET2/VER.E1), with the program ROMs tet2vere1.2e '
                   '(SHA-1 3a5638c6ad40bfde6e12fdfd6d469f6ea5e9f4fb) and tet2vere1.2j (SHA-1 554d1e42886d6a6c9c5857e9cbd5d7c37d7a6e67), '
                   'under these or older names. A zip with only tet1vere.2e and tet1vere.2j is the TET1 revision: not supported.')
-TTT_DISC_EXPECTED='Expected: Tekken Tag Tournament USA for PS2 (SLUS-20001), as a .cue with its .bin, a .bin or an .iso.'
+TTT_DISC_EXPECTED=('Expected: Tekken Tag Tournament USA for PS2 (SLUS-20001), version 1.00 or 2.00 (Greatest Hits), '
+                   'as a .cue with its .bin, a .bin or an .iso.')
 
 def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True):
     """The optional files given that this setup reads and cannot use: a

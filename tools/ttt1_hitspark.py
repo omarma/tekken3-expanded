@@ -20,6 +20,12 @@ gerbe d'un coup qui touche (ligne 28 de 8001AD30, sa palette rouge de la ROM ;
 MAME la montre verte avec le reglage d'usine de l'option des Service Options),
 et Guard-TTT1-hiteffect64.hfx, les etincelles d'un coup garde (ligne 30, teinte
 du jeu 80 / 96 / 128 : gris bleute). tools/ttt1/rom_ram.py SPARK_ROW, GUARD_ROW.
+Puis (F22) Throw-TTT1-hiteffect64.hfx, l'etincelle rose d'une projection (ligne
+29, 28 images, teinte 128 / 80 / 128), Smoke-TTT1-hiteffect64.hfx, la fumee
+d'une mise a terre (ligne 33, 30 images), et Mist-TTT1-hiteffect64.hfx, le
+brouillard empoisonne de Nina et Yoshimitsu : 21 images prises dans la planche
+de la fumee, avec sa propre palette (rom_ram.mist) ; le runtime les retrouve
+dans les cases de la fumee et n'en place que la palette.
 """
 import argparse, sys
 from pathlib import Path
@@ -30,11 +36,12 @@ import ttt1_import as I
 
 OUT = I.WORK / 'hitspark'
 # Natif de Tekken 3 (ID) -> son personnage dans TTT1 (le meme numero) ; Gon (17)
-# et Dr. B (19) ne sont pas dans TTT1.
+# et Dr. B (19) ne sont pas dans TTT1 : le runtime leur donne le paquet de Heihachi,
+# leur paquet T3 de 22 images etant le sien a l'octet (F22).
 NATIVES = dict(paul=0, law=1, lei=2, king=3, yoshimitsu=4, nina=5, hwoarang=6, xiaoyu=7, eddy=8, jin=9, julia=10,
                kuma=11, bryan=12, heihachi=13, ogre=14, mokujin=15, gunjack=16, anna=18, trueogre=20)
 MISHIMA = (9, 13)                      # 22 images, comme l'en-tete T3 ; 30 pour les autres
-COMMON = dict(Spark='SPARK_ROW', Guard='GUARD_ROW')   # 30 images chacune, comme TTT1
+COMMON = dict(Spark='SPARK_ROW', Guard='GUARD_ROW', Throw='THROW_ROW', Smoke='SMOKE_ROW')   # la longueur de TTT1
 
 
 def write(out=OUT):
@@ -47,8 +54,10 @@ def write(out=OUT):
         if key == 'jin': (out / 'Jin-TTT1-hiteffect.tim').write_bytes(H.t3_pack(vram, 0, frames))
     for name, row in COMMON.items():
         vram = R.effect_row_vram(I.TTT1, getattr(R, row))
-        (out / f'{name}-TTT1-hiteffect64.hfx').write_bytes(H.hfx_pack(vram, 0, 30))
-    print(f'TTT Hitspark : {len(NATIVES)} natifs et {len(COMMON)} etincelles communes dans {out.relative_to(ROOT)}')
+        (out / f'{name}-TTT1-hiteffect64.hfx').write_bytes(H.hfx_pack(vram, 0, R.effect_row_frames(I.TTT1, getattr(R, row))))
+    order, palette = R.mist(I.TTT1)
+    (out / 'Mist-TTT1-hiteffect64.hfx').write_bytes(H.hfx_pack(R.effect_row_vram(I.TTT1, R.SMOKE_ROW), 0, order=order, palette=palette))
+    print(f'TTT Hitspark : {len(NATIVES)} natifs, {len(COMMON)} etincelles communes et le brouillard dans {out.relative_to(ROOT)}')
 
 
 def main():

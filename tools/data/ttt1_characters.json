@@ -217,12 +217,12 @@
       "note": "pas de case au selecteur TTT1 : force_index (33 x 8) impose l'index au selecteur (0x80165C5C, tools/ttt1_select_probe.lua) ; moveset de depart 28 (celui de Jun). Modeles 112 (Poing) et 113 (Pied) ; 114 (variante 7) est le loup (spirit : Unknown-TTT1-wolf.*, F08). Vignette de grille envoyee en VRAM (960,960) avec les autres"
     }
   },
-  "_natives": "natives : natifs de Tekken 3 que la regle d'annulation d'Unknown ecarte (pas de donneur : Kuma, Ogre, Gun Jack, True Ogre) ; leur moveset TTT1 s'importe a part pour la carte MOVESET (tools/ttt1_import.py <cle>, sortie natives/<cle>). force_index = 8 x index de la table 0x801958C4 (Kuma 11, Ogre 14, Gun Jack 16, releve d'Unknown) ; capture : la capture d'un autre natif, avec les cles donnees ici ; t3 = numero du personnage Tekken 3. Panda est le costume 2 de Kuma : meme moveset.",
+  "_natives": "natives : natifs de Tekken 3 que la regle d'annulation d'Unknown ecarte (pas de donneur : Kuma, Ogre, Gun Jack, True Ogre) ; leur moveset TTT1 s'importe a part pour la carte MOVESET (tools/ttt1_import.py <cle>, sortie natives/<cle>). force_index = 8 x index de la table 0x801958C4 (Kuma 11, Ogre 14, Gun Jack 16, releve d'Unknown) ; capture : la capture d'un autre natif, avec les cles donnees ici ; t3 = numero du personnage Tekken 3. Panda est le costume 2 de Kuma : meme moveset. limbs : membre de toucher TTT1 >= 18 -> os du modele Tekken 3 du natif (il joue sur ce modele, pas sur le modele TTT1 converti dont l'import tire les autres) ; Ogre 19 = sa main gauche 6 (TTT1 et T3, 0x80041F4C, le lisent ainsi ; son os 19 est dans ses cheveux), True Ogre 19 = le bout de son bras-serpent, l'os 19 de son modele (B106) ; True Ogre 23 = le bout de ses cornes, l'os 2 decale de (800, 0, 600), point que TTT1 (MAME, bloc + 0xA8C + 0x50 x 23) et T3 (0x80041F4C, 0x8001DC40) calculent tous deux (Buffalo Horn, fin de Demon's Feast) ; l'import le mettait a 0, le bassin (B106, WS f+2).",
   "natives": {
     "kuma": {"t3": 11, "force_index": 88, "label": "KUMA"},
-    "ogre": {"t3": 14, "force_index": 112, "label": "OGRE"},
+    "ogre": {"t3": 14, "force_index": 112, "label": "OGRE", "limbs": {"19": 6}},
     "gunjack": {"t3": 16, "force_index": 128, "label": "GUN JACK"},
-    "trueogre": {"t3": 20, "force_index": 112, "capture": "ogre", "moveset": 14, "body": 20, "sound": 37, "label": "TRUE OGRE",
+    "trueogre": {"t3": 20, "force_index": 112, "capture": "ogre", "moveset": 14, "body": 20, "sound": 37, "label": "TRUE OGRE", "limbs": {"19": 19, "23": 23},
                  "note": "index 20 (TRUE) de la table 0x801958C4 : octets +7 corps 20, +8 son 37, +9 moveset 14 (celui d'Ogre). Force a l'index 160, le selecteur TTT1 montre un modele eclate et des cles vides (2026-10-01) : on convertit la capture d'Ogre avec le corps 20, qui decide des regles propres a True Ogre (conditions corps 0x85..0xEA)."}
   }
 }

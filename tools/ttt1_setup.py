@@ -231,6 +231,31 @@ def hit_effect_64():
     ttt1_hitspark.write()
 
 
+def unknown_hilt_step(roster, work):
+    """Unknown's costumes converted again with the hilt of her blade (tools/ttt1/hilt.py, B107):
+    model, textures, face, springs and .hilt of each, as a full import writes them (captures
+    and ROM regions reused)."""
+    if not imported('unknown'):
+        print("Unknown's blade hilt: skipped (Unknown not imported)", flush=True)
+        return
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1'), str(ROOT / 'tools/ttt1/model')]
+    import ttt1_import as I
+    report = json.loads((WORK / 'unknown/import-report.json').read_text())
+    ram, out = WORK / 'captures/unknown-select-ram.bin', WORK / 'unknown/guest'
+    for c, slot in enumerate(TABLE['unknown'].get('costumes') or [report['keys']['slot']], 1):
+        model = WORK / 'unknown' / ('ttt1.3dm' if c == 1 else f'costume{c}/ttt1.3dm')
+        if slot is None or not model.is_file() or not (out / f'Unknown-TTT1-arcade-P{c}.3dm').is_file(): continue
+        m = I.model(ram, slot, out, 'Unknown', model.parent, c)
+        print(f'  unknown costume {c}: {m["bytes"]} bytes', flush=True)
+def hitspark():
+    """The natives' and the common TTT Hitspark packs again, from the ROM
+    regions (tools/ttt1_hitspark.py): the throw spark, the knockdown smoke and
+    the poison mist (F22)."""
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1')]
+    import ttt1_hitspark
+    ttt1_hitspark.write()
+
+
 def has_work_files():
     """The import's work files are there: the ROM regions and the captures
     (gone once the setup's "free up disk space" deleted workspace/)."""
@@ -297,6 +322,12 @@ def mist_step(roster, work):
     M.main([WORK if work else roster])     # WORK: the guests' own folders and the roster
 
 
+def native_limbs_step(roster, work):
+    """Ogre's and True Ogre's left-arm and horn hit limbs in their move packs (tools/ttt1_retrofit_native_limbs.py, B106)."""
+    import ttt1_retrofit_native_limbs as N
+    N.main([WORK if work else roster])     # WORK: the natives' own folders and the roster
+
+
 UPDATE_STEPS = {'hands': hands_step,
                 'devil-jin': lambda roster, work: devil_jin(),
                 'panda-tiger': lambda roster, work: panda_tiger(),
@@ -308,7 +339,10 @@ UPDATE_STEPS = {'hands': hands_step,
                 'mist': mist_step,
                 'half-welds': half_welds_step,
                 'unknown-wolf': lambda roster, work: unknown_wolf(),
-                'hit-effect-64': lambda roster, work: hit_effect_64()}
+                'hit-effect-64': lambda roster, work: hit_effect_64(),
+                'native-limbs': native_limbs_step,
+                'unknown-hilt': unknown_hilt_step,
+                'hit-effect-64-more': lambda roster, work: hitspark()}
 
 
 def update(roster):

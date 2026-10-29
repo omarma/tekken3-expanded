@@ -18,6 +18,7 @@ static void tekken3_unlock_characters(void)
     const uint32_t doctor_progress_address = 0x80097EF6u;
     const uint32_t costume_address = 0x80097EF4u;
     const uint32_t costume_mask = (1u << 7) | (1u << 8) | (1u << 9);
+    const uint32_t tier_address = 0x80097F1Fu;
     if (!psx_mod_game_started()) return;
 
     uint32_t roster = psx_mod_read_word(roster_address);
@@ -28,6 +29,11 @@ static void tekken3_unlock_characters(void)
         psx_mod_write_word(costume_address, costumes | costume_mask);
     if (psx_mod_read_byte(doctor_progress_address) < 5u)
         psx_mod_write_byte(doctor_progress_address, 5u);
+    /* The save's tier (+0x2F) follows the roster as the game sets it after
+     * a game or a card read (2 with Dr. B's bit 19): the attract's Embu
+     * turns through its three variants from the first boot (B104). */
+    if (psx_mod_read_byte(tier_address) < 2u)
+        psx_mod_write_byte(tier_address, 2u);
 }
 
 static void tekken3_unlock_modes_movies(void)

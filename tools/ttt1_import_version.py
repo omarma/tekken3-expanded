@@ -14,7 +14,7 @@ Kept free of other imports: launcher/setup_backend.py reads it at every start.
 """
 from pathlib import Path
 
-TTT1_IMPORT_VERSION = 10
+TTT1_IMPORT_VERSION = 13
 STAMP = 'import-version.txt'
 
 # Update steps (implemented in tools/ttt1_setup.py, update_step): name ->
@@ -35,6 +35,9 @@ STEPS = {
     'half-welds': ('workspace', "Guests' joints (welds on whole vertices)"),
     'unknown-wolf': ('workspace', "Unknown's wolf spirit and its glow"),
     'hit-effect-64': ('workspace', "Strong-hit effects in 64 x 64 (TTT Hitspark)"),
+    'native-limbs': ('roster', "Ogre's and True Ogre's left-arm and horn hits (ws2, WS f+2 sparks)"),
+    'unknown-hilt': ('workspace', "The hilt of Unknown's blade (Yoshimitsu's and Kunimitsu's moves)"),
+    'hit-effect-64-more': ('workspace', "Throw spark, knockdown smoke and poison mist in 64 x 64 (TTT Hitspark)"),
 }
 
 # What brings a roster from version n - 1 to n: its update steps, in order, or
@@ -82,6 +85,20 @@ UPDATES = {
     # the guests' and Tekken 3's own cast's, drawn from the upper VRAM half by the TTT
     # Hitspark mod; the 32 x 32 pack stays the fallback (F12, GH#112).
     10: ['hit-effect-64'],
+    # 11: Ogre's and True Ogre's TTT1 limb 19 (left-arm moves, ws2 and WS f+2
+    # among them) read on their Tekken 3 model: Ogre's left hand 6, True Ogre's
+    # arm tip 19, not the converted TTT1 model's bone 20 (empty on Ogre: hit and
+    # spark at the arena's centre; True Ogre's tail: at his feet). True Ogre's
+    # limb 23 (Buffalo Horn, Demon's Feast) stays his horn tip 23, not his hips 0.
+    # B106, GH#152.
+    11: ['native-limbs'],
+    # 12: the hilt of Unknown's glowing blade, which TTT1 draws by code (0x801042B0)
+    # on Yoshimitsu's and Kunimitsu's moves: its quads and points from the ROM, its
+    # image kept by the texture packer, one .hilt per costume (B107, GH#150).
+    12: ['unknown-hilt'],
+    # 13: TTT1's throw spark, knockdown smoke and poison mist in 64 x 64 for the
+    # TTT Hitspark mod (Throw-, Smoke-, Mist-TTT1-hiteffect64.hfx, F22).
+    13: ['hit-effect-64-more'],
 }
 
 

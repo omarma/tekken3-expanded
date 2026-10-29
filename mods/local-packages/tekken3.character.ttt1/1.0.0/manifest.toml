@@ -40,7 +40,7 @@ id = "tekken3.ttt-stages"
 [[feature]]
 id = "ttt1-embu"
 name = "Embu TTT"
-description = "The attract-mode Embu (the dojo kata demo) played by TTT1 guests instead of the Tekken 3 cast: each native keeps his choreography and camera, the chosen guest takes his place. Needs TTT1 Characters."
+description = "One more attract-mode Embu (the dojo kata demo) played by TTT1 guests, in turn with Tekken 3's own: each native keeps his choreography and camera, the chosen guest takes his place. Needs TTT1 Characters."
 group = "Characters"
 default_enabled = true
 

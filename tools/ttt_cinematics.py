@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools/ttt1'))       # glyphs (t3_music)
 
-CINEMATICS_VERSION = 17
+CINEMATICS_VERSION = 18
 STAMP = 'version.txt'
 DATA = ROOT / 'tools/data/ttt_cinematics'
 WORK = ROOT / 'workspace/ttt1-import'

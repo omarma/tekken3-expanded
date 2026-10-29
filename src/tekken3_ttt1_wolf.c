@@ -57,9 +57,10 @@ enum {
     PAUSE=0x80095468,                   /* the solver keeps the local matrices it is given */
     PAUSED=0x80095494,                  /* the pause menu */
     SKIP_DRAW=0x800adca4, SCREEN=0x800ae204, PHASE=0x800ae224,
-    OT=0x800a8c54, BUFFER=0x800adefc, VBLANKS=0x800a08f0,
+    OT=0x800a8c54, BUFFER=0x800adefc,   /* 0 / 1, flipped once a drawn frame, in every arena */
     WORLD_VIEW=0x800adf70,              /* camera = R . world + T (src/tekken3_cine.c, sprites) */
     SOLVE=0x8003afcc, BODY=0x80037924,
+    FRAME_CYCLES=564480,                /* a VBlank of emulated time (interrupts.h) */
     RETURN=0x80010000,                  /* never reached: the nested call stops there */
     ROWS=27, HEADER=24+ROWS*56,
     PACKETS=0x12000,                    /* a wolf's packets, both buffers (about 2 x 32 KB) */
@@ -76,7 +77,7 @@ static struct {
     uint32_t gpu;                       /* both wolves' packets and sprites */
     uint16_t bones[3];                  /* the root and the two knees: 1, 13, 16 */
     struct { unsigned count; const unsigned char *frames; } seq[SEQS];
-    uint32_t uploaded;                  /* the frame counter at the last upload */
+    int uploaded; uint64_t uploaded_at; /* the emulated clock at the last upload */
 } pack;
 
 typedef struct { int32_t x,y,z,vx,vy,vz,life; unsigned counter; int alive; } Wisp;
@@ -85,7 +86,7 @@ static struct {
     uint32_t built_from;                /* her model header when wired */
     uint32_t start,next;                /* its packets */
     int32_t x,y,z; uint16_t angle;      /* the root, as the arcade's +0x53C and +2 */
-    uint32_t last_vblank, wobble;
+    uint64_t last_drawn; unsigned last_buffer; uint32_t wobble;
     int live;                           /* drawn on the frame before */
     unsigned a_counter,a_spawn,b_counter[2],c_counter,s_counter[2]; int a_alpha;
     Wisp wisps[4];
@@ -99,6 +100,12 @@ static int tracing(void) {
 static int wanted(void) {
     static int on=-1;
     if(on<0) { const char *e=getenv("TEKKEN3_UNKNOWN_WOLF"); on=!e || strcmp(e,"0"); }
+    return on;
+}
+/* TEKKEN3_WOLF_GLOW=0: the wolf without its glow (the performance bench's breakdown). */
+static int glowing(void) {
+    static int on=-1;
+    if(on<0) { const char *e=getenv("TEKKEN3_WOLF_GLOW"); on=!e || strcmp(e,"0"); }
     return on;
 }
 
@@ -490,19 +497,25 @@ void tekken3_ttt1_wolf_after_actor(CPUState *cpu,uint32_t actor) {
     }
     /* Phases 2..4 set a round up (the fighters back on their marks): no
      * wolf; it comes out of her again when the round starts, as 0x801694A8
-     * at each round, or after any frame she was not drawn. */
-    uint32_t vblank=psx_mod_read_word(VBLANKS);
-    if(psx_mod_read_half(PHASE)<6 || vblank-wolves[p].last_vblank>8) wolves[p].live=0;
+     * at each round, or after 8 frames she was not drawn. A step a game
+     * frame, told by the OT buffer flipping: the frame counter 0x800A08F0
+     * advances in the stage tiles' routine 0x8006D014 only, which the dark
+     * arena (True Ogre's, 0x800AFAA0) never runs, and the wolf stayed where
+     * it came out (B111). Gaps and uploads go by the emulated clock. */
+    uint64_t now=psx_cycle_count;
+    unsigned buffer=psx_mod_read_word(BUFFER)&1;
+    if(psx_mod_read_half(PHASE)<6 || now-wolves[p].last_drawn>8*FRAME_CYCLES) wolves[p].live=0;
     if(psx_mod_read_half(PHASE)<6) return;
-    if(!pack.uploaded || vblank-pack.uploaded>600 || !wolves[p].live) { upload_pack(); pack.uploaded=vblank|1; }
+    if(!pack.uploaded || now-pack.uploaded_at>600*FRAME_CYCLES || !wolves[p].live) {
+        upload_pack(); pack.uploaded=1; pack.uploaded_at=now;
+    }
     if(wolves[p].built_from!=psx_mod_read_word(MODELS+p*4) || !wolves[p].live) build(p);
     int32_t r[3];
     root_of(actor,r);
-    if(!wolves[p].live) { place(p); wolves[p].last_vblank=vblank; }
-    unsigned steps=vblank-wolves[p].last_vblank;
-    wolves[p].last_vblank=vblank;
+    if(!wolves[p].live) { place(p); wolves[p].last_buffer=buffer; }
+    unsigned steps=buffer!=wolves[p].last_buffer;
+    wolves[p].last_buffer=buffer; wolves[p].last_drawn=now;
     if(psx_mod_read_word(PAUSED)) steps=0;
-    if(steps>4) steps=4;
     wolves[p].live=1;
 
     uint64_t t0=tekken3_host_ns();
@@ -550,7 +563,7 @@ void tekken3_ttt1_wolf_after_actor(CPUState *cpu,uint32_t actor) {
         q+=size[(op>>3)-4];
     }
     while(steps--) step(p);
-    effects(&saved,p);
+    if(glowing()) effects(&saved,p);
     for(unsigned i=0;i<256;i++) psx_mod_write_word(0x1f800000+i*4,scratch[i]);
     *cpu=saved;
     psx_cyc_batch_flush();

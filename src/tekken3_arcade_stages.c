@@ -181,6 +181,7 @@ typedef struct {
     const uint32_t *lite;               /* LITE: 480 CLUT << 16 (stage 11) */
     const uint8_t *part;                /* PART (stage 2) */
     const uint8_t *glow;                /* GLOW (stage 11) */
+    const uint8_t *togr;                /* TOGR: True Ogre's colour, floor kind (0xFF none) */
 } Pack;
 
 static int s_on;                        /* the engine is up (either feature's activation) */
@@ -202,6 +203,7 @@ static unsigned s_stat_tiles, s_stat_floor, s_stat_far, s_stat_cone, s_stat_behi
 static struct {
     unsigned a98, a9a;                  /* 0x80243A98 / 0x80243A9A, u16 */
     int state, count, tick, frame;      /* stage 7's machine (0x80243A9E..) */
+    int cage_cleared;                   /* stage 7's empty cage written this round (B114) */
     int c, k, yaw;                      /* stage 3's object (0x80243B10, 0x80243B0C, 0x803535B2) */
     int was_over;                       /* the round was decided last frame */
     unsigned light;                     /* stage 11's floor lights (0x802437A8, 0..0xEF) */
@@ -833,6 +835,7 @@ static int pack_ttt(Pack *p) {
     }
     p->part = section(b, "PART");
     p->glow = section(b, "GLOW");
+    p->togr = section(b, "TOGR");
     return 1;
 }
 
@@ -971,6 +974,21 @@ static int ttt_wanted(void) {
     return tekken3_stage_source() == TEKKEN3_STAGE_TTT ? tekken3_stage_ttt_stage() : -1;
 }
 
+/* B124: TTT's True Ogre variant, its stages at night (0x801501C4 with
+ * 0x8015CE68(0x14): True Ogre in a team), here in Tekken 3's dark arena
+ * (0x800AFAA0: True Ogre fights, 0x80050F5C) of a fight, not a cinematic's
+ * stage: every colour the stage's TOGR byte (but stage 6's rewritten FT4),
+ * the tiles and primitives skipped with True Ogre, TOGR's floor kind, a
+ * black far background (0x80243790), no objects (0x801600C0), no stage 7
+ * animation (0x8015F6A4; its night texture file 5/12 lands only where the
+ * tiles left at night never read). ttt.Stage(true_ogre=True) is the
+ * reference. Not Unknown's stage for True Ogre as Arcade's CPU, the boss:
+ * drawn as it is. */
+static int ttt_night(void) {
+    return s_pack.source == TEKKEN3_STAGE_TTT && s_pack.togr && s_force < 0 && psx_mod_read_byte(DARK_ARENA)
+           && !tekken3_stage_true_ogre_boss();
+}
+
 /* The arcade stage draws this frame. */
 static int active(void) {
     if (!s_on || !psx_mod_gpu_high_vram_ready() || !psx_mod_game_started()) return 0;
@@ -978,7 +996,7 @@ static int active(void) {
     uint32_t mode = psx_mod_read_word(MODE);
     if (mode == 7 || mode == 8) return 0;
     /* The dark arena (True Ogre's fight) keeps the PS1's flat stage, unless
-     * a TTT stage is wanted there: stage 14 for True Ogre (stage source). */
+     * a TTT stage is wanted there: drawn at night (ttt_night). */
     int ttt = ttt_wanted();
     if (psx_mod_read_byte(DARK_ARENA) && ttt < 0) return 0;
     if (ttt >= 0) {
@@ -1059,13 +1077,16 @@ static void tj_begin(unsigned hook) {
  * TTT_OT_WIDE, the tiles and the floor's cells widened by a pixel
  * (wide_prim, ttt_floor_grid). The widened copies thus cover the slits
  * between the stage's pieces, where the far background showed through, but
- * nothing of the stage itself. */
+ * nothing of the stage itself. B121: an empty end entry before rank 976,
+ * like T3's list: linking rewrites the end's next word, and stage 2's
+ * snow and stage 11's beams, linked at 976 (TTT_OT_FIRST), went with it. */
+#define TTT_OT_END    975
 #define TTT_OT_FIRST  976
 #define TTT_OT_LAST   1023
 #define TTT_OT_WIDE   1024
 #define TTT_OT_FAR    1025
 #define TTT_OT_FILL   1026
-#define TTT_OT_RANKS  (TTT_OT_FILL - TTT_OT_FIRST + 1)
+#define TTT_OT_RANKS  (TTT_OT_FILL - TTT_OT_END + 1)
 #define TTT_OT_LINK  1010
 static uint32_t s_ttt_ot;
 static unsigned s_draws, s_ttt_ot_draw = ~0u;   /* stage frames drawn; the one the OT was set up for */
@@ -1087,13 +1108,13 @@ static uint32_t stage_ot(unsigned rank) {
     if (s_pack.source != TEKKEN3_STAGE_TTT) return main_ot(rank);
     if (rank < TTT_OT_FIRST) rank = TTT_OT_FIRST;
     if (rank > TTT_OT_LAST) rank = TTT_OT_LAST;
-    return ttt_ot() + 4u * (rank - TTT_OT_FIRST);
+    return ttt_ot() + 4u * (rank - TTT_OT_END);
 }
 
-static uint32_t ttt_slot(unsigned slot) { return ttt_ot() + 4u * (slot - TTT_OT_FIRST); }
+static uint32_t ttt_slot(unsigned slot) { return ttt_ot() + 4u * (slot - TTT_OT_END); }
 
 static unsigned stage_rank(uint32_t ot) {
-    return s_pack.source == TEKKEN3_STAGE_TTT ? (unsigned)((ot - s_ttt_ot) / 4 + TTT_OT_FIRST) : (unsigned)((ot - main_ot(0)) / 4);
+    return s_pack.source == TEKKEN3_STAGE_TTT ? (unsigned)((ot - s_ttt_ot) / 4 + TTT_OT_END) : (unsigned)((ot - main_ot(0)) / 4);
 }
 
 /* the TTT OT into the main one at 1010, once the frame's stage is drawn */
@@ -1285,6 +1306,27 @@ static void below_band(const Screen *s, int y, const uint8_t c[3]) {
  * of `desc` / `cluts`: stage 4's storm swaps them (entries 15..20). Low
  * resolution (FT4 64 x 32), as MAME runs TTT; mapped on the PS1 screen as
  * T3's. */
+static void ttt_far_texture(uint32_t ot, int r, uint16_t d, uint32_t clut, int xa, int ya, int xb, int yb) {
+    uint32_t tp = (uint32_t)(((d >> 4) & 0x100) >> 4 | ((d >> 8) & 0xF) | ((d >> 4) & 0x200) << 2);
+    int u = (d * 32) & 0xFF, v = ((d & 0x38) * 4) & 0xFF;
+    int v0 = v, v1 = v + 0x3F;
+    if (s_pack.stage == 5 && r == 3) { v0 = v + 0x3F; v1 = v; }
+    uint32_t q = alloc_words(10);
+    if (q) {
+        psx_mod_write_word(q + 4, 0x2C808080u);
+        psx_mod_write_word(q + 8, xy(xa, ya));
+        psx_mod_write_word(q + 12, clut << 16 | (uint32_t)(v0 & 0xFF) << 8 | (uint32_t)u);
+        psx_mod_write_word(q + 16, xy(xb, ya));
+        psx_mod_write_word(q + 20, tp << 16 | (uint32_t)(v0 & 0xFF) << 8 | (uint32_t)((u + 0x3F) & 0xFF));
+        psx_mod_write_word(q + 24, xy(xa, yb));
+        psx_mod_write_word(q + 28, (uint32_t)(v1 & 0xFF) << 8 | (uint32_t)u);
+        psx_mod_write_word(q + 32, xy(xb, yb));
+        psx_mod_write_word(q + 36, (uint32_t)(v1 & 0xFF) << 8 | (uint32_t)((u + 0x3F) & 0xFF));
+        add_prim(ot, q, 9);
+        s_stat_far++;
+    }
+}
+
 static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16_t *desc, const uint16_t *cluts) {
     const Pack *p = &s_pack;
     uint32_t ot = ttt_slot(TTT_OT_FAR);     /* TTT's rank 1023 */
@@ -1327,26 +1369,7 @@ static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16
                 int k = pmod(col0 + c, p->fcols);
                 int xa = map_x(s, x), xb = map_x(s, x + 0x40), ya = map_y(s, y), yb = map_y(s, y + step);
                 if (kind == 0x31) {
-                    uint16_t d = desc[r * p->fcols + k];
-                    uint32_t tp = (uint32_t)(((d >> 4) & 0x100) >> 4 | ((d >> 8) & 0xF) | ((d >> 4) & 0x200) << 2);
-                    int u = (d * 32) & 0xFF, v = ((d & 0x38) * 4) & 0xFF;
-                    int v0 = v, v1 = v + 0x3F;
-                    if (p->stage == 5 && r == 3) { v0 = v + 0x3F; v1 = v; }
-                    uint32_t clut = cluts[r * p->fcols + k];
-                    uint32_t q = alloc_words(10);
-                    if (q) {
-                        psx_mod_write_word(q + 4, 0x2C808080u);
-                        psx_mod_write_word(q + 8, xy(xa, ya));
-                        psx_mod_write_word(q + 12, clut << 16 | (uint32_t)(v0 & 0xFF) << 8 | (uint32_t)u);
-                        psx_mod_write_word(q + 16, xy(xb, ya));
-                        psx_mod_write_word(q + 20, tp << 16 | (uint32_t)(v0 & 0xFF) << 8 | (uint32_t)((u + 0x3F) & 0xFF));
-                        psx_mod_write_word(q + 24, xy(xa, yb));
-                        psx_mod_write_word(q + 28, (uint32_t)(v1 & 0xFF) << 8 | (uint32_t)u);
-                        psx_mod_write_word(q + 32, xy(xb, yb));
-                        psx_mod_write_word(q + 36, (uint32_t)(v1 & 0xFF) << 8 | (uint32_t)((u + 0x3F) & 0xFF));
-                        add_prim(ot, q, 9);
-                        s_stat_far++;
-                    }
+                    ttt_far_texture(ot, r, desc[r * p->fcols + k], cluts[r * p->fcols + k], xa, ya, xb, yb);
                 } else if (kind == 0x74) {
                     tile_rect(ot, xa, ya, xb - xa, yb - ya, cell_rgb);
                 } else if (kind == 0x64) {
@@ -1355,8 +1378,18 @@ static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16
                     /* B77: a cell TTT leaves empty, which its cameras always
                      * see covered by the stage (stage 5 has many); the PS1's
                      * see through it. The cell colour, under everything
-                     * (TTT_OT_FILL): only what nothing else covers. */
-                    tile_rect(ttt_slot(TTT_OT_FILL), xa, ya, xb - xa, yb - ya, cell_rgb);
+                     * (TTT_OT_FILL): only what nothing else covers.
+                     * A cinematic's cameras (the PS2's) look anywhere: there,
+                     * B87's rule, the nearest textured cell above in the
+                     * column (its sky) drawn again in its place (Wang's
+                     * ending, stage 1: row 1's empty cells behind the gate
+                     * showed black over the roofs). */
+                    int up = s_force >= 0 ? r - 1 : -1, ci = pmod(kind0 + c, p->fring);
+                    while (up >= 0 && p->fkinds[up * p->fring + ci] != 0x31) up--;
+                    if (up >= 0)
+                        ttt_far_texture(ttt_slot(TTT_OT_FILL), up, desc[up * p->fcols + k], cluts[up * p->fcols + k], xa, ya, xb, yb);
+                    else
+                        tile_rect(ttt_slot(TTT_OT_FILL), xa, ya, xb - xa, yb - ya, cell_rgb);
                 }
             }
             x += 0x40;
@@ -1552,7 +1585,7 @@ static void tiles(const Gte *g, const Screen *s, uint32_t ot_a, uint32_t ot_b) {
     static int sx[256], sy[256], sz[256];
     static int32_t px[256], py[256];
     int8_t vis[256];
-    int ttt = s_pack.source == TEKKEN3_STAGE_TTT;
+    int ttt = s_pack.source == TEKKEN3_STAGE_TTT, night = ttt_night();
     visible_tiles(s, vis);
     /* stage_check.py probe: every 15th frame, the inputs of ttt.geometry_commands
      * and every primitive TTT's rules keep (before the guard behind the camera) */
@@ -1572,14 +1605,15 @@ static void tiles(const Gte *g, const Screen *s, uint32_t ot_a, uint32_t ot_b) {
         const Tile *tl = &s_pack.tiles[t];
         unsigned nv = tl->head->nv;
         s_stat_cone += vis[t] > 0;
-        if (!tl->head->np || tl->head->skipped || nv > 0x100 || vis[t] <= 0) continue;
+        /* format 4: TileHead pad = skipped with True Ogre (pack.py) */
+        if (!tl->head->np || (night ? tl->head->pad : tl->head->skipped) || nv > 0x100 || vis[t] <= 0) continue;
         for (unsigned i = 0; i < nv; i++) rtps(g, tl->v[i].x, tl->v[i].y, tl->v[i].z, &sx[i], &sy[i], &sz[i], &px[i], &py[i]);
         uint32_t ot = (tl->head->layer_b ? ot_b : ot_a) + 4u * tl->head->slot;
         for (unsigned k = 0; k < tl->head->np; k++) {
             const Prim *pr = &tl->p[k];
             /* format 4: PRIM byte 6 = third culling vertex | flags (pack.py) */
             unsigned flags = ttt ? pr->cull & 0xF8u : 0;
-            if (pr->kind > 6 || (flags & PRIM_MASKED)) continue;
+            if (pr->kind > 6 || (flags & PRIM_MASKED) || (night && (flags & PRIM_MASKED_TO))) continue;
             unsigned a = pr->idx[0], b = pr->idx[1], c = pr->idx[pr->cull & 7];
             if (a >= nv || b >= nv || c >= nv) continue;
             /* TTT (0x801542A4): a frame test before NCLIP (one of the three
@@ -1600,6 +1634,12 @@ static void tiles(const Gte *g, const Screen *s, uint32_t ot_a, uint32_t ot_b) {
                 fprintf(s_probe, "\n");
             }
             if (behind) { s_stat_behind++; continue; }
+            Prim dark;
+            if (night && !(flags & PRIM_KEEPS_COLOUR)) {
+                dark = *pr;
+                memset(dark.rgb, s_pack.togr[0], sizeof dark.rgb);
+                pr = &dark;
+            }
             s_stat_tiles += emit_prim(ot, pr, sx, sy, px, py, sz);
             if (!(pr->code & 2)) wide_prim(pr, sx, sy);
         }
@@ -2604,7 +2644,9 @@ static void ttt_floor_grid(const View *w, const Screen *s, int light1[2], int li
     static int sx[256], sy[256], sz[256];
     static uint8_t lum[256];
     for (unsigned i = 0; i < p->gnv; i++) rtps(&g, p->gverts[2 * i], 0, p->gverts[2 * i + 1], &sx[i], &sy[i], &sz[i], NULL, NULL);
-    if (p->gkind == 0) {
+    /* B124: at night TOGR's kind (0x8011C204: kind 0 lit around the fighters, 2) */
+    int kind = ttt_night() && p->togr[1] <= 2 ? p->togr[1] : p->gkind;
+    if (kind == 0) {
         int dx = w->cam[0] - ((light1[0] + light2[0]) >> 1), dz = w->cam[2] - ((light1[1] + light2[1]) >> 1);
         int d = sqrt0(i32((int64_t)dx * dx + (int64_t)dz * dz), p->tsqrt);
         for (unsigned i = 0; i < p->gnv; i++) {
@@ -2613,7 +2655,7 @@ static void ttt_floor_grid(const View *w, const Screen *s, int light1[2], int li
             v = (int)(((int64_t)v * 0x1A36) >> 16);
             lum[i] = p->gramp[v > 0x3FF ? 0x3FF : v];
         }
-    } else if (p->gkind == 2) {
+    } else if (kind == 2) {
         int mx = (light1[0] + light2[0]) >> 1, mz = (light1[1] + light2[1]) >> 1;
         for (unsigned i = 0; i < p->gnv; i++) {
             int64_t ex = mx - (cx + p->gverts[2 * i]), ez = mz - (cz + p->gverts[2 * i + 1]);
@@ -3126,11 +3168,37 @@ static void hivram_move(int sx, int sy, int w, int h, int dx, int dy) {
     if (s_probe) fprintf(s_probe, "tm %d %d %d %d %d %d\n", sx, sy, w, h, dx, dy);
 }
 
+/* 0x8015F6A4 (B114, TIPS section 189): stage 7's caged Panda is left out
+ * when Panda takes part. TTT1 looks for Panda's models 0x5D and 0x17
+ * (Kuma's kick costumes, table 0x8001110C) among the four team members and
+ * the two fighters, and for True Ogre (0x14); it then loads archive 5 file
+ * 12 instead of 11 (the cage's texture with an all-zero CLUT, so nothing
+ * shows) and never runs the machine. Here: Kuma (ID 11) in his kick
+ * costume, Panda, on either side, the fighters of the fight (Team Battle:
+ * the ones on the field). True Ogre never fights on a TTT stage but 14. */
+static int stage7_cage_empty(void) {
+    for (unsigned p = 0; p < 2; p++)
+        if (psx_mod_read_half(0x800ADD5Cu + 2 * p) == 11 && (psx_mod_read_half(0x800ADD98u + 2 * p) & 3) == 1) return 1;
+    return 0;
+}
+
+/* The cage's CLUT (the machine's destination) set to zeros, as file 5:12
+ * leaves it: needed when the pack stays loaded after a fight without Panda */
+static void stage7_cage_clear(const uint8_t *dest) {
+    int dx = rd16(dest), dy = rd16(dest + 2);
+    uint16_t zero[16] = {0};
+    if (!s_pack.hivram || dx < 0 || dx + 16 > 1024 || dy < 512 || dy >= 1024) return;
+    memset(&s_pack.hivram[(size_t)(dy - 512) * 1024 + dx], 0, sizeof zero);
+    psx_mod_gpu_high_vram_upload(dx, dy, 16, 1, zero);
+    if (s_probe) fprintf(s_probe, "tz %d %d\n", dx, dy);
+}
+
 /* 0x8015F638 (each round, the stage load) */
 static void tanm_reset(void) {
     s_tttanim.a98 = s_tttanim.a9a = 0xFFFF;
     s_tttanim.state = s_tttanim.count = s_tttanim.tick = 0;
     s_tttanim.frame = -1;
+    s_tttanim.cage_cleared = 0;
 }
 
 /* stage 7's sequences: s16 x 26 x 7 after TANM's 4 bytes */
@@ -3199,8 +3267,10 @@ static void tanm_step(void) {
     unsigned old = s_tttanim.a9a;
     s_tttanim.a98 = (s_tttanim.a98 + 1) & 0xFFFF;
     s_tttanim.a9a = (s_tttanim.a9a + 1) & 0xFFFF;
-    if (s_probe) fprintf(s_probe, "ttanim %u %d %u %u %d %d %d %d\n", psx_mod_read_word(0x800A08F0u), s_pack.stage,
-                         s_tttanim.a98, s_tttanim.a9a, s_tttanim.state, s_tttanim.count, s_tttanim.tick, s_tttanim.frame);
+    int empty_cage = s_pack.stage == 7 && stage7_cage_empty();
+    if (s_probe) fprintf(s_probe, "ttanim %u %d %u %u %d %d %d %d %d\n", psx_mod_read_word(0x800A08F0u), s_pack.stage,
+                         s_tttanim.a98, s_tttanim.a9a, s_tttanim.state, s_tttanim.count, s_tttanim.tick, s_tttanim.frame,
+                         !empty_cage);
     const uint8_t *q = t + 4;
     switch (s_pack.stage) {
     case 3: {
@@ -3236,6 +3306,15 @@ static void tanm_step(void) {
         break;
     }
     case 7: {
+        if (ttt_night()) break;         /* 0x8015F6A4: not with True Ogre (B124) */
+        if (empty_cage) {
+            if (!s_tttanim.cage_cleared) stage7_cage_clear(q + 364 + 8 * 53);
+            s_tttanim.cage_cleared = 1;
+            s_tttanim.state = 0;                     /* once she leaves, the machine starts over */
+            s_tttanim.frame = -1;
+            break;
+        }
+        s_tttanim.cage_cleared = 0;
         stage7_machine();
         if (s_tttanim.frame != -1 && s_tttanim.frame >= 0 && s_tttanim.frame < 53) {
             const uint8_t *f = q + 364 + 8 * s_tttanim.frame, *dest = q + 364 + 8 * 53;
@@ -3406,6 +3485,54 @@ static void beam_bones(void) {
     if (e && *e) sscanf(e, "%d,%d", &s_beam_bones[0], &s_beam_bones[1]);
 }
 
+/* ---- B126: stage 11's wind on the accessory bones ---- */
+/* 0x801631FC gives the wind the beams' direction (x and z: the signs of the
+ * round's angle's sine and cosine); 0x801649A4, once a frame of the fight,
+ * blows it in gusts of 16 frames: b = 0..255..0 (+32 a frame), the vector
+ * (x b, 256 - b, z b) normalized to 4096 (MAME: 0x80243B90 / 94). TTT's
+ * accessory solver (0x80163B68) pulls a bone in the air sideways by its x and
+ * z times the bone's gravity / 256; nothing on the other stages, where T3's
+ * (0x80037CBC) pulls by gravity / 16 on every arena. */
+static int s_wind_sign[2], s_wind_phase, s_wind[2];
+static uint32_t s_wind_frame;
+
+static void wind_reset(int dx, int dz) {
+    s_wind_sign[0] = dx; s_wind_sign[1] = dz;
+    s_wind_phase = 0;
+    s_wind[0] = s_wind[1] = 0;
+}
+
+static void wind_step(void) {
+    s_wind_phase += 0x20;
+    int b = s_wind_phase & 0x100 ? ~s_wind_phase & 0xFF : s_wind_phase & 0xFF;
+    double v[3] = {s_wind_sign[0] * b, 0x100 - b, s_wind_sign[1] * b};
+    double l = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    s_wind[0] = (int)lround(v[0] * 4096 / l);
+    s_wind[1] = (int)lround(v[2] * 4096 / l);
+}
+
+int tekken3_ttt_stage_wind(int wind[2]) {
+    static int off = -1;            /* TEKKEN3_TTT_WIND=0: no wind, for comparison */
+    if (off < 0) { const char *e = getenv("TEKKEN3_TTT_WIND"); off = e && !strcmp(e, "0"); }
+    if (off || s_pack.source != TEKKEN3_STAGE_TTT || !s_pack.glow || psx_mod_read_word(0x800A08F0u) - s_wind_frame > 2) return 0;
+    wind[0] = s_wind[0]; wind[1] = s_wind[1];
+    return 1;
+}
+
+/* T3's solver: its pull, built at 0x80037FEC (x = z = gravity >> 4, y =
+ * (256 - gravity) * 16, the bone's block in s3), goes to ApplyRotMatrix
+ * (0x80081FD8, a0) back to 0x80038014; on stage 11, TTT's x and z */
+extern void __real_func_80081FD8(CPUState *cpu);
+void __wrap_func_80081FD8(CPUState *cpu) {
+    int wind[2];
+    if ((cpu->pc == 0 || cpu->pc == 0x80081FD8u) && cpu->gpr[31] == 0x80038014u && tekken3_ttt_stage_wind(wind)) {
+        int g = (int16_t)psx_mod_read_half(cpu->gpr[19] + 10);
+        psx_mod_write_half(cpu->gpr[4], (uint16_t)(wind[0] * g / 256));
+        psx_mod_write_half(cpu->gpr[4] + 4, (uint16_t)(wind[1] * g / 256));
+    }
+    __real_func_80081FD8(cpu);
+}
+
 /* 0x801631FC at each round: one direction for the round, each part's walk */
 static void beams_reset(void) {
     s_beam_angle = storm_rand() & 0xE00;
@@ -3414,6 +3541,7 @@ static void beams_reset(void) {
     int dx = sn > 0 ? 1 : sn < 0 ? -1 : 0, dz = cs > 0 ? 1 : cs < 0 ? -1 : 0;
     double l = sqrt((double)(dx * dx + dz * dz));
     s_beam_dir[0] = l > 0 ? (int)(dx * 4096 / l) : 0; s_beam_dir[1] = 0; s_beam_dir[2] = l > 0 ? (int)(dz * 4096 / l) : 0;
+    wind_reset(dx, dz);
     s_beam[0][0].phase = -(storm_rand() & 0x1FE);
     s_beam[0][1].phase = -(storm_rand() & 0x1FE);
     s_beam[1][0].phase = s_beam[1][1].phase = 0;
@@ -3603,7 +3731,9 @@ static void ttt_anim_tick(const Screen *s) {
         if (s_pack.glow) beams_reset();
     }
     s_tttanim.was_over = over;
+    s_wind_frame = psx_mod_read_word(0x800A08F0u);
     if (psx_mod_read_word(PAUSED)) return;
+    if (s_pack.glow) wind_step();
     tanm_step();
     if (s_pack.stage == 3 && s_pack.nlayout) object3_step();
     particles_step(s);
@@ -3963,8 +4093,6 @@ static void stage_draw(CPUState *cpu) {
     /* T3: A at 1010, B at 1021; TTT (0x80153738): A at 995, B at 1021, stage 3
      * A 1021, B 1022 (MISC) */
     uint32_t r1010 = stage_ot(s_pack.rank_a), r1021 = stage_ot(s_pack.rank_b);
-    psx_mod_write_word(ot_a, psx_mod_read_word(r1010) & 0xFFFFFFu);
-    psx_mod_write_word(ot_b, psx_mod_read_word(r1021) & 0xFFFFFFu);
     int ttt = s_pack.source == TEKKEN3_STAGE_TTT;
     /* PGXP covers the arcade stages only (see the floor hook). */
     s_precise = psx_mod_precision_wanted() && !ttt;
@@ -3973,10 +4101,18 @@ static void stage_draw(CPUState *cpu) {
     /* TTT: the far background takes the sky of the previous frame's storm */
     int sky = ttt && s_pack.storm ? s_storm.sky : 4;
     if (ttt) storm_step(cpu);
+    static unsigned night_said = ~0u;       /* the fight's decision and pack last said at night */
+    unsigned night_key = tekken3_stage_decisions() ^ s_pack_generation << 16;
+    if (ttt && ttt_night() && night_said != night_key) {
+        night_said = night_key;
+        fprintf(stdout, "arcade stages: TTT stage %d at night (True Ogre, colour %u, floor kind %d)\n", s_pack.stage,
+                s_pack.togr[0], s_pack.togr[1] <= 2 ? s_pack.togr[1] : s_pack.gkind);
+        fflush(stdout);
+    }
     tiles(&g, &s, ot_a, ot_b);
     if (ttt) {      /* TTT Stages S4: stage 3's object, stage 11's beams, stage 2's particles */
         Gte w;
-        ttt_objects(&g, &s);
+        if (!ttt_night()) ttt_objects(&g, &s);
         world_gte(cpu, &w);
         beams_draw(&w, stage_ot(TTT_OT_FIRST));
         particles_draw(&w, stage_ot(TTT_OT_FIRST));
@@ -3985,6 +4121,11 @@ static void stage_draw(CPUState *cpu) {
         objects(&g);
     }
     tj_fix();
+    /* B117: A and B lead to what their ranks hold once the objects are
+     * linked: TTT's stage 3 links its carousel at 1022, B's rank, and the
+     * game draws B, then the carousel (ttt.Stage.frame) */
+    psx_mod_write_word(ot_a, psx_mod_read_word(r1010) & 0xFFFFFFu);
+    psx_mod_write_word(ot_b, psx_mod_read_word(r1021) & 0xFFFFFFu);
     psx_mod_write_word(r1010, (psx_mod_read_word(r1010) & 0xFF000000u) | ((ot_a + 60) & 0xFFFFFFu));
     psx_mod_write_word(r1021, (psx_mod_read_word(r1021) & 0xFF000000u) | ((ot_b + 60) & 0xFFFFFFu));
     /* the PS1 tiles dropped: its private OT (2 slots, linked by 0x8006D7CC
@@ -3992,7 +4133,10 @@ static void stage_draw(CPUState *cpu) {
      * leading straight to slot 0 */
     uint32_t priv = PRIVATE_OT + 8u * b;
     psx_mod_write_word(priv + 4, (psx_mod_read_word(priv + 4) & 0xFF000000u) | (priv & 0xFFFFFFu));
-    if (ttt) {
+    if (ttt && ttt_night()) {       /* B124: one black TILE (0x80243790) */
+        static const uint8_t black[3];
+        tile_rect(ttt_slot(TTT_OT_FAR), -s.margin, 0, SCREEN_W + 2 * s.margin, SCREEN_H, black);
+    } else if (ttt) {
         int e = sky >= 15 && sky <= 20 ? sky - 15 : -1;
         far_background_ttt(&s, (int)psx_mod_read_word(CAMERA + 4) - s_axis_before - s_pack.axis0,
                            (int)psx_mod_read_word(CAMERA), e >= 0 ? s_pack.sskydesc[e] : s_pack.fdesc,
@@ -4099,7 +4243,7 @@ void __wrap_func_8004610C(CPUState *cpu) {
  * The dark arena (0x800AFAA0, True Ogre's fight): 0x8006D7CC calls only
  * this TILE (0x8006D810), never the stage routine 0x8006D014, and the
  * floor routine is 0x80049848 (0x80048134), hooked as usual. With a TTT
- * stage wanted there (stage 14 for True Ogre, src/tekken3_stage_source.c)
+ * stage wanted there (drawn at night, ttt_night, src/tekken3_stage_source.c)
  * the TTT stage is drawn here instead of the TILE, as after 0x8006D014 (its
  * far background covers the screen, as in a lit arena): the camera and the
  * GTE screen are the fight's; no axis step (the PS1 routine that turns it

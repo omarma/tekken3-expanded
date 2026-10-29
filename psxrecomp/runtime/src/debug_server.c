@@ -8077,6 +8077,56 @@ static void handle_synth_recurse(int id, const char *json)
 #endif
 }
 
+/* frame_times since=<n> gsince=<n>: the reference bench's per-frame times
+ * (PSX_FRAME_RING=1, main.cpp ring) -- f: [frame, guest work us, vblank handler
+ * us without the pacer, pacer us, game-thread kilocycles of the guest work] --
+ * and with PSX_GL_DRAW_TIMES=1 on OpenGL, g: [frame, GPU busy us, timed GPU
+ * works] per present. next / gnext are the cursors for the following call. */
+static void handle_frame_times(int id, const char *json)
+{
+    extern int runtime_frame_ring_on(void);
+    extern int runtime_frame_ring_take(uint64_t *cursor, uint64_t *frame,
+                                       uint32_t *work_us, uint32_t *front_us,
+                                       uint32_t *pacer_us, uint64_t *cycles);
+    if (!runtime_frame_ring_on()) { send_err(id, "frame ring off (PSX_FRAME_RING=1)"); return; }
+    uint64_t cur = (uint64_t)json_get_int(json, "since", 0);
+    uint64_t gcur = (uint64_t)json_get_int(json, "gsince", 0);
+    enum { MAX = 4096 };
+    size_t cap = 128 + (size_t)MAX * 2 * 72;
+    char *out = (char *)malloc(cap);
+    if (!out) { send_err(id, "alloc failed"); return; }
+    size_t n = (size_t)snprintf(out, cap, "{\"id\":%d,\"ok\":true,\"f\":[", id);
+    uint64_t frame, cycles; uint32_t work, front, pacer;
+    for (int i = 0; i < MAX && runtime_frame_ring_take(&cur, &frame, &work, &front, &pacer, &cycles); i++)
+        n += (size_t)snprintf(out + n, cap - n, "%s[%llu,%u,%u,%u,%llu]", i ? "," : "",
+                              (unsigned long long)frame, work, front, pacer,
+                              (unsigned long long)(cycles / 1000u));
+    n += (size_t)snprintf(out + n, cap - n, "],\"next\":%llu,\"g\":[", (unsigned long long)cur);
+    uint32_t busy, works;
+    for (int i = 0; i < MAX && gl_renderer_draw_times_next(&gcur, &frame, &busy, &works); i++)
+        n += (size_t)snprintf(out + n, cap - n, "%s[%llu,%u,%u]", i ? "," : "",
+                              (unsigned long long)frame, busy, works);
+    snprintf(out + n, cap - n, "],\"gnext\":%llu}", (unsigned long long)gcur);
+    debug_server_send_line(out);
+    free(out);
+}
+
+/* gl_ops: gl_renderer_op_counts plus the upper VRAM half's primitives, since
+ * boot; two reads apart give a scene's operations per present. */
+static void handle_gl_ops(int id, const char *json)
+{
+    (void)json;
+    extern uint64_t gpu_high_vram_primitives(void);
+    uint64_t c[GL_OP_COUNTS];
+    gl_renderer_op_counts(c);
+    char out[1024];
+    size_t n = (size_t)snprintf(out, sizeof out, "{\"id\":%d,\"ok\":true,\"ops\":[", id);
+    for (int i = 0; i < GL_OP_COUNTS; i++)
+        n += (size_t)snprintf(out + n, sizeof out - n, "%s%llu", i ? "," : "", (unsigned long long)c[i]);
+    snprintf(out + n, sizeof out - n, "],\"hivram_prims\":%llu}", (unsigned long long)gpu_high_vram_primitives());
+    debug_server_send_line(out);
+}
+
 static void handle_frame_perf(int id, const char *json)
 {
     (void)json;
@@ -13757,6 +13807,8 @@ static const CmdEntry s_commands[] = {
     { "gl_present_ring",   handle_gl_present_ring },
     { "present_ring",      handle_present_ring },
     { "frame_perf",        handle_frame_perf },
+    { "frame_times",       handle_frame_times },
+    { "gl_ops",            handle_gl_ops },
     { "gl_ws_ablate",      handle_gl_ws_ablate },
     { "gl_interp",         handle_gl_interp },
     { "gl_wide_fast",      handle_gl_wide_fast },

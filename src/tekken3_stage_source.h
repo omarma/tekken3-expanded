@@ -12,20 +12,25 @@ enum { TEKKEN3_STAGE_T3 = 0, TEKKEN3_STAGE_TTT = 1 };
 
 /* The source of the fight being loaded or fought: TEKKEN3_STAGE_TTT only for
  * an arena 0..12 of a fight of Arcade, VS, Team Battle, Time Attack, Survival,
- * Practice or the attract's demo the row gave to TTT; TEKKEN3_STAGE_T3 for
- * everything else (the row's T3, Gon's and Dr. B's arenas 13 and 14, the dark
- * arena, Tekken Ball, Tekken Force, the Embu, a cinematic's scene, TTT Stages
- * off). */
+ * Practice or the attract's demo the row gave to TTT (Gon's and Dr. B's
+ * arenas 13 and 14 given a TTT stage are loaded as its arena, see
+ * tekken3_stage_source_load_arena); TEKKEN3_STAGE_T3 for everything else
+ * (the row's T3, Gon's and Dr. B's PS1 stages, the dark arena, Tekken Ball,
+ * Tekken Force, the Embu, a cinematic's scene, TTT Stages off). */
 int tekken3_stage_source(void);
 /* The arena that source applies to (0x800ADC84, a guest's arena already
  * that of guests.txt's third column), or -1 where the game's own stage
  * stays, as listed above. */
 int tekken3_stage_arena(void);
 /* With TEKKEN3_STAGE_TTT, the TTT stage to draw: 0..12 (TTT stage n is
- * arena n), 13 Eddy-A (in arena 10, beside Eddy-B 10), 14 Unknown's when
- * True Ogre fights (any arena 0..12); -1 otherwise. Not always the arena,
+ * arena n), 13 Eddy-A (in arena 10, beside Eddy-B 10), 14 Unknown's (her
+ * own, and True Ogre's as Arcade's CPU); -1 otherwise. Not always the arena,
  * then. */
 int tekken3_stage_ttt_stage(void);
+/* Nonzero when the fight's TTT stage is Unknown's for True Ogre as Arcade's
+ * CPU: drawn as it is in the dark arena, where any other TTT stage is drawn
+ * at night (B124). */
+int tekken3_stage_true_ogre_boss(void);
 
 /* Bumped at each decision (each fight, Continues included): TTT's storm
  * starts again with it, as at TTT's stage load. */
@@ -45,6 +50,11 @@ int tekken3_arcade_stages_source_ready(int source);
 void tekken3_stage_source_menu(void);
 void tekken3_stage_source_decide(unsigned mode, int player, const char *guest, int arena);
 void tekken3_stage_source_tick(void);
+/* After a decision that gave Gon's or Dr. B's arena a TTT stage (B122): the
+ * arena the game must load instead (Eddy's 10 for Eddy-A, Nina's 9), which
+ * the tick writes until the fight and a guest's arena correction must
+ * follow; -1 otherwise. */
+int tekken3_stage_source_load_arena(void);
 
 #ifdef __cplusplus
 }

@@ -47,6 +47,11 @@ int tekken3_ttt_stage_flash(int type);
  * tekken3_ttt_stage_force(-1) does. */
 void tekken3_ttt_floor_centre(int on, int x, int z, int half);
 
+/* B126: TTT stage 11's wind this frame, x and z (world, 4096 = 1), or 0:
+ * none (another stage, or not drawn). TTT pulls the accessory bones in the
+ * air sideways by it times their gravity / 256. */
+int tekken3_ttt_stage_wind(int wind[2]);
+
 /* B87: the T3 arcade stage drawn (0..12, the PS1 arena), or -1: none, a TTT
  * stage, the PS1's own. For src/tekken3_arcade_cameras.c, which gives that
  * stage the arcade's K.O., replay and winner cameras. */

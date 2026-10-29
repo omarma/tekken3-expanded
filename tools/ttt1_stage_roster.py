@@ -37,7 +37,9 @@ OPTIONAL = ('TTT1-voices.juv',           # Tetsujin ne parle pas
             # expressions du visage (tools/ttt1_import.py faces()) : pas chez Kunimitsu, les Jacks...
             *(f'TTT1-arcade-P{c}.face' for c in (1, 2, 3)),
             # ressorts des accessoires (tools/ttt1/accessories.py) : pas chez Tetsujin, Bruce, les Jacks...
-            *(f'TTT1-arcade-P{c}.acc' for c in (1, 2, 3)))
+            *(f'TTT1-arcade-P{c}.acc' for c in (1, 2, 3)),
+            # poignee de la lame d'Unknown (tools/ttt1/hilt.py) : elle seule
+            *(f'TTT1-arcade-P{c}.hilt' for c in (1, 2, 3)))
 
 
 # Carte MOVESET du sélecteur (src/tekken3_native_moves.c) : les natifs de Tekken 3 sur

@@ -80,8 +80,8 @@ static void write_scene(void) {
     psx_mod_write_byte(ARENA,(uint8_t)arena); psx_mod_write_byte(ARENA2,(uint8_t)arena); psx_mod_write_byte(DARK,(uint8_t)dark);
 }
 
-static void finished(void) {
-    stage=IDLE;
+/* What the caller had, put back. */
+static void put_back(void) {
     /* The overlay loaded (+0x17) stays what it is: state 7 loads the
      * caller's again if it needs another. */
     uint8_t loaded=psx_mod_read_byte(MODE+0x17);
@@ -98,6 +98,11 @@ static void finished(void) {
     for(unsigned p=0;p<2;p++) psx_mod_write_half(HUMAN+p*2,saved.human[p]);
     psx_mod_write_half(SIDES,saved.winner_side); psx_mod_write_byte(AI_STAGE,saved.ai_stage);
     psx_mod_write_word(FIXED_VIEW,saved.fixed_view);
+}
+
+static void finished(void) {
+    stage=IDLE;
+    put_back();
     void (*then)(void)=done; done=NULL;
     fprintf(stderr,"Cine scene: over, %s\n",then?"to the caller":"to the attract");
     if(then) then();
@@ -194,10 +199,41 @@ int tekken3_cine_scene_turbo(void) {
     return k>=3?1:k<=1?-1:0;
 }
 
+/* The game leaving the scene before its end: Start in the demo fight, whose
+ * mode the scene borrows (0x8005101C, the fight's first call each frame:
+ * Start pressed on either pad in mode 6, the sounds off and
+ * 0x8004F8F8(4), the modes menu through state 2), from the loading's phase 3
+ * on or in the cinematic. The game goes where it chose; what the scene took
+ * is given back as at its end, the cinematic let go without its on_done (the
+ * Embu's way back to the title, the ending's credits), the pace the player's
+ * again: it stayed unpaced (the loading's) or held, the cinematic's music
+ * played on over the menu, and its hooks went on in the next fight (B109). */
+extern void tekken3_cine_abandon(void);
+extern int tekken3_cine_engine_active(void);
+extern int tekken3_cine_ttt_stage(void);
+extern int tekken3_ttt_stage_force(int stage);
+extern void tekken3_cine_trigger_left(void);
+static void left(unsigned state) {
+    fprintf(stderr,"Cine scene: left %s at frame %llu, the game to state %u (target %u)\n",stage==LOADING?"loading":"playing",
+            (unsigned long long)s_frame_count,state,psx_mod_read_byte(0x80097f38));
+    tekken3_cine_abandon();
+    /* Forced by the trigger before the loading, let go by the cinematic's end. */
+    if(tekken3_cine_ttt_stage()>=0) tekken3_ttt_stage_force(-1);
+    stage=IDLE; after=AFTER_NONE; done=NULL;
+    put_back();
+    tekken3_cine_trigger_left();
+}
+
 /* Every frame (src/tekken3_cine_hooks.c). */
 static void test_tick(void);
 void tekken3_cine_scene_tick(void) {
     test_tick();
+    /* State 2 only comes after the scene's end (finished: the title) or
+     * when the game leaves it. */
+    if(stage!=IDLE) {
+        unsigned state=psx_mod_read_half(STATE);
+        if(state==2 || (stage==PLAYING && !tekken3_cine_engine_active())) { left(state); return; }
+    }
     /* The engine reading the characters of its `swap`s ahead (its first
      * tick, src/tekken3_cine.c): black too. */
     if(stage==PLAYING && (flags&CINE_SCENE_BLACK) && tekken3_cine_preloading()) black();

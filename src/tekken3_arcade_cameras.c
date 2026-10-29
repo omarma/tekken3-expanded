@@ -1,7 +1,7 @@
-/* B87 (GH#142): on a T3 arcade stage, the K.O.'s REPLAY, the winner's pose
- * and the view of the loser follow Tekken 3 arcade's cameras, not the
- * PS1's. The PS1 port kept the arcade's routines and changed constants and a
- * few choices; its cameras come nearer and turn where the arcade's stages,
+/* B87 (GH#142): on a T3 arcade stage, the K.O.'s REPLAY and the winner's
+ * pose follow Tekken 3 arcade's cameras, not the PS1's. The PS1 port kept
+ * the arcade's routines and changed constants and a few choices; its
+ * cameras come nearer and turn where the arcade's stages,
  * made for the arcade's cameras, have slits and empty cells (older frames on
  * screen: T3 never clears it). Measured in MAME and in the game (workspace
  * notes, B87 cams/REPORT.md; TIPS, B87):
@@ -15,12 +15,12 @@
  *   replay         the arcade's draws (0x801D6DA8): a half turn on a coin,
  *                  side 1 within 60 degrees of the fight's line (PS1: 30 to
  *                  150), angles on 18 bits (PS1: halfwords, which overflow),
- *                  from 2 x z * 8.2475 to z * 8.2475 (PS1: 0x2B1A to 0x113D);
- *   loser's view   z * 7600 / 955 away (PS1: 0xF8A, 0x19C4 for move 0xB), eye
- *                  at -0x4B0 (PS1: -0x5DC), followed past z * 7000 / 955 by
- *                  z / 0xBF x the difference (PS1: 0xE50, 2 x), the loser's
- *                  height no higher than -400, pitch never down; its fixed
- *                  view z * 8000 / 955 up (PS1: 0x1EAD), drawn angle 0..0x3F.
+ *                  from 2 x z * 8.2475 to z * 8.2475 (PS1: 0x2B1A to 0x113D).
+ *
+ * The view of the loser (YOU LOSE, CONTINUE?, GAME OVER; 0x8006875C /
+ * 0x8006895C) stays the PS1's on every stage (B110, GH#156, the user's
+ * choice of 2026-10-25): the arcade's, its fixed view z * 8000 / 955 up
+ * instead of 0x1EAD, came nearer on the T3 arcade stages only.
  *
  * z, the arcade's zoom of the stage (H, 0x8017AB04: 550 to 800 on a screen
  * 512 wide), becomes the PS1's 500 on its 368: 500 x 512 / 368, the same
@@ -46,10 +46,6 @@
 #define SHOT_A_NEAR    ZK(0x1450)
 #define SHOT_A_RADIUS  (ZK(0x1450) + 0x5A0)
 #define REPLAY_NEAR    ((int32_t)((int64_t)256000 * 0x4B840 / (368 * 0x9280)))
-#define LOSER_FAR      ZK(7000)
-#define LOSER_RADIUS   (ZK(7000) + ZK(600))
-#define LOSER_STEP     (256000 / (368 * 0xBF))
-#define LOSER_HIGH     ZK(8000)
 
 /* the arcade's no_pitch by stage (0x8017AB04, +8 of each 10 bytes) */
 static const uint8_t NO_PITCH[13] = {1, 1, 1, 1, 0, 2, 0, 0, 1, 1, 1, 2, 1};
@@ -77,12 +73,6 @@ uint32_t tk3_arccam_v(uint32_t value, int which) {
     case ARCCAM_NO_PITCH:           return NO_PITCH[st];
     case ARCCAM_SHOT_A_CIRCLE:      return 0;   /* the PS1 compares the distance squared with it */
     case ARCCAM_SHOT_A_NEAR:        return SHOT_A_NEAR;
-    case ARCCAM_LOSER_EYE_Y:        return (uint32_t)-0x4B0;
-    case ARCCAM_LOSER_FIXED_MASK:   return 0x3F;
-    case ARCCAM_LOSER_FIXED_BIAS:   return 0;
-    case ARCCAM_LOSER_TARGET_Y:     return (int32_t)value > -400 ? (uint32_t)-400 : value;
-    case ARCCAM_LOSER_FAR:          return LOSER_FAR;
-    case ARCCAM_LOSER_FIXED_HEIGHT: return (uint32_t)-LOSER_HIGH;
     }
     return value;
 }
@@ -92,8 +82,6 @@ uint32_t tk3_arccam_k(uint32_t value, uint32_t factor, int which) {
     int32_t f = (int32_t)factor;
     switch (which) {
     case ARCCAM_SHOT_A_RADIUS: return (uint32_t)(f * SHOT_A_RADIUS);
-    case ARCCAM_LOSER_RADIUS:  return (uint32_t)(f * LOSER_RADIUS);
-    case ARCCAM_LOSER_STEP:    return (uint32_t)(f * LOSER_STEP);
     }
     return value;
 }
@@ -150,16 +138,4 @@ void tk3_arccam_replay_start(CPUState *cpu) {
     psx_mod_write_half(REPLAY + 16, (uint16_t)(to >> 2));
     psx_mod_write_byte(REPLAY + 7, REPLAY_ARCADE);
     s_cap_mask = 0;
-}
-
-/* camera_end_view_update, the view on the loser just built
- * (camera_look_angles, sp + 16): the arcade's never looks down
- * (0x801D5BE0: pitch as 12 bits, at most 0) */
-void tk3_arccam_loser_pitch(CPUState *cpu) {
-    if (stage() < 0) return;
-    uint32_t at = cpu->gpr[29] + 16;
-    int32_t pitch = (int32_t)(psx_mod_read_word(at) & 0xFFF);
-    if (pitch & 0x800) pitch -= 0x1000;
-    if (pitch > 0) pitch = 0;
-    psx_mod_write_word(at, (uint32_t)pitch);
 }

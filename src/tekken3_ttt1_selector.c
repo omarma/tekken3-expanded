@@ -4,6 +4,7 @@
 #include "gpu.h"
 #include "psx_sdl.h"
 #include "tekken3_ttt1_assets.h"
+#include "tekken3_stage_select.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -69,6 +70,7 @@ void tekken3_ttt1_selector_tick(void) {
 }
 uint16_t __wrap_tekken3_outfits_input(int player,uint16_t buttons) {
     devil_jin_input(player,buttons);                /* raw: both punches */
+    buttons=tekken3_stage_select_input(player,buttons);   /* the STAGE line (F18), before the cards */
     buttons=tekken3_native_moves_input(player,buttons);
     if(tekken3_ttt1_roster_enabled())
         return __real_tekken3_outfits_input(player,tekken3_guest_selector_input(player,buttons));

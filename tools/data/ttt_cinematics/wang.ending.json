@@ -1,0 +1,20 @@
+{
+ "about": "Wang's Tekken Tag Tournament (PS2) ending (scene 26): Wang trains Xiaoyu in kung-fu and his back locks; white flashes at 609 and 619. Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "wang",
+ "arena": 4,
+ "dark": 0,
+ "trigger": "arcade-end p1=wang",
+ "ttt_stage": {"stage": 1,
+               "why": "the PS2 script's stage 15 (scene table 0x51B388), LAW-B in the PS2 executable (0x440670), a PS2-only variant of Law's stage: TTT arcade's stage 1, Law's, turned half round (canonical:180, as Baek's): the PS2's courtyard is closed on every side, the arcade stage has its temple on one side only, and yaw 0 put the mountains behind them where the PS2 shows the temple (the user, 2026-10-25); 180 has the gate and stairs behind them in the wide shots and Xiaoyu's last shot, the mountains only behind Wang's close-ups (589-711); every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 4 above (tools/ps2/ttt_endings.json)"},
+ "actors": [
+  {"cast": "wang", "costume": 0, "skeleton": "wang",
+   "retarget": ["--basis", "canonical:180", "--twists", "--collars", "--upper-arms", "--world"],
+   "why": "TTT costume -1 (the player's): T3 costume 0"},
+  {"cast": "xiaoyu", "costume": 1, "skeleton": "kunimitsu", "idle": "roster/Xiaoyu-TTT1-idle.poses",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--arm-contacts"],
+   "why": "the Tekken 3 native on Kunimitsu's TTT1 skeleton, as the Embu's Xiaoyu (no female skeleton nearer), her TTT1 stance; TTT costume 3 is Tekken 3's blue and yellow dress on the PS2 (not the school uniform): T3 costume 1 (the kick costume, the gallery's BLUE RIBBON)"}
+ ],
+ "ignore": [
+  {"task": "0x3a0850", "why": "stage background ambience, as in Baek's ending: born with no script command, lives 1-5 frames, always 10 100+ units from both actors (median 13 400); TTT Stages' stage brings its own"}
+ ]
+}

@@ -38,7 +38,7 @@ The card also shows in Tekken Ball. The CPU draws its own moveset once per fight
 - **Practice:** ATTACK DATA shows "!" for every unguardable hit.
 
 ### CPU and modes
-- **CPU opponents** in Arcade, Time Attack, Survival, Team Battle and Tekken Ball. Devil, Angel and Unknown are hidden sub-bosses.
+- **CPU opponents** in Arcade, Time Attack, Survival, Team Battle and Tekken Ball. Devil, Angel and Unknown are hidden sub-bosses: one of them may take the stage 9 boss's place in Arcade and Time Attack, comes now and then after 17 wins in Survival, and joins about one CPU team in two in an 8-on-8 Team Battle (fewer in smaller teams).
 - **Tekken Force bosses of their own** for every guest, TTT characters included as bosses (Lee for Kazuya, Devil and Angel for each other…).
 - **Ogre lifts the stage 9 sub-boss** you just beat in his Arcade cutscene: Devil, Angel or Unknown when one of them took Heihachi's place.
 - **The attract mode's demo fights** draw TTT characters, TTT movesets and TTT stages.
@@ -57,7 +57,18 @@ Tekken Tag Tournament's arcade stages come with the characters, from the same `t
 
 The music of a TTT stage follows **BGM SELECT** in the same **GAME OPTION** page, as Tekken 3's does: **ARCADE** plays the TTT arcade piece, **REMIXED** (the default) plays its Tekken Tag Tournament PS2 version if you gave the setup your **Tekken Tag Tournament (USA) PS2 disc**, the arcade piece otherwise, and **SILENT** plays none. **RANDOM** draws one of the two versions at the start of each fight, on Tekken 3's stages (its console or its arcade soundtrack, both on the PS1 disc) as on TTT's (the PS2 version only if you gave the setup the PS2 disc): the draw lasts the whole fight, a Continue keeps it, and so does a save state. The memory card keeps REMIXED while RANDOM is chosen, so a game without this mod still reads it.
 
-Gon's and Dr. B's arenas keep their PS1 stage, and Tekken Ball and Tekken Force their own. Tekken 3's stage is the arcade one with [Arcade Stages](#arcade-stages) and `tekken3.zip`, the PS1 one otherwise. The setup makes the TTT stages and their music from your ROM in a few seconds, no MAME. Turn them off with **TTT Stages** on the **Mods** page of the game's launcher (in **Tekken Tag Tournament Content**), then restart the game; they also work with **TTT1 Characters** turned off.
+**True Ogre's fights are at night**, as in Tekken 3, where his fight is a lone floor in the dark: on a TTT stage they take that stage's night version, as Tekken Tag Tournament arcade shows its stages when True Ogre is in a team (darker scenery, a black sky, the floor lit around the fighters), with the stage's own music. On a Tekken 3 stage they keep Tekken 3's dark arena. The Arcade boss is the exception: True Ogre as the CPU's last opponent fights on Unknown's stage, TTT's final arena, on **TEKKEN TAG TOURNAMENT** (and when **RANDOM** draws TTT), and on Tekken 3's dark arena otherwise.
+
+Gon and Dr. B have no stage in TTT: on **TEKKEN TAG TOURNAMENT** (and when **RANDOM** draws TTT), Gon fights on Eddy's stage by day (TTT's Eddy A) and Dr. B on Nina's; on **AUTO** they keep their PS1 stage, while Roger and Alex, who share Gon's arena, take Eddy's stage by day. Tekken Ball and Tekken Force keep their own stages. Tekken 3's stage is the arcade one with [Arcade Stages](#arcade-stages) and `tekken3.zip`, the PS1 one otherwise. The setup makes the TTT stages and their music from your ROM in a few seconds, no MAME. Turn them off with **TTT Stages** on the **Mods** page of the game's launcher (in **Tekken Tag Tournament Content**), then restart the game; they also work with **TTT1 Characters** turned off.
+
+### Stage Select
+Pick the stage of a VS or Practice fight at the character select, as in Tekken Tag Tournament on PS2:
+- **First the game, then its stages:** **GAME** is **TEKKEN 3** or **TEKKEN TAG TOURNAMENT**, then **STAGE** lists that game's stages. **DEFAULT** keeps the game's own choice and the **STAGES** row, **RANDOM** draws one at each fight, from both games or, at the top of a game's list, from that game only. Tekken 3's stages are listed by fighter, each with its stage and its music: **GUN JACK** is Nina's stage with Gun Jack's theme, **TIGER** Eddy's with Tiger's, and Gon and Dr. B are there too. TTT's come with the [TTT stages](#ttt-stages) and play their own music.
+- **VS:** once both players have chosen their fighter and their handicap, the **STAGE SELECT** band shows up under the two names, and both can change it: **left** and **right** to pick the game, **down** for its stages (**left** and **right** again), **up** to go back to the game. **Cross** (either player) starts the fight; **circle** goes back a step, then takes the player who finished last back to the handicap.
+- **Practice:** picking the dummy opens the **STAGE SELECT** band under the clock on the game: **left** and **right**, then **cross** for its stages, **cross** again to fight. **Circle** goes back a step, then to the grid.
+- The last stage is kept, for VS and Practice each, even after a restart: a rematch goes straight to the same stage.
+
+Don't want the extra step? Set **STAGE SELECT** to **OFF** in **Options**, **GAME OPTION**: the fights load as before. To remove the feature altogether, untick **Stage Select** on the **Mods** page of the game's launcher, then restart the game.
 
 ### Options
 - **Difficulty:** the arcade levels, EASY to EX SUPER HARD, are in the Options menu.
@@ -74,7 +85,7 @@ The setup offers it as a checkbox. Leave it unticked and nothing changes.
 
 | Add-on | What it does | Extra file needed |
 |---|---|---|
-| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu, Baek, Angel or Jun: their Tekken Tag Tournament ending plays in Tekken 3's engine, on its TTT stage, in place of the ending movie. Seven endings for now, more to come. | None: it plays over Tekken 3's music, or the ending's original music with your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
+| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu, Baek, Angel, Jun or Wang: their Tekken Tag Tournament ending plays in Tekken 3's engine, on its TTT stage, in place of the ending movie. Eight endings for now, more to come. | None: it plays over Tekken 3's music, or the ending's original music with your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
 
 Jin's red lightning, an add-on until 1.3.0, is now part of **TTT Hitspark** (see [Features](#the-tag-tournament-roster)).
 
@@ -93,7 +104,7 @@ Jin's red lightning, an add-on until 1.3.0, is now part of **TTT Hitspark** (see
 | **Tekken 3** (PlayStation) | USA, **SLUS-00402** (Redump "Tekken 3 (USA)"): a `.cue` with its `.bin` files, one `.bin` per track or a single `.bin` holding all three |
 | **Tekken Tag Tournament arcade ROM** | For the TTT characters, the [TTT stages](#ttt-stages) and their music. `tektagt.zip`: MAME set `tektagt`, *Tekken Tag Tournament (World, TEG2/VER.C1, set 1)*, or `tektagtuc1` *(US, TEG3/VER.C1)*, `tektagtub` *(US, TEG3/VER.B)*, `tektagtjc1` *(Japan, TEG1/VER.C1)*, **non-merged** (a merged zip holding one of them works too) |
 | **Tekken 3 arcade ROM** *(optional)* | `tekken3.zip`: MAME set `tekken3`, *Tekken 3 (World, TET2/VER.E1)*, for the arcade difficulty levels and the [arcade stages](#arcade-stages) |
-| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**: a `.cue`/`.bin` or `.iso`. Adds the PS2 version of the [TTT stages](#ttt-stages)' music (BGM SELECT: REMIXED; about 60 MB copied beside the game), the PS2 effects (PS2 EFFECTS: Devil's and Angel's lasers, the Mishimas' strong-hit sparks) and the TTT Cinematics music. Without it, the TTT stages play their arcade music and the effects stay the arcade's |
+| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**, version 1.00 or 2.00 (Greatest Hits): a `.cue`/`.bin` or `.iso`. Adds the PS2 version of the [TTT stages](#ttt-stages)' music (BGM SELECT: REMIXED; about 60 MB copied beside the game), the PS2 effects (PS2 EFFECTS: Devil's and Angel's lasers, the Mishimas' strong-hit sparks) and the TTT Cinematics music. Without it, the TTT stages play their arcade music and the effects stay the arcade's |
 
 The exact versions:
 
@@ -269,7 +280,12 @@ Update the folder you already set up: no full reinstall. The setup keeps its too
    - with a ZIP (the one for your system: Windows, macOS, Linux or Android): extract it, then copy **the contents** of its `tekken3-expanded-x.y.z` folder into your existing folder, replacing every file (7-Zip: *Yes to All*).
 2. Start **Setup Tekken 3.cmd** (or **Setup Tekken 3.command**, or **Setup Tekken 3.sh**). The setup window opens with your files already filled in: click **Update & play**. Changes to the TTT1 characters are applied to your install, without a new import when the update allows it; otherwise the setup imports them again from your `tektagt.zip`. When the arcade stages change, the setup converts them again from your `tekken3.zip` (a few seconds). An install set up with `tekken3.zip` before the arcade stages existed gets them at its next update; to add them to an install set up without it, choose `tekken3.zip` in the setup window. The same goes for the TTT stages and their music with your `tektagt.zip`: an install with the TTT1 characters gets them at its next update.
 
-**From 1.3.0:**
+**From 1.4.0:**
+- The TTT1 characters are brought up to date without a new import (three update steps), and the TTT endings are rebuilt (Wang's joins them).
+- The new [Stage Select](#stage-select) is on: once both fighters are chosen in VS or Practice, pick the stage or just confirm. Set **STAGE SELECT** to **OFF** in **Options**, **GAME OPTION** to fight as before.
+- Save states made with 1.4.0 don't load in 1.4.1 (the recompiled code changed). Memory cards are not affected.
+
+**From 1.3.0 to 1.4.0:**
 - The mod **TTT1 Characters** is now called **Tekken Tag Tournament Content** on the launcher's **Mods** page. Only its name changes: your settings (features turned off, the Embu's cast) are kept.
 - **Update & play** makes the [TTT stages](#ttt-stages) and their music from your `tektagt.zip` (keep it where the setup found it; if it has moved, the update still finishes and the game keeps Tekken 3's stages).
 - If you gave the setup your Tekken Tag Tournament PS2 disc for the TTT Cinematics music, **Update & play** also copies the PS2 music of the TTT stages and the PS2 effects from it. The disc now has its own optional field under **Include Tekken Tag Tournament Content**: choose it there to add them to an install set up without it, clear the field to remove them.

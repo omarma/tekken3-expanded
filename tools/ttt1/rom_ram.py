@@ -110,7 +110,40 @@ def effect_vram(folder, c: int, v: int = 0) -> bytes:
 # Hitspark), each in the strong-hit effect's format. 28: a landed hit's spray
 # (file 30; its own red palette, untinted: the operator's green option recolours
 # it at run time), 30: a guarded hit's sparks (file 1, tinted 80 / 96 / 128).
-SPARK_ROW, GUARD_ROW = 28, 30
+# 29: a throw's pink spark (file 2, 28 images, tinted 128 / 80 / 128), 33: the
+# knockdown smoke (file 38; 801211F4 loads it as box 3, row 31 is no one's).
+SPARK_ROW, GUARD_ROW, THROW_ROW, SMOKE_ROW = 28, 30, 29, 33
+# The poison mist (type 10 decor effect, func_80158F9C): 21 images of the
+# smoke's sheet, by frame: UV at 800234BC, texture page at 800234E8 (2: the
+# sheet's first page, 3: its second), and its own palette, (608, 255) in the
+# fight VRAM (the 7th TIM of archive 5's file 0).
+MIST_UV, MIST_PAGES, MIST_FRAMES = 0x800234BC, 0x800234E8, 21
+
+
+def effect_row_frames(folder, index: int) -> int:
+    """Images that row `index` of 8001AD30 plays (halfword +4)."""
+    game = load(folder)[2]
+    return struct.unpack_from('<H', game, E.EFFECTS + 0x18 * index + 4 - E.BASE)[0]
+
+
+def mist(folder) -> tuple[list[int], bytes]:
+    """The mist's images, as indices into the smoke's sheet (image k of
+    effect_vram's layout: page k / 16, row k % 16 / 4, column k % 4), and its
+    16-colour palette."""
+    game = load(folder)[2]
+    uv = game[MIST_UV - E.BASE:MIST_UV - E.BASE + 2 * MIST_FRAMES]
+    pages = struct.unpack_from('<%di' % MIST_FRAMES, game, MIST_PAGES - E.BASE)
+    order = [16 * (page - 2) + 4 * (uv[2 * k + 1] // 64) + uv[2 * k] // 64 for k, page in enumerate(pages)]
+    data, p = file(folder, 5, 0), 0
+    while data[p:p + 4] == b'\x10\0\0\0':
+        flags, q = struct.unpack_from('<I', data, p + 4)[0], p + 8
+        for block in range(2 if flags & 8 else 1):
+            size, x, y, w, h = struct.unpack_from('<IHHHH', data, q)
+            if block == 0 and flags & 8 and (x, y, w, h) == (608, 255, 16, 1):
+                return order, data[q + 12:q + 44]
+            q += size
+        p = q
+    raise ValueError('no mist palette in archive 5')
 
 
 def effect_row_vram(folder, index: int) -> bytes:

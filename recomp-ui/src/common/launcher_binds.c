@@ -649,6 +649,33 @@ static int psx_guid_claimed_by_other(const LauncherModel* m, int self,
     return 0;
 }
 
+// Index in `pads` of the live pad `player` uses: among the pads with its GUID,
+// the one it already has, else the first no other visible player has. Two pads
+// of one model share a GUID, so the GUID alone would hand both players the
+// same pad. -1 when none is connected (or every one is taken).
+static int live_pad_for_player(const LauncherModel* m, int player,
+                               const LauncherPad* pads, int pad_count) {
+    const char* guid = m->s.player_gamepad_guid[player];
+    if (!pads || !guid[0]) return -1;
+    const int visible = launcher_model_visible_player_count(m);
+    int free_pad = -1;
+    for (int i = 0; i < pad_count; ++i) {
+        if (!pads[i].guid[0] || strcmp(pads[i].guid, guid) != 0) continue;
+        int taken = 0, kept = m->player_pad_id[player] == pads[i].id;
+        for (int o = 0; o < visible && o < LNG_MAX_PLAYERS; ++o) {
+            if (o == player || m->s.player_src[o] != 2 ||
+                m->player_pad_id[o] != pads[i].id ||
+                strcmp(m->s.player_gamepad_guid[o], guid) != 0)
+                continue;
+            taken = 1;
+            if (o < player) kept = 0;   // an earlier player has it first
+        }
+        if (kept) return i;
+        if (!taken && free_pad < 0) free_pad = i;
+    }
+    return free_pad;
+}
+
 static void psx_fallback_pad_label(const char* guid, char* out, size_t cap) {
     if (!out || !cap) return;
     if (guid && guid[0]) {
@@ -723,15 +750,7 @@ void launcher_binds_sync_psx_pad_sources(LauncherModel* m,
         if (!guid[0]) continue;
 
         // Prefer the live SDL name when this GUID is connected.
-        int live = -1;
-        if (pads) {
-            for (int i = 0; i < pad_count; ++i) {
-                if (pads[i].guid[0] && !strcmp(pads[i].guid, guid)) {
-                    live = i;
-                    break;
-                }
-            }
-        }
+        const int live = live_pad_for_player(m, p, pads, pad_count);
         const int custom = rui_psx_pad_binds_name_is_custom(path, guid);
         if (live >= 0) {
             m->player_pad_id[p] = pads[live].id;
@@ -876,15 +895,12 @@ void launcher_binds_prepare_psx_launch(LauncherModel* m,
             psx_fallback_pad_label(guid, name, sizeof(name));
         }
         if (!custom && pads) {
-            for (int i = 0; i < pad_count; ++i) {
-                if (pads[i].guid[0] && !strcmp(pads[i].guid, guid) &&
-                    pads[i].name[0]) {
-                    copy_str(name, sizeof(name), pads[i].name);
-                    copy_str(m->player_pad_name[p],
-                             sizeof(m->player_pad_name[p]), name);
-                    m->player_pad_id[p] = pads[i].id;
-                    break;
-                }
+            const int i = live_pad_for_player(m, p, pads, pad_count);
+            if (i >= 0 && pads[i].name[0]) {
+                copy_str(name, sizeof(name), pads[i].name);
+                copy_str(m->player_pad_name[p],
+                         sizeof(m->player_pad_name[p]), name);
+                m->player_pad_id[p] = pads[i].id;
             }
         }
         int dz = m->s.deadzone[p];
@@ -907,6 +923,128 @@ int launcher_binds_psx_known_at(int index, char* guid, int guid_cap,
 int launcher_binds_psx_name_is_custom(const char* guid) {
     if (!guid || !guid[0]) return 0;
     return rui_psx_pad_binds_name_is_custom(psx_input_ini_path(), guid);
+}
+
+// ---- Input source list ------------------------------------------------------
+
+static void push_pad_option(LauncherPadOption* out, int* n, int max,
+                            const char* guid, const char* name, uint32_t id,
+                            int live, int connection) {
+    if (!guid || !guid[0] || *n >= max) return;
+    for (int i = 0; i < *n; ++i) {
+        // A live pad is one entry per device; a saved one, one per GUID.
+        if (live ? out[i].live && out[i].id == id
+                 : !strcmp(out[i].guid, guid))
+            return;
+    }
+    LauncherPadOption* o = &out[(*n)++];
+    memset(o, 0, sizeof(*o));
+    copy_str(o->guid, sizeof(o->guid), guid);
+    copy_str(o->name, sizeof(o->name),
+             (name && name[0] && strcmp(name, "Gamepad") != 0) ? name
+                                                                : "Controller");
+    o->id = live ? id : 0;
+    o->live = live;
+    o->connection = live ? connection : 0;
+}
+
+int launcher_binds_pad_options(const LauncherModel* m, int player,
+                               const LauncherPad* pads, int pad_count,
+                               LauncherPadOption* out, int max) {
+    if (!m || !out || max <= 0) return 0;
+    if (!pads) pad_count = 0;
+    player = player < 0 ? 0 : (player >= LNG_MAX_PLAYERS ? LNG_MAX_PLAYERS - 1
+                                                         : player);
+    // Connected pads first, in SDL's order, so a pad keeps its number while it
+    // stays connected (the registry learning a GUID must not renumber them).
+    const int psx = is_psx_profile(m);
+    const char* path = psx ? psx_input_ini_path() : NULL;
+    int n = 0;
+    for (int i = 0; i < pad_count; ++i) {
+        const char* name = pads[i].name;
+        char reg[64] = {0};
+        if (psx && pads[i].guid[0]) {
+            // Custom rename wins; otherwise prefer the live driver name.
+            rui_psx_pad_binds_name(path, pads[i].guid, reg, (int)sizeof(reg));
+            if (reg[0] &&
+                (rui_psx_pad_binds_name_is_custom(path, pads[i].guid) ||
+                 !name[0] || !strcmp(name, "Gamepad")))
+                name = reg;
+        }
+        push_pad_option(out, &n, max, pads[i].guid, name, pads[i].id, 1,
+                        pads[i].connection);
+    }
+    if (psx) {
+        // Saved pads that are not connected, then a settings-restored GUID
+        // that isn't in the registry yet.
+        const int known = rui_psx_pad_binds_known_count(path);
+        for (int k = 0; k < known; ++k) {
+            char guid[40] = {0}, name[64] = {0};
+            if (rui_psx_pad_binds_known_at(path, k, guid, (int)sizeof(guid),
+                                           name, (int)sizeof(name)))
+                push_pad_option(out, &n, max, guid, name, 0, 0, 0);
+        }
+        if (m->s.player_src[player] == 2)
+            push_pad_option(out, &n, max, m->s.player_gamepad_guid[player],
+                            m->player_pad_name[player], 0, 0, 0);
+    }
+
+    // Unique labels: entries sharing a name are numbered, the number first so
+    // the narrow player card still shows it (GH#153: a DualSense on USB and one
+    // on Bluetooth both read "DualSense Wireless Controller").
+    for (int i = 0; i < n; ++i) {
+        int same = 0, rank = 0;
+        for (int j = 0; j < n; ++j) {
+            if (strcmp(out[j].name, out[i].name) != 0) continue;
+            ++same;
+            if (j <= i) ++rank;
+        }
+        const char* how = !out[i].live             ? " (disconnected)"
+                        : same < 2                 ? ""
+                        : out[i].connection == 1 ? " (wired)"
+                        : out[i].connection == 2 ? " (wireless)"
+                        : "";
+        if (same > 1)
+            snprintf(out[i].label, sizeof(out[i].label), "#%d %s%s", rank,
+                     out[i].name, how);
+        else
+            snprintf(out[i].label, sizeof(out[i].label), "%s%s", out[i].name,
+                     how);
+    }
+
+    // Who uses which entry: a live entry by device, a saved one by GUID.
+    const int visible = launcher_model_visible_player_count(m);
+    for (int p = 0; p < LNG_MAX_PLAYERS; ++p) {
+        if (p != player && p >= visible) continue;
+        if (m->s.player_src[p] != 2 || !m->s.player_gamepad_guid[p][0])
+            continue;
+        const int lp = live_pad_for_player(m, p, pads, pad_count);
+        for (int i = 0; i < n; ++i) {
+            const int uses =
+                out[i].live ? lp >= 0 && pads[lp].id == out[i].id
+                            : lp < 0 && !strcmp(out[i].guid,
+                                                m->s.player_gamepad_guid[p]);
+            if (!uses) continue;
+            if (p == player) out[i].selected = 1;
+            else out[i].claimed = 1;
+        }
+    }
+    return n;
+}
+
+int launcher_binds_player_pad_label(const LauncherModel* m, int player,
+                                    const LauncherPad* pads, int pad_count,
+                                    char* out, int cap) {
+    if (!out || cap <= 0) return 0;
+    LauncherPadOption opts[LNG_MAX_PADS + 16 + LNG_MAX_PLAYERS];
+    const int n = launcher_binds_pad_options(
+        m, player, pads, pad_count, opts, (int)(sizeof(opts) / sizeof(opts[0])));
+    for (int i = 0; i < n; ++i) {
+        if (!opts[i].selected) continue;
+        copy_str(out, (size_t)cap, opts[i].label);
+        return 1;
+    }
+    return 0;
 }
 
 void launcher_binds_reset_player(LauncherModel* m, int player) {

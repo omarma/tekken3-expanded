@@ -81,9 +81,11 @@ def clut_of(tile):
 
 # --- groupes -----------------------------------------------------------------
 
+EXTRA = []          # polygones dessines hors du modele (poignee d'Unknown), mis par plan()
+
 def _prims(T):
     from fmt import row, nrows, block, parse_c_ttt1
-    out = []
+    out = list(EXTRA)
     for r in range(nrows(T)):
         w = row(T, r)
         if w[2] > 2: out += parse_c_ttt1(block(T, w[2]))
@@ -343,11 +345,20 @@ def _trim(tiles, gs, T):
         out.append(dict(g, x=x0, y=y0, w=x1 - x0, h=y1 - y0))
     return tiles, out, dropped, cropped
 
-def plan(tex, T, faces=()):
+def plan(tex, T, faces=(), extra=()):
     """Calcule le rangement ; remap_uv() et repack() l'appliquent. faces :
     rectangles (x, y, l, h) des images d'expressions du visage, chacun une image
-    entiere de l'atlas ; face_at() donne ensuite leur place."""
-    tiles = read_tims(tex); gs = groups(tiles, T)
+    entiere de l'atlas ; face_at() donne ensuite leur place. extra : polygones
+    (famille, materiau, UV) que le jeu dessine hors du modele avec cet atlas
+    (tools/ttt1/hilt.py) : leurs images sont lues comme celles du modele."""
+    EXTRA[:] = ()
+    tiles = read_tims(tex)
+    model_box = _used(tiles, groups(tiles, T), T)
+    EXTRA[:] = extra
+    gs = groups(tiles, T)
+    # Images que seuls ces polygones lisent (quelques pixels a l'ecran) : reduites
+    # avant celles du modele quand le budget ne suffit pas (Unknown costume 2).
+    for g, b, m in zip(gs, _used(tiles, gs, T), model_box): g['extra_only'] = b is not None and m is None
     for p in faces:
         if not any((g['x'], g['y'], g['w'], g['h']) == tuple(p) for g in gs):
             raise ValueError(f'visage : pas d image {tuple(p)} dans l atlas')
@@ -404,7 +415,7 @@ def _plan(tiles, gs, halve=False):
     half = {}                                        # indice de groupe -> (axe, lignes 4 bits, erreur)
     cands = [i for i, g in enumerate(gs) if g['bpp'] == 1 and not g.get('face')]
     errs = {i: _quantize(gs[i], tiles)[2] for i in cands}
-    scored = sorted(cands, key=errs.get)
+    scored = sorted(cands, key=lambda i: (not gs[i].get('extra_only'), errs[i]))
     halves = []
     if halve:
         for i, g in enumerate(gs):
@@ -426,7 +437,7 @@ def _plan(tiles, gs, halve=False):
         where = pals and len(pals[0]) >= len(quant) and (_place(view, True) or _place(view, False))
         if where: break
         pal_ok = pals and len(pals[0]) >= len(quant)
-        if halves and pal_ok and (not scored or halves[0][2] < errs[scored[0]]):
+        if halves and pal_ok and (not scored or halves[0][2] < errs[scored[0]] and not gs[scored[0]].get('extra_only')):
             a, rows, err, i = halves.pop(0); half[i] = (a, rows, err); continue
         if scored: i = scored.pop(0); quant[i] = _quantize(gs[i], tiles); continue
         raise ValueError('textures : ne tiennent pas, meme reduites en 16 couleurs' if pal_ok

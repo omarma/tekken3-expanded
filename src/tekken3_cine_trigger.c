@@ -37,7 +37,7 @@ typedef struct {
     char mode[16];          /* reserved events: arcade, survival… */
     int stage, slot;        /* reserved events: boss stage, attract / theater slot (-1 any) */
     int every, seen;        /* attract: one Embu in `every`, from the first; Embus seen so far */
-    int rotation;           /* attract: its place in the Embus' rotation (2..4, 0 none; see state_leave_to) */
+    int rotation;           /* attract: the TTT Embu of the Embus' rotation (2..4, its place before B104; 0 none; see state_leave_to) */
     char cine[1024];        /* full path */
     Then then;
 } Trigger;
@@ -168,6 +168,9 @@ static void to_attract(void) {
     psx_mod_write_byte(CYCLE,CYCLE_TITLE); titled=1;
     psx_mod_write_half(0x800ae224,0); psx_mod_write_half(0x800ae204,2);
 }
+/* The game left the scene (Start: the modes menu, src/tekken3_cine_scene.c):
+ * neither the title nor the credits follow, the next trigger can play. */
+void tekken3_cine_trigger_left(void) { active=NULL; }
 static void title_tick(unsigned state) {
     static unsigned before;
     if(titled && before==3 && state!=3) { psx_mod_write_byte(CYCLE,CYCLE_AFTER_EMBU); titled=0; }
@@ -197,31 +200,39 @@ int tekken3_cine_trigger_arcade_end(void) {
 
 /* The attract's Embu (state 6, TIPS § 28): its variant is the byte
  * 0x80097F20 (the save's, unlock_chars +0x30), the file 0x45 + variant its
- * script. 0x8004F8F8(3), the way back to the title, turns it: when the
- * attract's cycle (0x80097F3E) makes this return the Embu, variant + 1, back
- * to 0 past the save's tier (+0x2F: 0 under 15 characters, 1 from 15, 2 with
- * Dr. B), so 0 / 0-1 / 0-1-2. L1, R1, L1 + R1 held (pad 0x800ADD68: 4, 8,
- * 12, alone) with a tier above 0: variant 1, 0, 2 if the tier allows it,
- * and the Embu at once.
- * A trigger with rotation=N is one more Embu in that rotation, the Nth: it
- * comes after variant N - 2 (rotation=2: 0, TTT, 1, 2), the variant put
- * back at N - 2 so the next return goes on with N - 1. The byte never holds
- * anything the game does not know: the turn is ours, ttt_next ("variant
- * N - 2 was the last Embu"), in a file beside the card that follows it as
- * the save does (<card>-embu-rotation.txt: read when the card is read,
- * written when it is written, with the variant it goes with). L2 alone held
- * on the way back: this Embu at once, any tier, then the rotation on from
- * N + 1. Its stage unavailable (TTT Stages off): its turn is skipped, the
- * game's own Embu. Mod off (no table): nothing changes.
+ * script. 0x8004F8F8(3), the way back to the title (also from the modes
+ * menu left alone), turns it: when the attract's cycle (0x80097F3E) makes
+ * this return the Embu, variant + 1, back to 0 past the save's tier (+0x2F:
+ * 0 under 15 characters, 1 from 15, 2 with Dr. B), so 0 / 0-1 / 0-1-2. L1,
+ * R1, L1 + R1 held (pad 0x800ADD68: 4, 8, 12, alone) with a tier above 0:
+ * variant 1, 0, 2 if the tier allows it, and the Embu at once.
+ * With the mod's Embus (the TTT Embu, a trigger with rotation=, and the
+ * guests' Embu, variant 0 with the Embu TTT casting: B104, GH#155) the
+ * rotation is ours, in the user's order: TTT, guests, variant 2, 0, 1. A
+ * turn not there is skipped: the TTT Embu without its stage (TTT Stages
+ * off) or its .cine, the guests' without a casting, a variant past the
+ * tier. Ours is chosen on the way back, the variant byte written as state
+ * 2 starts (before it loads the files): the byte never holds anything the
+ * game does not know (0 for the TTT Embu). The next turn follows the save
+ * (<card>-embu-rotation.txt: read when the card is read, written when it
+ * is written, with the variant it goes with); a new one starts with TTT.
+ * L1 / R1 / L1 + R1: the game's variant, the turn kept. L2 alone held on
+ * the way back: the TTT Embu at once, any tier, then the guests'. Without
+ * either Embu of the mod (mod off) nothing changes.
  * Other triggers (slot= that variant, or none: any; every=N: one Embu in N,
  * the first one included) take the Embu as it comes. The cinematic plays
  * from the Embu's first frame (nothing of it drawn yet: the scene goes to
  * state 7 at once, the image black while it loads); the title follows as
  * after the Embu (to_attract: the title through state 2). */
 enum { TARGET=0x80097f38, TIER=0x80097f1f, VARIANT=0x80097f20, PAD_HELD=0x800add68, PAD_L2=0x0001 };
+typedef enum { TURN_TTT, TURN_GUESTS, TURN_V2, TURN_V0, TURN_V1, TURNS } Turn;
+static const char *const turn_keys[TURNS]={"ttt","guests","v2","v0","v1"};
+static const unsigned turn_variant[TURNS]={0,0,2,0,1};
 extern int tekken3_cine_ttt_stage(void);
 extern int tekken3_card_file(char *out,size_t size,const char *suffix,int shared);
-static int ttt_next=-1;             /* 1: the rotation's cinematic next; -1 unknown */
+extern int tekken3_ttt1_embu_cast_active(void);
+static int next_turn=-1;            /* the next turn to try; -1 unknown (a new save: TTT) */
+static int guests_turn;             /* 1: the Embu playing is the guests' */
 static const Trigger *planned;      /* chosen by the way back, played as state 6 starts */
 
 static const Trigger *rotation_trigger(void) {
@@ -238,73 +249,84 @@ static int playable(const Trigger *t) {
     tekken3_ttt_stage_force(-1);
     return 1;
 }
+/* The next turn there from next_turn on, -1 for none; the .cine (1.4 MB)
+ * only read when the TTT Embu's turn comes. */
+static int pick(unsigned tier) {
+    const Trigger *t=rotation_trigger();
+    if(next_turn<0) next_turn=TURN_TTT;
+    for(int k=0;k<TURNS;k++) {
+        Turn u=(Turn)((next_turn+k)%TURNS);
+        int there=u==TURN_TTT?t && playable(t):u==TURN_GUESTS?tekken3_ttt1_embu_cast_active():turn_variant[u]<=tier;
+        if(there) { next_turn=(u+1)%TURNS; return u; }
+    }
+    return -1;
+}
+int tekken3_embu_guests_turn(void) { return guests_turn; }
 
 /* Called as 0x8004F8F8 is (on each dispatch: the call resumes inside it
  * after display_freeze, and ends in pieces of its own); a0 = the state it
  * leaves to, read on entry. Its choice (target 0x80097F38, variant) is read
  * as state 2 (0x8004FA60), which it always enters, starts: before state 2
  * loads the Embu's files (embu_loader_files, file 0x45 + variant). */
-static int leave_seen, leave_pending, leave_l2;
+static int leave_seen,leave_turn=-1,leave_l2;
 extern void __real_func_8004F8F8(CPUState *cpu);
 void __wrap_func_8004F8F8(CPUState *cpu) {
-    const Trigger *t;
-    if((cpu->pc==0 || cpu->pc==0x8004f8f8) && cpu->gpr[4]==3 && !active && (t=rotation_trigger())) {
-        unsigned tier=psx_mod_read_byte(TIER),variant=psx_mod_read_byte(VARIANT),pad=psx_mod_read_half(PAD_HELD);
-        int after=t->rotation-2;
-        if(ttt_next<0) ttt_next=tier>0 && (int)variant==after;
+    const Trigger *t=rotation_trigger();
+    if((cpu->pc==0 || cpu->pc==0x8004f8f8) && cpu->gpr[4]==3 && !active && (t || tekken3_ttt1_embu_cast_active())) {
+        unsigned tier=psx_mod_read_byte(TIER),pad=psx_mod_read_half(PAD_HELD);
         /* L1 / R1 / L1 + R1 taken by the game (its variant within the tier): kept. */
         int forced=tier && ((pad==4 && tier>=1) || pad==8 || (pad==12 && tier>=2));
-        leave_l2=pad==PAD_L2;
-        /* Only a return the Embu takes (the cycle at 1, or L2) reads the .cine (1.4 MB). */
-        leave_pending=(leave_l2 || (!forced && ttt_next && (int)tier>=after && psx_mod_read_byte(CYCLE)==1)) &&
-                      playable(t);
-        if(leave_pending && leave_l2) psx_mod_write_byte(CYCLE,1);   /* the Embu now, as L1 / R1 do */
+        leave_l2=pad==PAD_L2 && t && playable(t);
+        /* Only a return the Embu takes (the cycle at 1, or L2) chooses a turn. */
+        leave_turn=leave_l2?TURN_TTT:!forced && psx_mod_read_byte(CYCLE)==1?pick(tier):-1;
+        if(leave_l2) { psx_mod_write_byte(CYCLE,1); next_turn=TURN_GUESTS; }   /* the Embu now, as L1 / R1 do */
         leave_seen=1;
     }
     __real_func_8004F8F8(cpu);
 }
 extern void __real_func_8004FA60(CPUState *cpu);
 void __wrap_func_8004FA60(CPUState *cpu) {
-    const Trigger *t;
     if(leave_seen && (cpu->pc==0 || cpu->pc==0x8004fa60)) {
         leave_seen=0;
-        if((t=rotation_trigger()) && psx_mod_read_byte(TARGET)==6) {
+        if(psx_mod_read_byte(TARGET)==6) {
             unsigned variant=psx_mod_read_byte(VARIANT);
-            if(leave_pending) {
-                psx_mod_write_byte(VARIANT,(uint8_t)(t->rotation-2));
-                ttt_next=0; planned=t;
-                fprintf(stderr,"Cine trigger: Embu rotation, %s%s (variant %u put back at %d)\n",
-                        t->cine,leave_l2?" (L2)":"",variant,t->rotation-2);
-            } else {
-                ttt_next=(int)variant==t->rotation-2;
-                fprintf(stderr,"Cine trigger: Embu rotation, the game's variant %u\n",variant);
-            }
+            guests_turn=leave_turn==TURN_GUESTS;
+            if(leave_turn>=0) {
+                psx_mod_write_byte(VARIANT,(uint8_t)turn_variant[leave_turn]);
+                if(leave_turn==TURN_TTT) planned=rotation_trigger();
+                fprintf(stderr,"Cine trigger: Embu rotation, %s%s (variant %u put at %u)\n",
+                        leave_turn==TURN_TTT?planned->cine:turn_keys[leave_turn],leave_l2?" (L2)":"",
+                        variant,turn_variant[leave_turn]);
+            } else
+                fprintf(stderr,"Cine trigger: Embu rotation, the game's variant %u (L1 / R1)\n",variant);
         }
-        leave_pending=0;
+        leave_turn=-1;
     }
     __real_func_8004FA60(cpu);
 }
 
 /* The card's file: the boot's read starts from nothing (the EXE's variant
  * 0), a read takes the file if it goes with the card's variant, a write
- * writes it (src/tekken3_ttt1_records.c calls these). */
-void tekken3_embu_rotation_forget(void) { ttt_next=-1; }
+ * writes it (src/tekken3_ttt1_records.c calls these). Before B104 the file
+ * held "ttt-next N variant V": not read, the rotation starts again. */
+void tekken3_embu_rotation_forget(void) { next_turn=-1; }
 void tekken3_embu_rotation_load(void) {
-    char path[1024]; int next; unsigned with;
-    ttt_next=-1;
+    char path[1024],key[16]; unsigned with;
+    next_turn=-1;
     if(!tekken3_card_file(path,sizeof path,"embu-rotation.txt",0)) return;
     FILE *f=fopen(path,"r");
     if(!f) return;
-    if(fscanf(f,"ttt-next %d variant %u",&next,&with)==2 && with==psx_mod_read_byte(VARIANT)) ttt_next=next!=0;
+    if(fscanf(f,"next %15s variant %u",key,&with)==2 && with==psx_mod_read_byte(VARIANT))
+        for(int u=0;u<TURNS;u++) if(!strcmp(key,turn_keys[u])) next_turn=u;
     fclose(f);
-    fprintf(stderr,"Cine trigger: Embu rotation from %s: %s\n",path,ttt_next<0?"not this card's":ttt_next?"the cinematic next":"the game's next");
+    fprintf(stderr,"Cine trigger: Embu rotation from %s: %s\n",path,next_turn<0?"not this card's":turn_keys[next_turn]);
 }
 void tekken3_embu_rotation_save(void) {
     char path[1024];
-    if(ttt_next<0 || !tekken3_card_file(path,sizeof path,"embu-rotation.txt",0)) return;
+    if(next_turn<0 || !tekken3_card_file(path,sizeof path,"embu-rotation.txt",0)) return;
     FILE *f=fopen(path,"w");
     if(!f) { fprintf(stderr,"Cine trigger: cannot write %s\n",path); return; }
-    fprintf(f,"ttt-next %d variant %u\n",ttt_next,psx_mod_read_byte(VARIANT));
+    fprintf(f,"next %s variant %u\n",turn_keys[next_turn],psx_mod_read_byte(VARIANT));
     fclose(f);
 }
 
@@ -332,7 +354,6 @@ static void attract_tick(unsigned state) {
     if(planned) {
         const Trigger *t=planned; planned=NULL;
         play(t,variant);
-        if(!active) ttt_next=1;     /* not played: its turn again next time */
         return;
     }
     for(int i=0;i<trigger_count;i++) {

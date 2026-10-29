@@ -2857,9 +2857,75 @@ struct RuntimePerfState {
     uint64_t bench_start_frame = 0;
     uint64_t bench_end_frame = 0;
     RuntimePerfSnapshot bench_start;
+    bool diag = false;                  /* PSX_RUNTIME_PERF_DIAG: the cadence lines */
+    bool ring = false;                  /* PSX_FRAME_RING: the per-frame ring below */
+    uint64_t frame_begin_counter = 0;
+    uint64_t pacer_at_begin = 0;
+    uint64_t pending_work = 0;
+    uint64_t pending_cycles = 0;
+    uint64_t exit_cycles = 0;
 };
 
 static RuntimePerfState g_runtime_perf;
+
+/* Reference bench (tools/perf/ref_bench.py): PSX_FRAME_RING=1 keeps, for each
+ * emulated frame, the guest work since the previous vblank, the vblank
+ * handler's own work (present, input, mod ticks) without its pacer wait, that
+ * wait, and on Windows the game thread's cycles over the guest work
+ * (QueryThreadCycleTime: other processes taking the core do not count). The
+ * debug server's frame_times command drains it. */
+struct RuntimeFrameRecord {
+    uint64_t frame;
+    uint32_t work_us, front_us, pacer_us;
+    uint64_t cycles;
+};
+#define RUNTIME_FRAME_RING 16384
+static RuntimeFrameRecord g_frame_ring[RUNTIME_FRAME_RING];
+static uint64_t g_frame_ring_seq = 0;
+
+static uint64_t runtime_thread_cycles() {
+#ifdef _WIN32
+    ULONG64 cycles = 0;
+    QueryThreadCycleTime(GetCurrentThread(), &cycles);
+    return (uint64_t)cycles;
+#else
+    return 0;
+#endif
+}
+
+static uint32_t runtime_ticks_us(uint64_t ticks) {
+    return (uint32_t)(ticks * 1000000u / g_runtime_perf.frequency);
+}
+
+static void runtime_frame_ring_push(uint64_t now) {
+    uint64_t pacer = g_runtime_perf.pacer_ticks - g_runtime_perf.pacer_at_begin;
+    uint64_t span = now - g_runtime_perf.frame_begin_counter;
+    RuntimeFrameRecord &r = g_frame_ring[g_frame_ring_seq % RUNTIME_FRAME_RING];
+    extern uint64_t s_frame_count;
+    r.frame = s_frame_count;
+    r.work_us = runtime_ticks_us(g_runtime_perf.pending_work);
+    r.front_us = runtime_ticks_us(span > pacer ? span - pacer : 0);
+    r.pacer_us = runtime_ticks_us(pacer);
+    r.cycles = g_runtime_perf.pending_cycles;
+    g_frame_ring_seq++;
+}
+
+/* Next record after *cursor (records the ring overwrote are skipped); 0 when
+ * none is ready or the ring is off. */
+extern "C" int runtime_frame_ring_take(uint64_t *cursor, uint64_t *frame,
+                                       uint32_t *work_us, uint32_t *front_us,
+                                       uint32_t *pacer_us, uint64_t *cycles) {
+    if (!g_runtime_perf.ring || *cursor >= g_frame_ring_seq) return 0;
+    if (g_frame_ring_seq - *cursor > RUNTIME_FRAME_RING)
+        *cursor = g_frame_ring_seq - RUNTIME_FRAME_RING;
+    const RuntimeFrameRecord &r = g_frame_ring[*cursor % RUNTIME_FRAME_RING];
+    *frame = r.frame; *work_us = r.work_us; *front_us = r.front_us;
+    *pacer_us = r.pacer_us; *cycles = r.cycles;
+    (*cursor)++;
+    return 1;
+}
+
+extern "C" int runtime_frame_ring_on(void) { return g_runtime_perf.ring; }
 
 static bool runtime_perf_parse_window(const char *text, uint64_t *start,
                                       uint64_t *end) {
@@ -2880,7 +2946,10 @@ static void runtime_perf_init() {
     if (g_runtime_perf.initialized) return;
     g_runtime_perf.initialized = true;
     const char *enabled = std::getenv("PSX_RUNTIME_PERF_DIAG");
-    g_runtime_perf.enabled = enabled && enabled[0] && enabled[0] != '0';
+    g_runtime_perf.diag = enabled && enabled[0] && enabled[0] != '0';
+    const char *ring = std::getenv("PSX_FRAME_RING");
+    g_runtime_perf.ring = ring && ring[0] && ring[0] != '0';
+    g_runtime_perf.enabled = g_runtime_perf.diag || g_runtime_perf.ring;
     if (!g_runtime_perf.enabled) return;
 
     g_runtime_perf.frequency = SDL_GetPerformanceFrequency();
@@ -3004,13 +3073,27 @@ static void runtime_perf_frame_begin() {
         now >= g_runtime_perf.last_frame_exit_counter) {
         g_runtime_perf.guest_work_ticks +=
             now - g_runtime_perf.last_frame_exit_counter;
+        if (g_runtime_perf.ring) {
+            g_runtime_perf.pending_work = now - g_runtime_perf.last_frame_exit_counter;
+            g_runtime_perf.pending_cycles = g_runtime_perf.exit_cycles
+                ? runtime_thread_cycles() - g_runtime_perf.exit_cycles : 0;
+        }
+    }
+    if (g_runtime_perf.ring) {
+        g_runtime_perf.frame_begin_counter = now;
+        g_runtime_perf.pacer_at_begin = g_runtime_perf.pacer_ticks;
     }
     runtime_perf_bench_tick(now);
 }
 
 static void runtime_perf_frame_end() {
     if (!g_runtime_perf.enabled) return;
-    g_runtime_perf.last_frame_exit_counter = SDL_GetPerformanceCounter();
+    uint64_t now = SDL_GetPerformanceCounter();
+    if (g_runtime_perf.ring && g_runtime_perf.frame_begin_counter) {
+        runtime_frame_ring_push(now);
+        g_runtime_perf.exit_cycles = runtime_thread_cycles();
+    }
+    g_runtime_perf.last_frame_exit_counter = now;
 }
 
 class RuntimePerfFrameScope {
@@ -3034,7 +3117,7 @@ static void runtime_perf_diag_tick() {
     static uint64_t last_spu = 0, last_underruns = 0, last_overflows = 0;
     static uint64_t last_up[6] = {0};
     static uint64_t last_overlay_load_us = 0;
-    if (!g_runtime_perf.enabled) return;
+    if (!g_runtime_perf.diag) return;
 
     uint64_t now = SDL_GetPerformanceCounter();
     const uint64_t interval_ticks =

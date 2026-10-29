@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Tekken Force: each guest's own bosses (F02).
+"""Tekken Force: each guest's own bosses (F02), the natives' Tekken 3 ones (B112).
 
     python tools/test_force_bosses.py --player kazuya [--stages 4] [--observe 20] [--shots DIR]
                                       [--build build-rel-lite] [--memcard-dir saves]
+                                      [--attract] [--ttt1-moves]
 
 Boots a private copy of the build (software renderer, headless, x1) on a copy
 of the memory card, opens Tekken Force (tools/test_force_moveset.py) and picks
@@ -15,7 +16,9 @@ seconds of fight with player 1 standing and punching: the game must not hang
 projections must go on: B04's freeze), the boss must play (its move record,
 actor + 0x54, changes) and take hits. The boss is then knocked out (life 0)
 and the next stage follows. Prints one line per stage and fails on the first
-boss that does not hold.
+boss that does not hold. --attract first leaves the attract on till one of
+its fights has a guest, as a player who watched it: the guests' tick then
+runs through the Force overlay's load (B112, every native met Paul).
 """
 import argparse, json, sys, time
 from pathlib import Path
@@ -51,8 +54,23 @@ ROUTES = {
     'roger': ['kuma', 'panda', 'alex', 'heihachi'],
     'alex': ['kuma', 'panda', 'roger', 'heihachi'],
     'tetsujin': ['tetsujin'] * 4,
-    'jin': ['paul', 'nina', 'hwoarang', 'heihachi'],            # stock, for comparison
 }
+# Tekken 3's own routes (B112), the overlay's table at 0x800B6378 read on the
+# disc, the punch costume's: costumes only change Eddy's (Tiger: Eddy three
+# times) and Kuma's (Panda: Kuma, Xiaoyu, Jin), and the bosses' outfits.
+ROUTES.update({
+    'paul': ['law', 'kuma', 'jin', 'heihachi'], 'law': ['paul', 'hwoarang', 'eddy', 'heihachi'],
+    'lei': ['nina', 'hwoarang', 'bryan', 'heihachi'], 'king': ['lei', 'paul', 'nina', 'heihachi'],
+    'yoshimitsu': ['yoshimitsu', 'mokujin', 'bryan', 'heihachi'], 'nina': ['jin', 'anna', 'anna', 'heihachi'],
+    'hwoarang': ['eddy', 'law', 'jin', 'heihachi'], 'xiaoyu': ['lei', 'kuma', 'jin', 'heihachi'],
+    'eddy': ['julia', 'gunjack', 'eddy', 'heihachi'], 'jin': ['paul', 'nina', 'hwoarang', 'heihachi'],
+    'julia': ['king', 'eddy', 'jin', 'heihachi'], 'kuma': ['panda', 'xiaoyu', 'paul', 'heihachi'],
+    'bryan': ['lei', 'gunjack', 'yoshimitsu', 'heihachi'], 'heihachi': ['eddy', 'julia', 'jin', 'heihachi'],
+    'ogre': ['king', 'hwoarang', 'jin', 'heihachi'], 'mokujin': ['mokujin'] * 4,
+    'gunjack': ['gunjack', 'yoshimitsu', 'bryan', 'heihachi'], 'gon': ['kuma', 'panda', 'mokujin', 'heihachi'],
+    'anna': ['yoshimitsu', 'gunjack', 'nina', 'heihachi'], 'drb': ['nina', 'anna', 'bryan', 'heihachi'],
+    'trueogre': ['king', 'hwoarang', 'jin', 'heihachi'], 'crow': ['heihachi'] * 4,
+})
 SCAN = (0x80056764, 0x80056900)
 SOLDIER = 21
 
@@ -71,7 +89,9 @@ class PatientGame(Game):
 
 
 def catalogue(build):
-    return [l.split()[0] for l in (build / 'mods/ttt1/guests.txt').read_text().splitlines() if l.split()]
+    """The guests, none in a build without mods/ttt1 (the mod off: Tekken 3's own routes)."""
+    path = build / 'mods/ttt1/guests.txt'
+    return [l.split()[0] for l in path.read_text().splitlines() if l.split()] if path.is_file() else []
 
 
 def fighter_id(key, guests):
@@ -86,7 +106,7 @@ def name_of(fid, guests):
     return NATIVES[fid] if fid < len(NATIVES) else f'id{fid}'
 
 
-def pick(g, player, guests):
+def pick(g, player, guests, ttt1=False):
     to_force_grid(g)
     if player in guests:
         k = guests.index(player)
@@ -102,13 +122,21 @@ def pick(g, player, guests):
         want = GUEST_ID + k
     else:
         want = NATIVES.index(player)
-        for _ in range(30):
+        for _ in range(4):                     # row by row: right until the row wraps or stops, then down
+            row = set()
+            while g.value(fm.P1_FIGHTER) not in row | {want}:
+                row.add(g.value(fm.P1_FIGHTER)); g.press(RIGHT)
             if g.value(fm.P1_FIGHTER) == want: break
-            g.press(RIGHT)
+            g.press(DOWN)
     g.wait(lambda: g.value(fm.P1_FIGHTER) == want, f'the grid cursor never reached {player}', 10)
     g.press(SQUARE)
     time.sleep(1)
-    if 'P1 opens the MOVESET card' in g.log(): g.press(CROSS)
+    if 'P1 opens the MOVESET card' in g.log():
+        if ttt1:
+            g.press(RIGHT)
+            g.wait(lambda: 'P1 highlights TTT1 moves' in g.log(), 'right did not switch to TTT1 moves', 5)
+        g.press(CROSS)
+    elif ttt1: raise AssertionError(f'{player} has no MOVESET card')
     g.wait(lambda: g.value(SCREEN) == 8 and g.value(PHASE, 2) >= 8, 'the stage never started', 120)
     got = g.value(ACTOR + 0x18, 2)
     assert got == want, f'player 1 is {name_of(got, guests)}, not {player}'
@@ -162,8 +190,8 @@ def observe(g, seconds, shots, tag):
                 boss_damage=life0 - g.value(boss + 0x3f6, 2), player_damage=lost)
 
 
-def run(g, player, stages, seconds, shots, guests, pokes=(), fast=False):
-    pick(g, player, guests)
+def run(g, player, stages, seconds, shots, guests, pokes=(), fast=False, ttt1=False):
+    pick(g, player, guests, ttt1)
     route = ROUTES.get(player)
     results, met, in_boss, i, started, seen = [], 0, False, 0, time.monotonic(), set()
     stage, full = g.value(STAGE, 2), g.value(LIFE, 2)
@@ -247,6 +275,9 @@ def main():
     ap.add_argument('--end', action='store_true', help='after stage 4: the boss icons of the end screen')
     ap.add_argument('--fast', action='store_true', help='knock the ordinary enemies out on sight')
     ap.add_argument('--poke', action='append', default=[], help='STAGE=KEY: write that boss in RAM (test only)')
+    ap.add_argument('--attract', action='store_true',
+                    help='leave the attract on till one of its fights has a guest (B112: the way a player comes in)')
+    ap.add_argument('--ttt1-moves', action='store_true', help='a native: take the TTT1 moves on the MOVESET card')
     ap.add_argument('--keep-log', default='', help='copy the game log there')
     a = ap.parse_args()
     build = Path(a.build)
@@ -255,8 +286,10 @@ def main():
     if shots: shots.mkdir(parents=True, exist_ok=True)
     g = PatientGame(build, Path(a.memcard_dir), {})
     try:
+        if a.attract:
+            g.wait(lambda: 'TTT1 characters: guest in the fight' in g.log(), 'no attract fight with a guest', 400)
         t0 = time.monotonic()
-        results = run(g, a.player, a.stages, a.observe, shots, guests, a.poke, a.fast)
+        results = run(g, a.player, a.stages, a.observe, shots, guests, a.poke, a.fast, a.ttt1_moves)
         print(f'{time.monotonic() - t0:.0f} s', flush=True)
         if a.end and len(results) == 4 and all(r['held'] for r in results) and not end_screen(g, shots, a.player):
             results.append(dict(held=False))

@@ -470,6 +470,14 @@ def convert_positions(a, reader=None, prev_reader=None, half=None, track=False):
     out += pack_fields([], 2)
     return out
 
+def ps1_uv(page, clut, u, v):
+    """UV TTT1 -> (materiau PS1, UV u | v << 8 dans la bande costume), apres rangement."""
+    mode, cl, X, sub, Y = texpack.remap_uv(page, clut, u, v)   # images hors repli deplacees
+    ppw = 4 >> mode
+    pm = (cl & 0x7fff) | (0x8000 if mode == 1 else 0)
+    Yf = Y + (128 if X >= 64 else 0); Xf = X % 64                # repli de la bande costume
+    return pm, ((Xf * ppw + sub) & 255) | ((Yf & 255) << 8)
+
 def convert_texture(c):
     prims = parse_c_ttt1(c)
     mats = []; uvs = []; stream = []
@@ -478,11 +486,7 @@ def convert_texture(c):
         page, clut = mat >> 16, mat & 0xffff
         idx = []; pm = None
         for u, v in uv:
-            mode, cl, X, sub, Y = texpack.remap_uv(page, clut, u, v)   # images hors repli deplacees
-            ppw = 4 >> mode
-            pm = (cl & 0x7fff) | (0x8000 if mode == 1 else 0)
-            Yf = Y + (128 if X >= 64 else 0); Xf = X % 64                # repli de la bande costume
-            e = ((Xf * ppw + sub) & 255) | ((Yf & 255) << 8)
+            pm, e = ps1_uv(page, clut, u, v)
             if e not in uvs: uvs.append(e)
             idx.append(uvs.index(e))
         if pm not in mats: mats.append(pm)

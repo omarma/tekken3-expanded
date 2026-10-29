@@ -99,6 +99,16 @@ class Conversion(unittest.TestCase):
             self.assertEqual(laser.main(['--ttt-disc', str(disc), '--out', str(Path(temp) / 'pack')]), 1)
             self.assertFalse((Path(temp) / 'pack').exists())
 
+    def test_an_unknown_version_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            disc = Path(temp) / 'ttt-v3.iso'
+            disc.write_bytes(iso({'SYSTEM.CNF': b'BOOT2 = cdrom0:\\SLUS_200.01;1\r\nVER = 3.00\r\n',
+                                  'SLUS_200.01': b'\0' * 0x1D0000, 'TEKKEN.BIN': b'\0' * 2048}))
+            with self.assertRaises(ttt_disc.DiscError) as error:
+                laser.laser_set(disc)
+            self.assertIn('SLUS_200.01 of an unknown version (SYSTEM.CNF: VER = 3.00), not 1.00 or 2.00', str(error.exception))
+            self.assertFalse(laser.found(disc))
+
     def test_not_a_disc(self):
         with tempfile.TemporaryDirectory() as temp:
             disc = Path(temp) / 'zeros.iso'

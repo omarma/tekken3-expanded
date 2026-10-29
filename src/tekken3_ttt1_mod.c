@@ -7,6 +7,7 @@
 #include "psx_sdl.h"
 #include "tekken3_ttt1_assets.h"
 #include "tekken3_stage_source.h"
+#include "tekken3_arcade_stages.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@
  * data start (+16). `generation` and `costume` are the identity and the
  * costume it was read for, `prefix` the files it was read from. */
 enum { FACE_MAX=5 };      /* expressions 1..5: bytes 3..7 of TTT1's 0x801945D8 */
+enum { HILT_POINTS=16, HILT_QUADS=14 };
 typedef struct {
     unsigned generation,costume;char prefix[48];
     unsigned char file[65536];unsigned size;
@@ -33,6 +35,11 @@ typedef struct {
     /* Springs of accessory bones 18..21 (.acc, tools/ttt1/accessories.py): the
      * arcade's block of the TTT1 bone drawn on each, none for a rigid bone. */
     int16_t accessory[4][12];unsigned char swings[4],accessories_changed;
+    /* Hilt of Unknown's blade (.hilt, tools/ttt1/hilt.py): per style (moveset), the
+     * T3 hand bone and 16 points in its frame; 14 quads, corners and UVs; 0 styles: none. */
+    unsigned hilt_styles;uint16_t hilt_material;
+    struct { uint16_t moveset,bone; int16_t point[HILT_POINTS][3]; } hilt[2];
+    unsigned char hilt_corner[HILT_QUADS][4];uint16_t hilt_uv[HILT_QUADS][4];
 } GuestModel;
 static GuestModel models[2];
 static uint32_t control;
@@ -251,6 +258,66 @@ static void read_accessories(unsigned player,const char *root,unsigned costume) 
     fprintf(stderr,"%s model: accessory springs on bones %s%s%s%s\n",name_for(player),
             m->swings[0]?"18 ":"",m->swings[1]?"19 ":"",m->swings[2]?"20 ":"",m->swings[3]?"21":"");
 }
+/* The costume's blade hilt: 'HLT1', u16 styles (2), u16 quads (14), u16 material,
+ * u16 0, per style u16 moveset, u16 T3 bone, 16 x 3 s16 points, then per quad 4
+ * corners (bytes) and 4 UVs (u16). No file (anyone but Unknown): no hilt. */
+static void read_hilt(unsigned player,const char *root,unsigned costume) {
+    GuestModel *m=&models[player];
+    enum { STYLE=4+6*HILT_POINTS, QUAD=4+8, SIZE=12+2*STYLE+HILT_QUADS*QUAD };
+    unsigned char b[SIZE];char path[4096];
+    m->hilt_styles=0;
+    if(snprintf(path,sizeof path,"%s/%s-arcade-P%u.hilt",root,model_prefix(player),costume)>=(int)sizeof path)return;
+    FILE *f=fopen(path,"rb");
+    if(!f)return;
+    size_t n=fread(b,1,sizeof b,f);fclose(f);
+    if(n<SIZE || memcmp(b,"HLT1",4) || half(b+4)!=2 || half(b+6)!=HILT_QUADS)return;
+    m->hilt_material=half(b+8);
+    for(unsigned s=0;s<2;s++) {
+        const unsigned char *e=b+12+s*STYLE;
+        m->hilt[s].moveset=half(e);m->hilt[s].bone=half(e+2);
+        for(unsigned i=0;i<HILT_POINTS*3;i++)m->hilt[s].point[i/3][i%3]=(int16_t)half(e+4+2*i);
+    }
+    for(unsigned q=0;q<HILT_QUADS;q++) {
+        const unsigned char *e=b+12+2*STYLE+q*QUAD;
+        for(unsigned k=0;k<4;k++) {
+            m->hilt_corner[q][k]=e[k]<HILT_POINTS?e[k]:0;
+            m->hilt_uv[q][k]=half(e+4+2*k);
+        }
+    }
+    m->hilt_styles=2;
+    fprintf(stderr,"%s model: blade hilt for movesets %u and %u\n",name_for(player),m->hilt[0].moveset,m->hilt[1].moveset);
+}
+static void material_words(unsigned player,unsigned mat,uint32_t *v,unsigned nv);
+/* The hilt of player's blade for the moveset it fights with (TTT1 0x801042B0,
+ * Unknown on Yoshimitsu's or Kunimitsu's moves): its hand bone, points and
+ * corners, and the GPU words of each quad's corners (UV with palette or page),
+ * else 0. */
+int tekken3_ttt1_hilt(unsigned player,unsigned moveset,unsigned *bone,const int16_t (**points)[3],
+                      const unsigned char (**corners)[4],uint32_t words[][4]) {
+    if(player>1)return 0;
+    GuestModel *m=&models[player];
+    for(unsigned s=0;s<m->hilt_styles;s++) {
+        if(m->hilt[s].moveset!=moveset)continue;
+        *bone=m->hilt[s].bone;*points=(const int16_t (*)[3])m->hilt[s].point;
+        *corners=(const unsigned char (*)[4])m->hilt_corner;
+        for(unsigned q=0;q<HILT_QUADS;q++) {
+            for(unsigned k=0;k<4;k++)words[q][k]=m->hilt_uv[q][k];
+            material_words(player,m->hilt_material,words[q],4);
+        }
+        return HILT_QUADS;
+    }
+    return 0;
+}
+/* The hand that holds the blade (0 the first, rows 13 / 14, bone 6; 1 the second,
+ * rows 17 / 18, bone 10), which TTT1 closes on the hilt (0x80103064 asks the fist
+ * of the hand that 0x801042B0 draws in), else -1. */
+static int hilt_hand(unsigned player) {
+    if(player>1 || !tekken3_guest_switches_on_button(player))return -1;
+    GuestModel *m=&models[player];
+    for(unsigned s=0;s<m->hilt_styles;s++)
+        if(m->hilt[s].moveset==tekken3_guest_moveset(player))return m->hilt[s].bone==10?1:0;
+    return -1;
+}
 /* Reads and checks a player's guest model, relocations and textures into
  * the host buffers. Returns 0 and leaves the buffers unusable on failure. */
 static int read_model(unsigned player) {
@@ -279,6 +346,7 @@ static int read_model(unsigned player) {
     m->reloc_count=(unsigned)(reloc_bytes/4);
     read_face(player,root,costume);
     read_accessories(player,root,costume);
+    read_hilt(player,root,costume);
     /* PS1 model converted by tools/ttt1_import.py: 27 rows. */
     if (word(m->file)!=27 || word(m->file+8)!=0x4b4d4433 || word(m->file+16)!=0x5f8) return 0;
     m->first_block=word(m->file+24); m->payload=word(m->file+16);
@@ -961,6 +1029,30 @@ void tekken3_ttt1_face_tick(unsigned player,int advanced,int expression,unsigned
     gr_vram_transfer_in(t?t->nx:384+x%64,t?t->ny:player*256+by,w,h,(const uint16_t*)(m->textures+m->face_image[e]));
     face_variant[player]=(int)e;
 }
+/* GPU words of a guest's textured corners: each UV (u | v << 8, in the costume
+ * band) gets the palette (corner 0) or the page (corner 1) of its material
+ * (palette | 0x8000 for 8 bits), in the player's band or on a tile moved off
+ * the HUD palettes. */
+static void material_words(unsigned player,unsigned mat,uint32_t *v,unsigned nv) {
+    unsigned bx0=255,by0=255,bx1=0,by1=0,shift=mat&0x8000?1:2;  /* pixels per halfword: 2 (8bpp) or 4 */
+    for(unsigned j=0;j<nv;j++) {
+        unsigned bx=(v[j]&255)>>shift,by=v[j]>>8;
+        if(bx<bx0)bx0=bx;if(bx>bx1)bx1=bx;if(by<by0)by0=by;if(by>by1)by1=by;
+    }
+    unsigned tpage=(mat&0x8000?0x86u:0x06u)+player*16;
+    const MovedTile *t=moved_count[player]?moved_tile(player,bx0,by0,bx1,by1):NULL;
+    if(t) {
+        /* Same place inside the tile, in its new page. */
+        for(unsigned j=0;j<nv;j++) {
+            unsigned u=v[j]&255,row=v[j]>>8;
+            unsigned nu=u-(t->bx<<shift)+((t->nx&63)<<shift),nv_=row-t->by+t->ny;
+            v[j]=(nv_<<8)|nu;
+        }
+        tpage=(t->nx>>6)|(mat&0x8000?0x80u:0);
+    }
+    v[0]|=(0x7e00u+(mat&0x7fff)+player*256)<<16;
+    if(nv>1)v[1]|=tpage<<16;
+}
 /* Paquets modeles pour le renderer NATIF, depuis le bloc de textures PS1 (mot 2) :
  * u16 decalage de la table d'UV, materiaux u16 (palette | 0x8000 si 8 bits),
  * UV deja replies dans la bande costume. Le moteur ecrit lui-meme sommets,
@@ -983,28 +1075,9 @@ static uint32_t make_packets_native(uint32_t bundle,uint32_t out,unsigned player
                 if(nv==4) psx_mod_write_word(out+40,0x808080);
             }
             uint32_t v[4];
-            unsigned bx0=255,by0=255,bx1=0,by1=0,shift=mat&0x8000?1:2;  /* pixels per halfword: 2 (8bpp) or 4 */
-            for(unsigned j=0;j<nv;j++) {
-                v[j]=psx_mod_read_half(uv+2+psx_mod_read_byte(src++)*2);
-                unsigned bx=(v[j]&255)>>shift,by=v[j]>>8;
-                if(bx<bx0)bx0=bx;if(bx>bx1)bx1=bx;if(by<by0)by0=by;if(by>by1)by1=by;
-            }
-            unsigned tpage=(mat&0x8000?0x86u:0x06u)+player*16;
-            const MovedTile *t=moved_count[player]?moved_tile(player,bx0,by0,bx1,by1):NULL;
-            if(t) {
-                /* Same place inside the tile, in its new page. */
-                for(unsigned j=0;j<nv;j++) {
-                    unsigned u=v[j]&255,row=v[j]>>8;
-                    unsigned nu=u-(t->bx<<shift)+((t->nx&63)<<shift),nv_=row-t->by+t->ny;
-                    v[j]=(nv_<<8)|nu;
-                }
-                tpage=(t->nx>>6)|(mat&0x8000?0x80u:0);
-            }
-            for(unsigned j=0;j<nv;j++) {
-                if(j==0) v[j]|=(0x7e00u+(mat&0x7fff)+player*256)<<16;
-                if(j==1) v[j]|=tpage<<16;
-                psx_mod_write_word(out+voff[kind][j],v[j]);
-            }
+            for(unsigned j=0;j<nv;j++)v[j]=psx_mod_read_half(uv+2+psx_mod_read_byte(src++)*2);
+            material_words(player,mat,v,nv);
+            for(unsigned j=0;j<nv;j++)psx_mod_write_word(out+voff[kind][j],v[j]);
             out+=size[kind];
         }
     }
@@ -1191,6 +1264,7 @@ void __wrap_func_80034844(CPUState *cpu) {
             else if(grip=='O')cpu->gpr[5]=0;
             else if(grip=='D' && hand==0)   /* the other hand's gauge: this one follows the attacks too */
                 cpu->gpr[5]=hand_index((int16_t)psx_mod_read_half(actor+0x127e));
+            if(hilt_hand(player)==hand)cpu->gpr[5]=3;
         }
         /* A cinematic's hand steps (src/tekken3_cine.c, "hand"), on a hand with poses. */
         int step=hand>=0?tekken3_cine_hand(player,(unsigned)hand):-1;
@@ -1249,8 +1323,8 @@ static uint32_t swing_block(unsigned player,unsigned bone) {
  * angles (atan2(-z, x), atan2(y, |xz|)). TTT1 adds: (1) the tip is smoothed over +2 frames (actor
  * +0x126C); (2) collision mode 2 (0x801642B8): the tip stays outside a cylinder of radius +22 around
  * the x axis of bone +14 through (0, +18, +20) in its frame (Michelle's braids, Ganryu's apron...);
- * (3) no sideways pull, where T3 adds +10 / 16 on x and z (TTT1 sways them only on King's stage,
- * 0x80163230). The solver writes the bone's local rotation; the engine (0x8003B418) composes it. */
+ * (3) no sideways pull, where T3 adds +10 / 16 on x and z, but on King's stage the wind's (B126,
+ * tekken3_ttt_stage_wind). The solver writes the bone's local rotation; the engine (0x8003B418) composes it. */
 enum { ACC_LENGTH=4,ACC_SMOOTH=1,ACC_PULL=2,ACC_DAMP=3,ACC_GRAVITY=5,ACC_MODE=6,ACC_BONE=7,ACC_Y=9,ACC_Z=10,ACC_RADIUS=11 };
 static int32_t accessory_tip[2][4][3];
 static void read_matrix(uint32_t a,int32_t *m) { for(unsigned k=0;k<9;k++)m[k]=(int16_t)psx_mod_read_half(a+k*2); }
@@ -1308,7 +1382,14 @@ static void solve_accessory(uint32_t actor,unsigned player,unsigned bone,const i
     apply(inverse,d,d);
     double length=sqrt((double)d[0]*d[0]+(double)d[1]*d[1]+(double)d[2]*d[2]);
     for(unsigned n=0;n<3;n++)d[n]=length>0?(int64_t)(d[n]*4096.0/length):0;
-    if(air) { int64_t pull[3]={0,(0x100-k[ACC_GRAVITY])<<4,0}; apply(inverse,pull,g); }
+    if(air) {
+        int64_t pull[3]={0,(0x100-k[ACC_GRAVITY])<<4,0};
+        int wind[2];
+        if(tekken3_ttt_stage_wind(wind)) {        /* B126: stage 11's wind, sideways */
+            pull[0]=(int16_t)(wind[0]*k[ACC_GRAVITY]/256);pull[2]=(int16_t)(wind[1]*k[ACC_GRAVITY]/256);
+        }
+        apply(inverse,pull,g);
+    }
     for(unsigned n=0;n<3;n++)v[n]=(d[n]*k[ACC_PULL]+g[n]*k[ACC_DAMP])/256;
     v[0]+=(0x100-k[ACC_PULL]-k[ACC_DAMP])<<4;
     if(k[ACC_MODE]==2 && k[ACC_BONE]<18) {                       /* 0x801642B8 */
@@ -1828,6 +1909,15 @@ void __wrap_func_800707F4(CPUState *cpu) {
 extern void tekken3_cine_hooks_tick(void);
 extern void tekken3_ttt1_embu_effects(void);
 extern void tekken3_ttt1_embu_light(int embu);
+extern int tekken3_embu_guests_turn(void);
+/* A casting with a guest in it, the guests' models there: the Embus'
+ * rotation has the guests' turn. */
+int tekken3_ttt1_embu_cast_active(void) {
+    if(!control)return 0;
+    embu_parse();
+    for(unsigned i=0;i<20;i++)if(embu_cast[i]>=0)return 1;
+    return 0;
+}
 static void embu_tick(void) {
     tekken3_cine_hooks_tick();
     /* The lightning pack and light of a cinematic. */
@@ -1858,9 +1948,10 @@ static void embu_tick(void) {
         embu_activated[0]=embu_activated[1]=0;
         return;
     }
-    /* Variant 2 (0x80097F20, the unlocked roster, TIPS § 28) is always the
-     * game's own: the casting is for the starting roster of variants 0-1. */
-    if(psx_mod_read_byte(0x80097f20)>1)return;
+    /* Only the guests' turn of the Embus' rotation (variant 0, B104,
+     * src/tekken3_cine_trigger.c): T3's variants 0, 1 and 2 (the unlocked
+     * roster, TIPS § 28) are the game's own. */
+    if(!tekken3_embu_guests_turn())return;
     for(unsigned p=0;p<2;p++) {
         if(!embu_activated[p])continue;
         const uint32_t actor=0x800a9228+p*0x188c;

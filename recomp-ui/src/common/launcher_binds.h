@@ -108,6 +108,34 @@ int launcher_binds_psx_known_at(int index, char* guid, int guid_cap,
 // 1 if the GUID has a user-chosen display name (Rename Gamepad).
 int launcher_binds_psx_name_is_custom(const char* guid);
 
+// One gamepad entry of a player's Input source list. Every live pad gets its
+// own entry, even when two pads share a name or a GUID (two pads of the same
+// model), in SDL's order; saved pads that are not connected follow, one per
+// GUID. `label` is unique within the list: entries sharing a name are
+// numbered, with the connection when SDL knows it
+// ("#2 DualSense Wireless Controller (wireless)").
+typedef struct {
+    char     guid[40];
+    char     name[64];    // display name without the number
+    char     label[96];   // unique label for the list (and as an ImGui id)
+    uint32_t id;          // live SDL instance id, 0 when disconnected
+    int      live;
+    int      connection;  // LauncherPad.connection, 0 when disconnected
+    int      selected;    // the pad `player` uses
+    int      claimed;     // used by another visible player
+} LauncherPadOption;
+
+// Fill `out` with the gamepad entries offered to `player` (0-based). Saved
+// pads from the [gamepads] registry are listed only under a PSX profile.
+int launcher_binds_pad_options(const LauncherModel* m, int player,
+                               const LauncherPad* pads, int pad_count,
+                               LauncherPadOption* out, int max);
+// Copy into `out` the list label of the pad `player` uses; 0 (out untouched)
+// when the player's source is not a listed pad.
+int launcher_binds_player_pad_label(const LauncherModel* m, int player,
+                                    const LauncherPad* pads, int pad_count,
+                                    char* out, int cap);
+
 // A system hotkey was rebound. `keycode` is an SDL_Keycode, `kmod` the SDL
 // modifier mask; pass keycode==0 to UNBIND. Persists to config.ini [KeyMap]
 // and refreshes the model's display string.

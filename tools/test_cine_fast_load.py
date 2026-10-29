@@ -2,6 +2,7 @@
 """F09: a cinematic's black loading is short and runs unpaced, the cinematic and the title after it never do.
 
     python tools/test_cine_fast_load.py OUT [--build build-rel-lite] [--mods off,on,check]
+                                        [--start black,scene]
 
 Boots tools/cine_drive.py's private copy (software x1, headless) once per setting of the speed mods
 (off: none; on: psx.enhancement.fast-loading, uncapped), Start at the title, then no input: the
@@ -15,6 +16,15 @@ speed-up past the black), or if the characters read ahead take more than READ_AH
 drive reads them as before (TEKKEN3_CINE_SWAP_CHECK=1) and every file must match the disc image's
 bytes (src/tekken3_cine_swap.c). OUT/<setting>/game.log, OUT/<setting>/pace.txt. Run through
 ressources/slot.py (--kind game). Frames, not seconds: headless runs unpaced everywhere.
+
+--start (B109): Start pressed during the TTT Embu instead, mods off: in the black (held from the
+fight's phase 3, seen in phases 4 to 6) or 300 frames into the cinematic. The demo fight's mode
+takes Start to the modes menu (fight_reset_check, state_leave_to(4)); the characters read ahead
+cannot be left, the game reads no pad in the engine's one call. Each run fails if the menu does
+not come, if the pace is not the player's again within LEFT_MAX frames of the game taking Start
+(the black: once its phase 3 is over) or leaves it afterwards, if the cinematic still plays or its
+scene still loads ("Cine scene: left" never logged), or if an Arcade with a guest (Kazuya) then
+started from that menu does not reach its first round (the game stuck or gone). OUT/start-<moment>/game.log, OUT/start-<moment>/pace.txt.
 """
 import argparse, re, sys, time
 from pathlib import Path
@@ -32,6 +42,7 @@ CHECK = re.compile(r'Cine swap: check, file (\d+) (.+)')
 UNPACED = ('unpaced, the loading', 'unpaced, the reading ahead', 'unpaced, back to the title')
 HELD = ('held, the scene', 'held, the title')
 READ_AHEAD_MAX = 120
+LEFT_MAX = 120
 
 
 def turbo_frames(edges, a, b):
@@ -82,13 +93,79 @@ def run(build, out, setting):
     return ok
 
 
+def run_start(build, out, moment):
+    """B109: Start during the TTT Embu, then the modes menu, the player's pace, a fight that loads."""
+    out.mkdir(parents=True, exist_ok=True)
+    g = cd.Game(build, out, {}, False, mods_state=MODS['off'])
+    rows, ok, menu, pressed, guest = [], True, False, None, 'kazuya'
+    try:
+        f0 = g.frame(); end = time.monotonic() + 900
+        while time.monotonic() < end and pressed is None:
+            st = g.value(cd.STATE, 2)
+            if not menu and st == 3 and g.frame() - f0 > 300:
+                g.press(cd.START); menu = True
+            found = PACE.findall(g.log()); paces = [p for _, p in found]
+            scene = next((int(f) for f, p in found if p == 'held, the scene'), None)
+            # The black: the fight's phase 3 loads in one call (the pad unread), phase 4 waits 60
+            # frames, too short to aim at headless: Start held from phase 3 until the game takes it.
+            if moment == 'black' and paces and paces[-1] == 'unpaced, the loading' and st == 8:
+                pressed = g.frame(); at = (st, g.value(cd.PHASE, 2))
+                g.q(cmd='press', buttons=cd.START, frames=1200)
+                g.wait(lambda: g.value(cd.STATE, 2) != 8 or g.value(cd.PHASE, 2) == 17, 'the black never ended', 60)
+                taken = g.frame(); at += (g.value(cd.STATE, 2), g.value(cd.PHASE, 2))
+            elif moment == 'scene' and scene is not None and g.frame() - scene > 300:
+                pressed = taken = g.frame(); at = (st, g.value(cd.PHASE, 2)); g.press(cd.START)
+            time.sleep(.02)
+        if pressed is None: print(f'start {moment}: the moment never came'); return False
+        rows.append(f'Start at frame {pressed}, state {at[0]} phase {at[1]}' +
+                    (f', taken by frame {taken}: state {at[2]} phase {at[3]}' if len(at) > 2 else ''))
+        try:
+            g.wait(lambda: g.value(cd.STATE, 2) == 4, 'no modes menu', 60)
+        except AssertionError:
+            rows.append('the modes menu never came  <- ECHEC'); ok = False
+        if ok:
+            # Not long: the menu goes back to the title after 481 frames without input
+            # (0x1E1, ovl5), a few seconds headless.
+            time.sleep(.5)
+            menu_frame = g.frame()
+            try:
+                cd.to_arcade_guest(g, guest)
+                g.wait(lambda: g.value(cd.STATE, 2) == 8 and g.value(cd.PHASE, 2) == 8, 'no round', 180)
+                rows.append(f'Arcade with {guest} from the menu: first round at frame {g.frame()}')
+            except Exception as e:
+                rows.append(f'Arcade with {guest} from the menu: {e}  <- ECHEC'); ok = False
+            rows.append(f'menu at frame {menu_frame}')
+    finally:
+        alive = g.process.poll() is None
+        g.stop()
+    log = (out / 'game.log').read_text(errors='replace')
+    paces = [(int(f), p) for f, p in PACE.findall(log)]
+    after = [(f, p) for f, p in paces if f >= pressed]
+    back = next((f for f, p in after if p == "the player's"), None)
+    if back is None or back - taken > LEFT_MAX:
+        rows.append(f"pace after Start: {after}  <- ECHEC (not the player's within {LEFT_MAX} frames)"); ok = False
+    elif any(p != "the player's" for f, p in after if f > back):
+        rows.append(f"pace after Start: {after}  <- ECHEC (left the player's again)"); ok = False
+    else:
+        rows.append(f"pace the player's again {back - taken} frames after the game took Start")
+    if 'Cine scene: left' not in log: rows.append('no "Cine scene: left" in the log  <- ECHEC'); ok = False
+    if not alive: rows.append('the game was gone at the end  <- ECHEC'); ok = False
+    for l in log.splitlines():
+        if l.startswith(('Cine scene:', 'Cine:')) and 'pace' not in l and 'hold' not in l: rows.append('  log: ' + l)
+    (out / 'pace.txt').write_text('\n'.join(rows) + '\n')
+    print(f'start {moment}:'); print('\n'.join('  ' + r for r in rows))
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('out', type=Path)
     ap.add_argument('--build', default='build-rel-lite')
     ap.add_argument('--mods', default='off,on,check')
+    ap.add_argument('--start', default='', help='B109: black,scene (Start pressed then), in place of --mods')
     a = ap.parse_args()
-    ok = all([run(ROOT / a.build, a.out / s, s) for s in a.mods.split(',')])
+    if a.start: ok = all([run_start(ROOT / a.build, a.out / f'start-{m}', m) for m in a.start.split(',')])
+    else: ok = all([run(ROOT / a.build, a.out / s, s) for s in a.mods.split(',')])
     print('OK' if ok else 'ECHEC')
     sys.exit(0 if ok else 1)
 

@@ -12,14 +12,21 @@
  * arena 5 (Lei) T3 or TTT 5, arena 7 (Xiaoyu and Jin in costumes 3 and 4) T3
  * or School, arena 10 (Eddy, Tiger) T3, Eddy-B or Eddy-A. Every draw is
  * made once per fight with the host's generator, as the CPU draws its
- * moveset. True Ogre (ID 20) on either side: TTT's stage 14 (Unknown's) in
- * TTT, T3 or 14 in RANDOM (the user's choice, 2026-10-21); in AUTO his own
- * Tekken 3 stage (the user's choice, 2026-10-25: stage 14 is Unknown's); his
- * fight is the game's dark arena (0x800AFAA0 = 2, Ogre's arena 6, decided
- * again when the cutscene reloads Ogre as True Ogre), which keeps the PS1
- * stage otherwise. A Continue fights the same fight again: it keeps its
- * stage. Gon's arena 13 (Roger and Alex's too) and Dr. B's 14 keep the PS1
- * stage.
+ * moveset. True Ogre (ID 20) on either side makes the fight the game's dark
+ * arena (0x800AFAA0, 0x80050F5C; Arcade: Ogre's arena 6, decided again when
+ * the cutscene reloads Ogre as True Ogre): the same rules decide, a TTT
+ * stage is drawn at night as TTT draws its stages with True Ogre in a team,
+ * Tekken 3's stays the PS1's dark arena (B124, GH#172, the user's choices of
+ * 2026-10-28). But True Ogre as Arcade's CPU, the boss, keeps 1.4.0's rule:
+ * TTT's stage 14, Unknown's, as it is, in TTT, T3 or 14 in RANDOM, his
+ * Tekken 3 stage in AUTO and T3. A Continue fights the same fight again: it
+ * keeps its stage. Gon's arena 13 (Roger and Alex's too) and Dr. B's 14 have no TTT
+ * stage of their own (B122, GH#171, the user's choice of 2026-10-27): Gon's
+ * takes Eddy-A by day (13), Dr. B's Nina's (9), as any arena does in TTT,
+ * RANDOM and for a guest in AUTO (Roger, Alex); a native in AUTO, and T3,
+ * keep the PS1 stage. The game then loads the arena of that TTT stage
+ * (Eddy's 10, Nina's 9, as the STAGE line of F18 does), its music the
+ * fighter's.
  *
  * Only what can be drawn is offered: TTT once the engine has TTT packs, so
  * AUTO and RANDOM too; Tekken 3's stage always (the arcade stage with Arcade
@@ -31,8 +38,13 @@
  * auto or random), not in the game's options block. Benches:
  * TEKKEN3_STAGES (t3, ttt, auto, random) overrides the menu,
  * TEKKEN3_STAGES_SEED fixes RANDOM's draw, TEKKEN3_STAGES_TTT=1 offers TTT
- * before its packs exist (the engine then draws Tekken 3's). */
+ * before its packs exist (the engine then draws Tekken 3's).
+ *
+ * In VS and Practice the STAGE line (F18, src/tekken3_stage_select.c) comes
+ * first: a stage chosen there is the fight's, the row's value only with the
+ * line's AUTO. */
 #include "tekken3_stage_source.h"
+#include "tekken3_stage_select.h"
 #include "tekken3_game_options.h"
 #include "tekken3_moveset_draw.h"
 #include "memcard.h"
@@ -44,8 +56,9 @@
 #include <time.h>
 
 enum { SCREEN = 0x800ae204, OPTIONS = 5, FIGHT = 8, LOADING = 11, MENU = 4, MODE = 0x800afa88,
-       ARENA = 0x800adc84, DARK_ARENA = 0x800afaa0, NO_STAGE = 0x800adca4, HUMAN = 0x800ae1f8,
-       LAST_ARCADE_ARENA = 12, PRACTICE = 5, DEMO = 6, STAGE_MODES = 0x3f };
+       ARENA = 0x800adc84, ARENA_COPY = 0x800afaa2, DARK_ARENA = 0x800afaa0, NO_STAGE = 0x800adca4,
+       HUMAN = 0x800ae1f8, LAST_ARCADE_ARENA = 12, GON_ARENA = 13, DR_B_ARENA = 14, ARCADE = 0, PRACTICE = 5, DEMO = 6,
+       STAGE_MODES = 0x3f };
 enum { SET_T3, SET_TTT, SET_AUTO, SET_RANDOM, SETTINGS };
 static const char *const words[SETTINGS] = { "t3", "ttt", "auto", "random" };
 static const char *const labels[SETTINGS] = { "TEKKEN 3", "TEKKEN TAG TOURNAMENT", "AUTO", "RANDOM" };
@@ -62,7 +75,9 @@ static int forced;                       /* TEKKEN3_STAGES */
 static uint64_t draw_state;
 static int decided = -1;                 /* the fight's source, -1 none yet */
 static int decided_stage = -1, decided_arena = -1;   /* its TTT stage, its arena */
-static int decided_true_ogre;            /* TTT's stage 14 for True Ogre: drawn in the dark arena */
+static int decided_moved;                /* Gon's or Dr. B's arena: the game loads decided_arena instead */
+static int decided_boss;                 /* Unknown's stage 14 for True Ogre as Arcade's CPU (B124) */
+static int moving;                       /* that arena written until the fight */
 static int continuing;
 static unsigned decisions;               /* tekken3_stage_decisions */
 static int row = -1, offered[SETTINGS], offered_count, shown = -1;
@@ -153,15 +168,23 @@ static const struct { int arena, count, choices[3]; } native_draws[] = {
     { 7, 2, { -1, 7 } },                  /* Xiaoyu, Jin in costumes 3, 4: T3 or School */
     { 10, 3, { -1, 10, 13 } },            /* Eddy, Tiger: T3, Eddy-B or Eddy-A */
 };
-enum { EDDY_ARENA = 10, EDDY_B = 10, EDDY_A = 13 };
+enum { EDDY_ARENA = 10, EDDY_B = 10, EDDY_A = 13, NINA = 9, OGRE_ARENA = 6 };
 enum { FIGHTERS = 0x800add5c, TRUE_OGRE = 20, UNKNOWN_STAGE = 14 };   /* fighter IDs of players 1, 2 */
 
 static int pick(int count) { return (int)tekken3_moveset_draw((unsigned)count, &draw_state); }
 /* TTT's stage of an arena (TTT, RANDOM, a guest in AUTO); Unknown's is 14
- * whatever her arena. */
+ * whatever her arena; Gon's arena Eddy-A, Dr. B's Nina's (B122). */
 static int ttt_stage_of(const char *guest, int arena) {
     if (guest && !strcmp(guest, "unknown")) return UNKNOWN_STAGE;
+    if (arena == GON_ARENA) return EDDY_A;
+    if (arena == DR_B_ARENA) return NINA;
     return arena == EDDY_ARENA ? (pick(2) ? EDDY_A : EDDY_B) : arena;
+}
+/* The arena the game loads for TTT's stage in Gon's or Dr. B's arena:
+ * Eddy-A's is Eddy's, Unknown's Ogre's (Unknown in Gon's arena), as on F18's
+ * STAGE line. */
+static int arena_of_stage(int stage) {
+    return stage == EDDY_A ? EDDY_ARENA : stage == UNKNOWN_STAGE ? OGRE_ARENA : stage;
 }
 /* AUTO's stage: -1 Tekken 3's. */
 static int auto_stage(const char *guest, int arena) {
@@ -173,34 +196,55 @@ static int auto_stage(const char *guest, int arena) {
 
 void tekken3_stage_source_decide(unsigned mode, int player, const char *guest, int arena) {
     decisions++;
-    if (!deciding_mode(mode)) { decided = -1; return; }
+    if (!deciding_mode(mode)) { decided = -1; decided_moved = moving = 0; return; }
     if (continuing && decided >= 0) {
-        continuing = 0;
+        continuing = 0; moving = decided_moved;
         fprintf(stderr, "TTT Stages: %s Continue, the same fight on %s stage %d\n", mode_names[mode],
                 decided == TEKKEN3_STAGE_TTT ? "TTT" : "T3",
                 decided == TEKKEN3_STAGE_TTT ? decided_stage : decided_arena);
         return;
     }
     continuing = 0;
+    /* The STAGE line of VS and Practice (src/tekken3_stage_select.c): its
+     * stage, on the arena it has the game load. */
+    int chosen_source, chosen_stage, chosen_arena;
+    if (tekken3_stage_select_choice(mode, &chosen_source, &chosen_stage, &chosen_arena)) {
+        decided = chosen_source; decided_stage = chosen_stage; decided_arena = chosen_arena;
+        decided_moved = moving = decided_boss = 0;
+        fprintf(stderr, "TTT Stages: %s fight, the STAGE line's %s stage %d in arena %d\n", mode_names[mode],
+                decided == TEKKEN3_STAGE_TTT ? "TTT" : "T3", decided == TEKKEN3_STAGE_TTT ? decided_stage : decided_arena,
+                decided_arena);
+        return;
+    }
     int s = effective(), stage = -1;
-    /* True Ogre (ID 20) on either side (Team Battle: the fighter on the field):
-     * TTT's stage 14, Unknown's, whatever the arena, in TTT, and in RANDOM one
-     * chance in two (the user's choice of 2026-10-21); AUTO and T3 his own
-     * Tekken 3 stage (2026-10-25). */
-    int true_ogre = psx_mod_read_half(FIGHTERS) == TRUE_OGRE || psx_mod_read_half(FIGHTERS + 2) == TRUE_OGRE;
-    if (arena >= 0 && arena <= LAST_ARCADE_ARENA)
-        stage = true_ogre ? (s == SET_TTT || (s == SET_RANDOM && pick(2)) ? UNKNOWN_STAGE : -1)
+    /* True Ogre (ID 20) on either side (Team Battle: the fighter on the
+     * field): the dark arena (B124). As Arcade's CPU (no human on his
+     * side), the boss: Unknown's stage 14 in TTT, T3 or 14 in RANDOM, T3 in
+     * AUTO and T3, as in 1.4.0 (the user's choice of 2026-10-28). */
+    int ogre[2], boss = 0;
+    for (int p = 0; p < 2; p++) {
+        ogre[p] = psx_mod_read_half(FIGHTERS + 2 * p) == TRUE_OGRE;
+        boss |= mode == ARCADE && ogre[p] && !psx_mod_read_half(HUMAN + 2 * p);
+    }
+    int true_ogre = ogre[0] || ogre[1];
+    if (arena >= 0 && arena <= DR_B_ARENA)
+        stage = boss ? (s == SET_TTT || (s == SET_RANDOM && pick(2)) ? UNKNOWN_STAGE : -1)
               : s == SET_TTT ? ttt_stage_of(guest, arena)
               : s == SET_RANDOM ? (pick(2) ? ttt_stage_of(guest, arena) : -1)
               : s == SET_AUTO ? auto_stage(guest, arena) : -1;
     decided = stage >= 0 ? TEKKEN3_STAGE_TTT : TEKKEN3_STAGE_T3;
-    decided_stage = stage; decided_arena = arena;
-    decided_true_ogre = true_ogre && stage >= 0;
-    fprintf(stderr, "TTT Stages: %s fight in arena %d, P%d's %s%s decides%s, STAGES %s -> %s stage %d\n",
+    /* Gon's or Dr. B's arena given a TTT stage: the game loads its arena. */
+    decided_moved = moving = stage >= 0 && arena > LAST_ARCADE_ARENA;
+    decided_stage = stage; decided_arena = decided_moved ? arena_of_stage(stage) : arena;
+    decided_boss = boss && stage >= 0;
+    char moved[32] = "";
+    if (decided_moved) snprintf(moved, sizeof moved, ", loads arena %d", decided_arena);
+    fprintf(stderr, "TTT Stages: %s fight in arena %d, P%d's %s%s decides%s%s, STAGES %s -> %s stage %d\n",
             mode_names[mode], arena, player + 1, guest ? "guest " : player < 0 ? "-" : "native",
-            guest ? guest : "", true_ogre ? " (True Ogre fights)" : "", words[s], stage >= 0 ? "TTT" : "T3",
+            guest ? guest : "", boss ? " (True Ogre, Arcade's CPU)" : true_ogre ? " (True Ogre fights: at night)" : "", moved, words[s], stage >= 0 ? "TTT" : "T3",
             stage >= 0 ? stage : arena);
 }
+int tekken3_stage_source_load_arena(void) { return moving ? decided_arena : -1; }
 
 void tekken3_stage_source_tick(void) {
     if (!psx_mod_game_started()) return;
@@ -210,7 +254,14 @@ void tekken3_stage_source_tick(void) {
      * section 74). Any screen but the fight, the loading screen, the
      * selector (9) or screen 1 ends the match. */
     static uint16_t was_human[2];
-    if (screen == MENU) decided = -1;
+    if (screen == MENU) { decided = -1; moving = 0; }
+    /* Gon's or Dr. B's arena given a TTT stage: the arena of that stage,
+     * every VBlank until the fight (as the STAGE line, F18). */
+    if (moving && screen == FIGHT) moving = 0;
+    if (moving && decided >= 0) {
+        if (psx_mod_read_half(ARENA) != (uint16_t)decided_arena) psx_mod_write_half(ARENA, (uint16_t)decided_arena);
+        if (psx_mod_read_byte(ARENA_COPY) != (uint8_t)decided_arena) psx_mod_write_byte(ARENA_COPY, (uint8_t)decided_arena);
+    }
     /* The demo's decision ends with its fight: the Embu (state 6) that may
      * follow is mode 6 too, in Hwoarang's arena, and keeps the game's stage. */
     if (psx_mod_read_word(MODE) == DEMO && screen != FIGHT && screen != LOADING && screen != 1) decided = -1;
@@ -226,15 +277,16 @@ void tekken3_stage_source_tick(void) {
 }
 
 /* The game's own stage: nothing decided, another mode, another arena than
- * the decided one, Gon's or Dr. B's, the dark arena (but True Ogre's, when
- * TTT's stage 14 was decided for him). */
+ * the decided one, Gon's or Dr. B's (when they keep it), the dark arena with
+ * Tekken 3's stage decided (a TTT stage is drawn there at night, B124). */
 static int own_stage(void) {
     int arena = psx_mod_read_half(ARENA);
     return decided < 0 || !deciding_mode(psx_mod_read_word(MODE)) || arena != decided_arena ||
-           arena < 0 || arena > LAST_ARCADE_ARENA || (psx_mod_read_byte(DARK_ARENA) && !decided_true_ogre) ||
+           arena < 0 || arena > LAST_ARCADE_ARENA || (psx_mod_read_byte(DARK_ARENA) && decided != TEKKEN3_STAGE_TTT) ||
            psx_mod_read_byte(NO_STAGE);
 }
 int tekken3_stage_source(void) { return own_stage() ? TEKKEN3_STAGE_T3 : decided; }
 int tekken3_stage_arena(void) { return own_stage() ? -1 : psx_mod_read_half(ARENA); }
+int tekken3_stage_true_ogre_boss(void) { return tekken3_stage_source() == TEKKEN3_STAGE_TTT && decided_boss; }
 int tekken3_stage_ttt_stage(void) { return tekken3_stage_source() == TEKKEN3_STAGE_TTT ? decided_stage : -1; }
 unsigned tekken3_stage_decisions(void) { return decisions; }

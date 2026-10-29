@@ -9,10 +9,11 @@ input, TEKKEN3_ATTRACT_DEMO=GUEST,P2 (the guest starts the demo's turn, P2 is pl
 native, or a guest for the Embus after a guest's demo), TEKKEN3_CPU_MOVESET=ttt1, TEKKEN3_STAGES=auto. The
 first demo fight must be the guest against P2 (0x800ADD5C), a native P2 on its TTT1 moves, and the guest's
 TTT stage decided and loaded; the second demo the next fighter of the turn against P2. --embus N goes on
-through N Embus of the attract (counted by their trigger lines in the log: the cinematic engine's one in two
-leaves state 6 at once for its scene's fight, then the game's own) and checks each one: the engine's scene
-ends; the game's own Embu keeps Tekken 3's stage and grafts its cast's guests, not a fighter of the demo
-before it (natives on their TTT1 moves stayed the players' identities there: B75). Screenshots of the
+through N Embus of the attract (counted by the rotation's decisions in the log, "Cine trigger: Embu rotation":
+the cinematic engine's TTT Embu leaves state 6 at once for its scene's fight, then the game's own, the guests'
+and T3's variants, TIPS § 135) and checks each one: the engine's scene ends; the game's own Embu keeps Tekken
+3's stage, the guests' grafts its cast's guests, not a fighter of the demo before it (natives on their TTT1
+moves stayed the players' identities there: B75), T3's variants none. Screenshots of the
 game's Embu in OUT/embu-*.png. Exit 1 otherwise. OUT/states.txt, OUT/game.log. Run through
 ressources/slot.py (--kind game).
 """
@@ -28,7 +29,14 @@ T3_KEYS = ['paul', 'law', 'lei', 'king', 'yoshimitsu', 'nina', 'hwoarang', 'xiao
            'bryan', 'heihachi', 'ogre', 'mokujin', 'gunjack', 'gon', 'anna', 'drb']
 T3_NAMES = {'Paul', 'Law', 'Lei', 'King', 'Yoshimitsu', 'Nina', 'Hwoarang', 'Xiaoyu', 'Eddy', 'Jin', 'Julia',
             'Kuma', 'Bryan', 'Heihachi', 'Ogre', 'Mokujin', 'Anna'}
-TRIGGER, OWN, DEMO_LINE = 'Cine trigger: attract,', "Cine trigger: attract, the game's own", 'attract demo,'
+TRIGGER, DEMO_LINE = 'Cine trigger: Embu rotation, ', 'attract demo,'
+
+
+def turn(decision):
+    """The rotation's turn a decision line names: 'TTT' (the engine's .cine), 'guests', 'v0'..."""
+    first = decision.split('\n', 1)[0][len(TRIGGER):]
+    if '.cine' in first: return 'TTT'
+    return 'v' + first.split()[3] if first.startswith("the game's") else first.split()[0]
 
 
 def main():
@@ -63,7 +71,8 @@ def main():
                     demos.append((pair, len(log))); away = False
                 if st != 8: away = True
                 while log.count(TRIGGER) > len(embus): embus.append(len(demos))
-                own = st == 6 and log.rfind(OWN) > log.rfind(DEMO_LINE)
+                r = log.rfind(TRIGGER)
+                own = st == 6 and r > log.rfind(DEMO_LINE) and turn(log[r:]) != 'TTT'
                 last = (st, ph)
             if own and f // 600 != shot:
                 shot = f // 600
@@ -101,15 +110,16 @@ def main():
         stop = log.find(DEMO_LINE, start)
         part = log[start:stop if stop >= 0 else len(log)]
         before = log[log.rfind(DEMO_LINE, 0, start):start].split('\n', 1)[0]
-        own_embu = part.startswith(OWN)
+        kind = turn(part); own_embu = kind != 'TTT'
         grafted = re.findall(r"TTT1 Embu: P\d (.+?) on \w+'s model", part)
-        print(f'Embu {i + 1} (after "{before}"): {"the game" if own_embu else "the cinematic engine"}' +
+        print(f'Embu {i + 1} (after "{before}"): {kind}, {"the game" if own_embu else "the cinematic engine"}' +
               (f', grafted {sorted(set(grafted))}' if own_embu else ''))
         if own_embu:
             if re.search(r'arcade stages: TTT stage \d+ loaded', part): fails.append(f'Embu {i + 1}: a TTT stage')
             wrong = sorted(set(grafted) & T3_NAMES)
             if wrong: fails.append(f'Embu {i + 1}: natives grafted in place of the cast: {wrong}')
-            if not grafted: fails.append(f'Embu {i + 1}: no guest of the cast grafted')
+            if kind == 'guests' and not grafted: fails.append(f'Embu {i + 1}: no guest of the cast grafted')
+            if kind != 'guests' and grafted: fails.append(f'Embu {i + 1} ({kind}): guests grafted {sorted(set(grafted))}')
         elif 'Cine scene: over' not in part: fails.append(f'Embu {i + 1}: the scene did not end')
     if len(triggers) < a.embus: fails.append(f'{len(triggers)} Embu(s) seen, not {a.embus}')
     print('OK' if not fails else 'ECHEC: ' + '; '.join(fails))

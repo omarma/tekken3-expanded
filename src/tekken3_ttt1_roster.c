@@ -10,6 +10,7 @@
 #include "tekken3_ttt1_ui_palette.h"
 #include "tekken3_stage_source.h"
 #include "tekken3_bgm_select.h"
+#include "tekken3_stage_select.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1639,10 +1640,15 @@ static void effect_headers(void) {
  * header and pack it has in a fight. */
 extern int tekken3_ttt1_embu_native(unsigned player);
 extern void tekken3_ttt1_embu_hit_effect(unsigned player);
-static void embu_effect_headers(unsigned state) {
+/* That player is a guest playing the part whose effect the Embu plays: its
+ * own pack is the one in VRAM (TTT Hitspark draws its 64 x 64 then). */
+int tekken3_ttt1_embu_effect_guest(unsigned player) {
     static const int owner[2]={JIN_ID,4};   /* Yoshimitsu */
+    return player<2 && psx_mod_read_word(0x800ae204)==6 && tekken3_ttt1_embu_native(player)==owner[player];
+}
+static void embu_effect_headers(unsigned state) {
     for(unsigned row=0;state==6 && row<2;row++) {
-        if(tekken3_ttt1_embu_native(row)!=owner[row])continue;
+        if(!tekken3_ttt1_embu_effect_guest(row))continue;
         uint32_t at=EFFECT_ROWS+row*16,header=effect_header(row);
         if(psx_mod_read_word(at)!=header)psx_mod_write_word(at,header);
         tekken3_ttt1_embu_hit_effect(row);
@@ -2434,8 +2440,12 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
      * it, or with TTT Stages alone (natives only, TTT Stages S7). */
     int guests=tekken3_ttt1_roster_enabled();
     /* BGM SELECT's RANDOM: the fight's version (src/tekken3_bgm_select.c). */
-    if(cpu->pc==0 || cpu->pc==0x8004f3b0)tekken3_bgm_select_fight();
-    if((cpu->pc==0 || cpu->pc==0x8004f3b0) && (guests || tekken3_arcade_stages_source_ready(TEKKEN3_STAGE_TTT))) {
+    int entry=cpu->pc==0 || cpu->pc==0x8004f3b0;
+    if(entry)tekken3_bgm_select_fight();
+    /* The STAGE line of VS and Practice (F18, src/tekken3_stage_select.c):
+     * the fight's stage, before the source is decided. */
+    if(entry)tekken3_stage_select_fight(psx_mod_read_word(cpu->gpr[4]));
+    if(entry && (guests || tekken3_arcade_stages_source_ready(TEKKEN3_STAGE_TTT))) {
         /* The attract's demo fight; a cinematic's scene loads in its mode
          * too, on the game's stage. */
         unsigned mode=psx_mod_read_word(cpu->gpr[4]);
@@ -2447,6 +2457,9 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
             unsigned owner=roster[k].arena_owner<STOCK_FIGHTERS?roster[k].arena_owner:9;
             uint32_t record=psx_mod_read_word(0x80097d40+owner*16);
             arena_value=psx_mod_read_byte(record+10);music_value=psx_mod_read_byte(record+11);
+            /* The STAGE line's arena and, on Tekken 3's stages, its music. */
+            if(tekken3_stage_select_arena()>=0)arena_value=(unsigned)tekken3_stage_select_arena();
+            if(tekken3_stage_select_music()>=0)music_value=(unsigned)tekken3_stage_select_music();
         }
         /* The fight's stage (src/tekken3_stage_source.c), from the arena of
          * the guest's model fighter or of the native's record (fighter * 4 +
@@ -2459,8 +2472,23 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
             if(record>>24==0x80)arena=psx_mod_read_byte(record+10);
         }
         tekken3_stage_source_decide(scene?~0u:mode,p,k>=0?roster[k].key:NULL,arena);
+        /* Gon's arena (Roger's, Alex's) given a TTT stage: that stage's (B122). */
+        if(k>=0 && tekken3_stage_source_load_arena()>=0)arena_value=(unsigned)tekken3_stage_source_load_arena();
     }
     __real_func_8004F3B0(cpu);
+    /* Again every VBlank until the fight (tekken3_stage_select.c's tick). */
+    if(entry && tekken3_stage_select_arena()>=0) {
+        psx_mod_write_half(ARENA,(uint16_t)tekken3_stage_select_arena());
+        psx_mod_write_byte(ARENA_COPY,(uint8_t)tekken3_stage_select_arena());
+    }
+    if(entry && tekken3_stage_source_load_arena()>=0) {
+        psx_mod_write_half(ARENA,(uint16_t)tekken3_stage_source_load_arena());
+        psx_mod_write_byte(ARENA_COPY,(uint8_t)tekken3_stage_source_load_arena());
+    }
+    if(entry && tekken3_stage_select_music()>=0) {
+        psx_mod_write_half(MUSIC,(uint16_t)tekken3_stage_select_music());
+        psx_mod_write_byte(MUSIC_COPY,(uint8_t)tekken3_stage_select_music());
+    }
 }
 /* Guests as the CPU's opponents in Arcade and Time Attack (user's choice,
  * 2026-09-25; PASSATION.md objective 5). 0x800B1FCC draws the ten stock
@@ -2740,15 +2768,19 @@ void __wrap_func_8004F0E4(CPUState *cpu) {
  *    a guest as any one fighter is;
  *  - the CPU's team keeps its stock fighters, each place having a chance
  *    of 1 / TEAM_ONE_IN to be a guest (not Devil, Angel, Unknown) or
- *    Mokujin, at most TEAM_MAX such places.
+ *    Mokujin, at most TEAM_MAX such places; and, drawn first and apart from
+ *    that cap, 1 / TEAM_BOSS_ONE_IN to be Devil, Angel or Unknown, one of
+ *    them at most per team (B125, GH#173, the user's choice, 2026-10-28:
+ *    some half of the CPU's 8-member teams have one, as Tekken 3 leaves
+ *    Heihachi, Ogre and True Ogre in its draw).
  * No fighter is twice in either team; the costume stays. Every native left
  * in a filled place (the CPU's, a Random fill's) tosses its moves, Tekken 3
  * or TTT1, kept for the match (tekken3_native_moves_assign). Mokujin is
- * subject to his unlock. TEKKEN3_TEAM_GUESTS="one_in,max" sets the CPU's
- * rate (max 0 = never). */
+ * subject to his unlock. TEKKEN3_TEAM_GUESTS="one_in,max[,boss_one_in]" sets
+ * the CPU's rates (max 0 = no guest, boss_one_in 0 = no boss). */
 enum { TEAM_BATTLE=2, TEAMS=0x800afa88+89, TEAM_STRIDE=13, TEAM_EMPTY=88, RANDOM_FILL_POOL=0x1f7fff };
 extern int tekken3_native_moves_assign(unsigned slot,unsigned id,int ttt1);
-static unsigned team_one_in=4,team_max=2;
+static unsigned team_one_in=4,team_max=2,team_boss_one_in=12;
 static void team_tick(unsigned state) {
     static unsigned char written[2][8];
     static int built;
@@ -2756,8 +2788,10 @@ static void team_tick(unsigned state) {
     if(!configured) {
         configured=1;
         const char *e=getenv("TEKKEN3_TEAM_GUESTS");
-        unsigned a,b;
-        if(e && sscanf(e,"%u,%u",&a,&b)==2 && a){team_one_in=a;team_max=b;}
+        unsigned a,b,c;
+        int got=e?sscanf(e,"%u,%u,%u",&a,&b,&c):0;
+        if(got>=2 && a){team_one_in=a;team_max=b;}
+        if(got==3)team_boss_one_in=c;
     }
     if(state==10){built=0;return;}
     if(state!=11 || psx_mod_read_word(GAME_MODE)!=TEAM_BATTLE || !tekken3_ttt1_roster_enabled())return;
@@ -2766,6 +2800,7 @@ static void team_tick(unsigned state) {
         for(unsigned p=0;p<2;p++)for(unsigned i=0;i<8;i++)if(psx_mod_read_byte(TEAMS+p*TEAM_STRIDE+i)!=written[p][i])same=0;
         if(same)return;
     }
+    int first_swapped[2]={0,0};
     for(unsigned p=0;p<2;p++) {
         int human=psx_mod_read_half(0x800ae1f8+p*2)!=0;
         uint32_t team=TEAMS+p*TEAM_STRIDE;
@@ -2774,6 +2809,7 @@ static void team_tick(unsigned state) {
         unsigned char members[8];
         for(unsigned i=0;i<8;i++)members[i]=psx_mod_read_byte(team+i);
         unsigned placed=0;
+        int boss_in=0;
         for(unsigned i=chosen;i<size;i++) {
             if(members[i]==TEAM_EMPTY)continue;
             /* Who is in either team, this place left out. */
@@ -2786,21 +2822,24 @@ static void team_tick(unsigned state) {
                 int g=tekken3_guest_character(m>>2);
                 if(g>=0)guest_taken[g]=1;else if((m>>2)<32)stock_taken|=1u<<(m>>2);
             }
-            unsigned extras[GUEST_MAX+1],n=0;
+            unsigned extras[GUEST_MAX+1],bosses[GUEST_MAX],n=0,nb=0;
             for(unsigned k=0;k<roster_count;k++)
-                if(!guest_taken[k] && (human || !hidden_boss(k)))extras[n++]=k;
+                if(guest_taken[k])continue;
+                else if(!human && hidden_boss(k))bosses[nb++]=k;
+                else extras[n++]=k;
             if(!(stock_taken>>MOKUJIN&1) && mokujin_unlocked())extras[n++]=NO_GUEST;
             unsigned stock_left=0;
             for(uint32_t pool=psx_mod_read_word(AVAILABLE)&RANDOM_FILL_POOL&~stock_taken;pool;pool&=pool-1)stock_left++;
-            int swap;
+            int swap,boss=!human && nb && !boss_in && team_boss_one_in && !draw(team_boss_one_in);
             if(human)swap=n && draw(n+stock_left)<n;
-            else swap=n && placed<team_max && !draw(team_one_in);
+            else swap=boss || (n && placed<team_max && !draw(team_one_in));
             if(!swap)continue;
-            unsigned k=extras[draw(n)],id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
+            unsigned k=boss?bosses[draw(nb)]:extras[draw(n)],id=k==NO_GUEST?MOKUJIN:GUEST_ID+k;
             members[i]=(unsigned char)(id*4+(members[i]&3));
-            psx_mod_write_byte(team+i,members[i]);placed++;
+            psx_mod_write_byte(team+i,members[i]);
+            if(boss)boss_in=1;else placed++;
             /* The loading screen has copied the first member already. */
-            if(i==0){psx_mod_write_half(0x800add5c+p*2,(uint16_t)id);psx_mod_write_half(0x800add98+p*2,(uint16_t)(members[i]&3));}
+            if(i==0){psx_mod_write_half(0x800add5c+p*2,(uint16_t)id);psx_mod_write_half(0x800add98+p*2,(uint16_t)(members[i]&3));first_swapped[p]=1;}
             fprintf(stderr,"TTT1 characters: %s joins %s P%u's team (member %u)\n",fighter_name(id),
                     human?"Random fill, ":"the CPU's team, ",p+1,i+1);
         }
@@ -2824,6 +2863,13 @@ static void team_tick(unsigned state) {
             unsigned owner=k<0?first:roster[k].arena_owner<STOCK_FIGHTERS?roster[k].arena_owner:9;
             uint32_t record=psx_mod_read_word(0x80097d40+owner*16);
             arena_value=psx_mod_read_byte(record+10);music_value=psx_mod_read_byte(record+11);arena_pending=1;
+            /* The fight's stage was decided for the member replaced: again
+             * for this one (B122; B118 saw TTT's stage decided, then the
+             * game's drawn on the new member's arena). Gon's arena (Roger's,
+             * Alex's) given a TTT stage: that stage's. */
+            if(first_swapped[chooser])
+                tekken3_stage_source_decide(TEAM_BATTLE,(int)chooser,k>=0?roster[k].key:NULL,(int)arena_value);
+            if(tekken3_stage_source_load_arena()>=0)arena_value=(unsigned)tekken3_stage_source_load_arena();
         }
     }
     for(unsigned p=0;p<2;p++)for(unsigned i=0;i<8;i++)written[p][i]=psx_mod_read_byte(TEAMS+p*TEAM_STRIDE+i);
