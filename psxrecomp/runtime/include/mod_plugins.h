@@ -95,6 +95,40 @@ int psx_mod_gpu_high_vram_source(uint32_t address, uint32_t size);
 int psx_mod_gpu_high_vram_ready(void);
 
 /*
+ * Finer copies of a sprite's texture, in the upper half. A variable-size
+ * textured sprite (GP0 0x64-0x67) whose texture page (x, y, colour depth),
+ * UV-and-CLUT word and size match a slot is drawn over the same screen
+ * rectangle from the slot's hw x hh rectangle of 15-bit texels at (hx, hy),
+ * hy in 512..1023, uploaded beforehand. Only while the renderer draws above
+ * native resolution (gr_scale() > 1) and samples the half: at x1, or with
+ * Vulkan, the game's sprite is drawn as it is.
+ *
+ * set: slot 0..31; page = texture page x | y << 4 | colour depth << 7 (the
+ * texpage bits 0-4 and 7-8); uv = the sprite's word 2 (u | v << 8 | CLUT
+ * << 16). Returns 0 if refused. clear: the slot matches nothing again.
+ */
+int  psx_mod_gpu_sprite_hd_set(unsigned slot, unsigned page, uint32_t uv,
+                               unsigned w, unsigned h, unsigned hx, unsigned hy,
+                               unsigned hw, unsigned hh);
+void psx_mod_gpu_sprite_hd_clear(unsigned slot);
+
+/*
+ * The same for textured polygons, by region: a textured polygon (GP0
+ * 0x24-0x3F) whose texture page (x, y, colour depth) matches `page`, whose
+ * CLUT is on row clut_y at a column in [clut_x0, clut_x1), and whose UVs all
+ * lie in [u0, u0 + w] x [v0, v0 + h], is drawn from the hw x hh 15-bit texels
+ * at (hx, hy), hy in 512..1023, its UVs scaled to them; its colours, shading
+ * and blending stay the game's. The same conditions as the sprite slots
+ * (above native resolution, a renderer that samples the half). Slots 0..7;
+ * set returns 0 if refused.
+ */
+int  psx_mod_gpu_texture_hd_set(unsigned slot, unsigned page, unsigned clut_y,
+                                unsigned clut_x0, unsigned clut_x1,
+                                unsigned u0, unsigned v0, unsigned w, unsigned h,
+                                unsigned hx, unsigned hy, unsigned hw, unsigned hh);
+void psx_mod_gpu_texture_hd_clear(unsigned slot);
+
+/*
  * A mod's own audio player in save states (BS_SEC_MOD_AUDIO). bytes: the
  * size of its state now, 0 while it plays nothing (then no section is
  * written and the state file is the stock one); write fills that many bytes;

@@ -162,7 +162,11 @@ static void upload_pack(void) {
 
 /* The activation: the upper half, only for a staged pack (the renderer
  * compiles its upper-half shader only if the half exists when it starts). */
+/* The characters mod's one activation callback: the roster's HD tiles need
+ * the upper VRAM half made now, before the renderer builds its programs. */
+extern void tekken3_ttt1_roster_activate(void);
 static void wolf_activate(void) {
+    tekken3_ttt1_roster_activate();
     if(!wanted()) return;
     pack.pack=read_file("wolf.glow",&pack.pack_size);
     if(!pack.pack || !parse_pack()) {

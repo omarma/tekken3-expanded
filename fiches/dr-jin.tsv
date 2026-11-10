@@ -1,0 +1,199 @@
+commande	autres commandes	statut	notes	DR coup	DR niveau	DR dégâts	DR 1re active	DR dernière active	DR durée	DR libre	DR gel	DR garde	DR touche	DR contre	DR réaction garde	DR réaction touche	DR réaction contre	T3 coup	T3 niveau	T3 dégâts	T3 1re active	T3 dernière active	T3 durée	T3 libre	T3 gel	T3 garde	T3 touche	T3 contre	T3 réaction garde	T3 réaction touche	T3 réaction contre	TTT1 coup	TTT1 niveau	TTT1 dégâts	TTT1 1re active	TTT1 dernière active	TTT1 durée	TTT1 libre	TTT1 gel	TTT1 garde	TTT1 touche	TTT1 contre	TTT1 réaction garde	TTT1 réaction touche	TTT1 réaction contre
+1	f+1 / b, 1 / d, 1	modifié : damage, block, ch		Jz_lp00	haut	7	10	10	39	26	0	+3	+9	+9	sGrd_hM00JIN	sDm_KAO025G	sDm_KAO0025	295	haut	6	10	10	39	28	0	+1	+9	+10	2693	2241	2238	80040a1c	haut	6	10	10	39	26	0	+3	+9	+9	p510	p638	p638
+2	d, 2 / f, 2 / d/b, 2	modifié : damage		Jz_rp00	haut	9	10	10	40	29	0	+0	+9	+9	sGrd_hM00	sDm_KAO28R	sDm_KAO28R	296	haut	12	10	10	39	29	0	+0	+9	+9	2693	2285	2285	800411a0	haut	12	10	10	39	29	0	+0	+9	+9	p510	p658	p658
+3	3+4 / b+3+4 / b, 3	modifié : damage, block, hit, ch		Jz_lk00	haut	19	14	14	57	40	0	+0	+4	+4	sGrd_hM0026	sDm_Sty00_	sDm_Sty00_	300	haut	25	14	14	58	47	0	-14	-3	-3	2693	2232	2232	80041a5c	haut	25	14	14	58	47	0	-14	-3	-3	p510	p627	p627
+4	b, 4 / d, 4 / f, 4	modifié : damage, first, block		Jz_round_RK	haut	21	18	19	60	50	0	+6	(sDm_kaiten)	(sDm_kaiten)	sGrd_kaiten	sDm_kaiten	sDm_kaiten	301	haut	30	19	22	62	48	0	-10	(2556)	(2556)	2709	2556	2556	80041e6c	haut	30	19	22	62	48	0	-10	(p707)	(p707)	p517	p707	p707
+1+2	b, 1+2 / d, 1+2 / f, 1+2	nouveau dans DR	T3 = 1 ; TTT1 = 1	Jz_pppp	milieu	5	12	12	78	74	0	-43	-32	-32	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M	295	haut	6	10	10	39	28	0	+1	+9	+10	2693	2241	2238	80040a1c	haut	6	10	10	39	26	0	+3	+9	+9	p510	p638	p638
+1+3	b, 1+3 / d, 1+3 / f, 1+3	modifié : damage		ThrmvLB2_00	haut	prise	12	14	40	39	0							2792	haut	prise	12	14	42	39	0							8006db34	haut	prise	12	14	42	39	0						
+1+4	1, 4 / 4, 1 / f+4, 1	absent de DR																550	milieu spécial	5	12	13	64	64	0	-33	-22	-22	2726	2355	2352	80049d60	milieu spécial	5	12	13	64	64	0	-33	-22	-22	p522	p675	p672
+2+4	b, 2+4 / d, 2+4 / f, 2+4	modifié : damage		ThrmvRB2_00	haut	prise	12	14	40	39	0							2796	haut	prise	12	14	42	39	0							8006db68	haut	prise	12	14	42	39	0						
+b+1	b, b+1 / d, b+1 / f, b+1	absent de DR																306	haut	10	10	10	39	28	0	+1	+12	+12	2693	2232	2232	80049fd0	milieu	15	18	18	55	45	0	-8	+5	+5	p518	p769	p769
+b+2	b, 2 / b, b+2 / d, b+2	modifié : first, block, hit, ch		Jz_rp00B	haut	12	16	17	60	45	0	-10	+1	+1	sGrd_RE19	sDm_KAO17L	sDm_KAO17L	308	haut	12	17	17	60	49	0	-13	-2	-2	2709	2318	2318	80043bac	haut	12	17	17	60	49	0	-13	-2	-2	p517	p633	p654
+b+3	b, b+3	nouveau dans DR	T3 = 3 ; TTT1 = 3	Jz_uchi_LK	haut	15	14	17	65	41	0	+3	+3	(sDm_ROL00LD)	sGrd_uchi_LK	sDm_Sty00_	sDm_ROL00LD	300	haut	25	14	14	58	47	0	-14	-3	-3	2693	2232	2232	80041a5c	haut	25	14	14	58	47	0	-14	-3	-3	p510	p627	p627
+b+4	b, b+4 / d, b+4 / f, b+4	remplacé : damage, first, block, hit	T3 = 4	Jz_usirotsuki	milieu	18	17	18	55	47	0	-7	(dm_kaityuu)	(dm_kaityuu)	sGrd_ToroB23	dm_kaityuu	dm_kaityuu	301	haut	30	19	22	62	48	0	-10	(2556)	(2556)	2709	2556	2556	80041ea0	milieu	21	16	18	62	44	0	-4	+2	(p748)	p539	p765	p748
+d+1	b, d+1 / d, d+1 / f, d+1	absent de DR																353	milieu spécial	5	8	8	37	29	0	-2	+9	+9	2711	2333	2333	80045b5c	milieu spécial	5	8	8	37	29	0	-2	+9	+9	p518	p665	p665
+d+2	b, d+2 / d, d+2 / f, d+2	remplacé : damage, first, block, hit, ch		Co_t_srp00	milieu spécial	8	11	11	220	220	0	-190	-179	-179	sGrd_mM00	sDm_HAR00M	sDm_HAR00M	354	milieu spécial	10	10	10	39	31	0	-2	+9	+9	2711	2333	2333	80045d98	milieu spécial	10	10	10	39	31	0	-2	+9	+9	p518	p665	p665
+d+3	b, d+3 / d, d+3 / f, d+3	remplacé : damage, first, block, hit, ch		Jz_t_slk00	bas	7	15	16	55	45	0	(cGrd_lR00)	+0	+0	cGrd_lR00	sDm_ASI00R	sDm_ASI00R	355	bas	5	18	18	62	51	0	-14	-3	+5	2734	2355	2471	800460a4	bas	5	18	18	62	51	0	-14	-3	+5	p525	p675	p758
+d+4	b, d+4 / d, d+4 / f, d+4	remplacé : damage, first, block, hit, ch		Jz_t_srk00	bas	15	16	19	55	50	0	(cGrd_Nrak01)	-4	-4	cGrd_Nrak01	sDm_naraku_2	sDm_naraku_2	356	bas	7	12	12	46	39	0	-8	+3	+3	2734	2352	2352	800463e4	bas	7	12	12	46	39	0	-8	+3	+3	p525	p672	p672
+f+2	b, f+2 / d, f+2 / f, f+2	remplacé : level, damage, first, block, hit, ch		Jz_rp00F	haut	12	16	17	50	50	0	-15	-9	-9	sGrd_hM00	sDm_KAO025G	sDm_KAO025G	303	milieu	18	17	18	46	48	0	+2	+7	+7	2697	2471	2471	80042ba0	milieu	18	17	18	46	48	0	+1	+7	+7	p514	p758	p758
+f+3	f+3+4 / b, f+3 / d, f+3	remplacé : level, damage, first, block, hit, ch		Jz_lk00F	milieu	16	12	12	58	36	0	-5	+6	+6	sGrd_mM00	sDm_HAR00M	sDm_HAR00M	304	haut	20	14	14	58	47	0	-14	-3	-3	2709	2318	2318	800431b8	haut	20	14	14	58	47	0	-14	-3	-3	p517	p654	p654
+f+4	f, f+4 / f,f, 4	remplacé : damage, first, block, hit, ch		Jz_hiza_up	milieu	21	16	17	65	49	0	-8	+2	(dm_hara_07L)	sGrd_Tohtai	sDm_hiza_up	dm_hara_07L	567	milieu	12	11	11	49	37	0	-7	+4	+4	2711	2648	2648	8004a378	milieu	12	11	11	49	37	0	-7	+4	+4	p518	p765	p765
+u+1	u+1+2 / b, u+1 / d, u+1	modifié : hit, ch		Co_jplp00	milieu	12	18	18	52	45	0	-8	+3	+3	sGrd_hM00	sDm_Sty00_	sDm_Sty00_	3334	milieu	12	18	18	52	45	0	-8	(2556)	(2556)	2693	2556	2556	8003e0ac	milieu	12	18	18	52	45	0	-8	+3	+3	p510	p765	p765
+u+3	u+3+4 / u, 3 / b, u+3	absent de DR																3363	milieu	25	21	21	65	57	0	-17	(2556)	(2556)	2693	2556	2556	8003e898	milieu	25	21	21	65	57	0	-17	(p707)	(p707)	p510	p707	p707
+u+4	b, u+4 / d, u+4 / f, u+4	remplacé : damage, first, block		Jz_jprk00	milieu	15	15	17	51	46	0	-12	(sDw_KAO00_)	(sDw_UP_01_)	sGrd_hM00	sDw_KAO00_	sDw_UP_01_	3378	milieu	25	25	25	66	55	0	-11	(2556)	(2556)	2709	2556	2556	8003f42c	milieu	25	25	25	66	55	0	-11	(p707)	(p707)	p517	p707	p707
+d/b+1	b, d/b+1 / d, d/b+1 / f, d/b+1	nouveau dans DR	T3 = d+1	Co_t_slp00	milieu spécial	5	10	10	219	219	0	-190	-179	-179	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M	353	milieu spécial	5	8	8	37	29	0	-2	+9	+9	2711	2333	2333														
+d/b+2	b, d/b+2 / d, d/b+2 / f, d/b+2	nouveau dans DR	T3 = d+2 ; TTT1 = d+2	Jz_new_com1	milieu	12	16	16	60	50	0	-15	-4	(dm_hara_01)	sGrd_RE19G	sDm_HAR00MG	dm_hara_01	354	milieu spécial	10	10	10	39	31	0	-2	+9	+9	2711	2333	2333	80045d98	milieu spécial	10	10	10	39	31	0	-2	+9	+9	p518	p665	p665
+d/b+3	b, d/b+3 / d, d/b+3 / f, d/b+3	remplacé : level, damage, first, block, hit, ch		Jz_yoke_hlk	haut	28	19	21	64	59	0	-12	(ym_y01)	(ym_y01)	sGrd_RE12	ym_y01	ym_y01	364	bas	12	16	16	60	49	0	-17	-3	-3	2739	2352	2352	80046070	bas	12	16	16	60	49	0	-17	-3	-3	p528	p672	p672
+d/b+4	d/b, d/b+4	remplacé : damage, first, block, hit, ch		Jz_t_srk02	bas	15	20	22	67	53	0	(cGrd_lR00)	+2	(sDm_ASI10LD)	cGrd_lR00	sDm_Ari00G	sDm_ASI10LD	365	bas	7	12	12	46	39	0	-8	+3	+3	2734	2352	2352	800463b0	bas	7	12	12	46	39	0	-8	+3	+3	p525	p672	p672
+d/f+1	b, d/f+1 / d, d/f+1 / f, d/f+1	identique		Jz_t_slpF	milieu	12	13	14	48	34	0	-2	+9	+9	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M	313	milieu	12	13	14	48	34	0	-2	+9	+9	2711	2341	2333	80046a64	milieu	12	13	14	48	34	0	-2	+9	+9	p518	p668	p665
+d/f+2	b, d/f+2 / d, d/f+2 / f, d/f+2	modifié : block, hit		Jz_m_p00	milieu	15	15	17	47	41	0	-7	+4	(sDw_UP_00_)	sGrd_mM00	sDw_JACKup	sDw_UP_00_	359	milieu	15	15	17	47	36	0	-2	+29	(2538)	2711	2412	2538	80046e74	milieu	15	15	17	47	36	0	-2	+9	(p704)	p518	p768	p704
+d/f+3	b, d/f+3 / d, d/f+3 / f, d/f+3	modifié : damage, first, block, hit, ch		Jz_t_slkF	milieu	10	14	15	60	49	0	-16	-7	(sDm_nkdoBxC4_D)	sGrd_mM00	sDm_toht28	sDm_nkdoBxC4_D	360	milieu	17	16	16	60	44	0	-9	+2	+2	2711	2333	2333	80047528	milieu	17	16	16	60	44	0	-9	+2	+2	p518	p665	p665
+d/f+4	b, d/f+4 / d, d/f+4 / f, d/f+4	remplacé : damage, first, block, hit, ch		kaz_k00	milieu	33	19	21	70	55	0	-17	(sDm_kaz_k002)	(sDm_kaz_k002)	sGrd_Toro19	sDm_kaz_k002	sDm_kaz_k002	361	milieu	10	13	14	48	41	0	-9	+2	+2	2711	2232	2232	80047868	milieu	10	13	14	48	41	0	-9	+2	+2	p518	p627	p627
+u/b+1	b, u/b+1 / d, u/b+1 / f, u/b+1	identique		Co_jplp00B	milieu	12	18	18	52	45	0	-8	+3	(sDw_KAO00_)	sGrd_hM00	sDm_KAO30M	sDw_KAO00_	3336	milieu	12	18	18	52	45	0	-8	+3	(2556)	2693	2232	2556	8003e114	milieu	12	18	18	52	45	0	-8	+3	(p707)	p510	p627	p707
+u/b+3	u/b+3+4 / u/b, 3 / u, b+3	absent de DR																3365	milieu	25	21	21	65	57	0	-17	(2556)	(2556)	2693	2556	2556	8003e900	milieu	25	21	21	65	57	0	-17	(p707)	(p707)	p510	p707	p707
+u/b+4	b, u/b+4 / d, u/b+4 / f, u/b+4	modifié : block, hit		Co_jprk00B	milieu	11	15	17	53	53	0	-19	-8	(sDw_KAO00_)	sGrd_hM00	sDm_KAO30M	sDw_KAO00_	3380	milieu	11	15	17	53	46	0	-12	-1	(2556)	2693	2232	2556	8003f188	milieu	11	15	17	53	46	0	-12	-1	(p707)	p510	p627	p707
+u/f+1	b, u/f+1 / d, u/f+1 / f, u/f+1	modifié : hit, ch		Co_jplp00F	milieu	12	18	18	52	45	0	-8	+3	+3	sGrd_hM00	sDm_Sty00_	sDm_Sty00_	3335	milieu	12	18	18	52	45	0	-8	(2556)	(2556)	2693	2556	2556	8003e0e0	milieu	12	18	18	52	45	0	-8	+3	+3	p510	p765	p765
+u/f+2	b, u/f+2 / d, u/f+2 / f, u/f+2	nouveau dans DR		Jz_yokerp	milieu	18	15	16	55	41	0	-7	+2	(sDm_PNG00_)	sGrd_mM00	sDm_toht28	sDm_PNG00_																												
+u/f+3	u/f+3+4 / u/f, 3 / u, f+3	absent de DR																3364	milieu	25	21	21	65	57	0	-17	(2556)	(2556)	2693	2556	2556	8003e8cc	milieu	25	21	21	65	57	0	-17	(p707)	(p707)	p510	p707	p707
+u/f+4	b, u/f+4 / d, u/f+4 / f, u/f+4	remplacé : damage, first		Jz_jprk00F	milieu	13	15	17	51	46	0	-12	(sDw_UP_01_)	(sDw_UP_01_)	sGrd_hM00	sDw_UP_01_	sDw_UP_01_	3379	milieu	25	25	25	66	56	0	-12	(2556)	(2556)	2709	2556	2556	8003f460	milieu	25	25	25	66	56	0	-12	(p707)	(p707)	p517	p707	p707
+1+2+3	b+1+2+3 / f+1+2+3 / b, 1+2+3	nouveau dans DR		Jz_3auto_00	haut	6	10	10	39	26	0	+3	+9	+9	sGrd_hM00	sDm_KAO025G	sDm_KAO0025																												
+d+1+2	d/b+1+2 / b, d+1+2 / d, d+1+2	absent de DR (DR : = d/b+1)	DR = d/b+1	Co_t_slp00	milieu spécial	5	10	10	219	219	0	-190	-179	-179	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M	338	milieu	prise	26	26	20	20	0							80045614	milieu	prise	26	26	70	59	0						
+d+3+4	d+3, 4 / d, 3+4 / d/f+3, 4	remplacé : level		jz_c20	milieu	5	14	15	77	77	0	-44	-33	-33	sGrd_jz_c20	sDm_HAR00M	sDm_HAR00M	367	milieu spécial	5	14	14	77	77	0	-44	-33	-33	2711	2333	2333	8004692c	milieu spécial	5	14	14	77	77	0	-44	-33	-33	p518	p665	p665
+f+1+2	b, f+1+2 / d, f+1+2 / f, f+1+2	nouveau dans DR	T3 = d/f+1 ; TTT1 = d/f+1	Jz_rplp00	haut	10	14	14	71	60	0	-18	-16	-16	sGrd_RE12	sDm_KAO30M	sDm_KAO30M	313	milieu	12	13	14	48	34	0	-2	+9	+9	2711	2341	2333	80046a64	milieu	12	13	14	48	34	0	-2	+9	+9	p518	p668	p665
+f+1+3	b, f+1+3 / d, f+1+3 / f, f+1+3	nouveau dans DR		ThrmvLB2_00F	haut	prise	15	17	45	42	0																																		
+f+2+4	b, f+2+4 / d, f+2+4 / f, f+2+4	nouveau dans DR		ThrmvRB2_00F	haut	prise	15	17	45	42	0																																		
+d/b+3+4	b, d/b+3+4 / d, d/b+3+4 / f, d/b+3+4	nouveau dans DR	T3 = d/b+3 ; TTT1 = d/b+3	Co_t_slk00	bas	12	16	16	240	240	0	(cGrd_lR16)	-194	-194	cGrd_lR16	sDm_ASI00R	sDm_ASI00R	364	bas	12	16	16	60	49	0	-17	-3	-3	2739	2352	2352	80046070	bas	12	16	16	60	49	0	-17	-3	-3	p528	p672	p672
+d/f+3+4	b, d/f+3+4 / d, d/f+3+4 / f, d/f+3+4	modifié : damage, first, block, ch		Co_t_slkF	milieu	15	14	15	60	40	0	-7	+2	(sDm_nkdoBxC4_D)	sGrd_mM00	sDm_toht28	sDm_nkdoBxC4_D	369	milieu	17	16	16	60	44	0	-9	+2	+2	2711	2333	2333	800474f4	milieu	17	16	16	60	44	0	-9	+2	+2	p518	p665	p665
+u/b+1+2	b, u/b+1+2 / d, u/b+1+2 / f, u/b+1+2	nouveau dans DR	T3 = u/b+1 ; TTT1 = u/b+1	Jz_guard_00	imparable	100	75	80	125	110	0	-16	(sDm_kaz_k002)	(sDm_kaz_k002)	sGrd_Toro19	sDm_kaz_k002	sDm_kaz_k002	3336	milieu	12	18	18	52	45	0	-8	+3	(2556)	2693	2232	2556	8003e114	milieu	12	18	18	52	45	0	-8	+3	(p707)	p510	p627	p707
+u/f+1+2	f,f, u/f+1+2 / f,f, N, u/f+1+2	nouveau dans DR	T3 = u/f+1 ; TTT1 = u/f+1	Thrmv_B2_00	haut	prise	12	12	40	39	0							3335	milieu	12	18	18	52	45	0	-8	(2556)	(2556)	2693	2556	2556	8003e0e0	milieu	12	18	18	52	45	0	-8	+3	+3	p510	p765	p765
+1, 1		absent de DR																537	haut	8	15	15	44	33	0	+1	+9	+12	2693	2241	2232	800499ec	haut	8	15	15	44	33	0	+1	+9	+12	p510	p641	p627
+1, 2		modifié : damage, block, hit, ch		Jz_lprpF	haut	12	10	10	40	29	0	+0	+8	+9	sGrd_Jz_lprpF	sDm_Jz_lprpF	sDm_KAO00R	298	haut	6	10	10	39	28	0	+1	+9	+10	2693	2241	2238	80040a50	haut	6	10	10	39	28	0	+1	+7	+7	p510	p638	p638
+1, 3		nouveau dans DR		Jz_narucom_01	haut	6	10	10	39	26	0	+3	+9	+9	sGrd_hM00	sDm_KAO025G	sDm_KAO0025																												
+2, 1		nouveau dans DR		Jz_rp_2_lp	milieu	9	16	17	51	34	0	+1	+7	+7	sGrd_mM00	sDm_HAR25MG	sDm_HAR25MG																												
+2, 2		absent de DR																539	haut	21	17	17	60	49	0	-13	-2	-2	2709	2318	2318	80049b24	haut	21	17	17	60	49	0	-13	-2	-2	p517	p654	p654
+2, 4		nouveau dans DR		Jz_rp_2_lk	haut	16	24	27	65	56	0	-13	(ym_y01L)	(ym_y01L)	sGrd_ToroB19	ym_y01L	ym_y01L																												
+3, 2		absent de DR																613	haut	15	14	14	58	58	0	-25	-14	-14	2693	2232	2232	8004b5c0	haut	15	14	14	58	58	0	-25	-14	-14	p510	p627	p627
+4, 3	u/f+4, 3	remplacé : damage, first, block		Bmt_hasai	milieu	28	23	34	208	208	0	(sGrd_mk2_dou)	(dw_rarixk)	(dw_rarixk)	sGrd_mk2_dou	dw_rarixk	dw_rarixk	559	milieu	25	35	37	205	205	0	-151	(2556)	(2556)	2693	2556	2556	8004a170	milieu	25	35	37	205	205	0	-151	(p707)	(p707)	p510	p707	p707
+1+2, -		nouveau dans DR		Jz_pppp2	milieu	5	20	20	78	74	0	-35	-24	-24	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M																												
+1+4, -		absent de DR																551	haut	10	27	27	64	52	0	-6	+3	+3	2693	2285	2285	80049d94	haut	10	27	27	64	52	0	-6	+3	+3	p510	p650	p650
+1+4, 2		absent de DR																552	haut	10	27	27	64	52	0	-6	+3	+3	2693	2285	2285	80049dc8	haut	10	27	27	64	52	0	-6	+3	+3	p510	p650	p650
+1, d+3		nouveau dans DR		Jz_TK5_LPLK	bas	7	16	17	48	47	0	(cGrd_Nrak01)	-1	-1	cGrd_Nrak01	sDm_naraku_2	sDm_naraku_2																												
+b+1, 1		nouveau dans DR	T3 = 1, 1	Jz_zan_dslp	milieu	18	16	17	56	46	0	-11	+12	+12	sGrd_mM00	sDm_tokusyu3	sDm_tokusyu3	537	haut	8	15	15	44	33	0	+1	+9	+12	2693	2241	2232														
+b+1, 2		remplacé : level, damage, first, block, hit, ch		Jz_zan_tuki	milieu	24	35	36	88	64	0	-10	(dm_kaityuu)	(dm_kaityuu)	sGrd_mM00	dm_kaityuu	dm_kaityuu	297	haut	10	10	10	39	29	0	+0	+10	+9	2693	2312	2285														
+b+1, 3		nouveau dans DR		Jz_jmplk	haut	25	22	27	67	56	0	+4	(sDm_2K3_Fy)	(sDm_2K3_Fy)	sGrd_YA37	sDm_2K3_Fy	sDm_2K3_Fy																												
+b+1, 4		remplacé : level, damage, first, block		Jz_zan_srk00	bas	15	35	37	254	254	0	(cGrd_lR16)	(sDm_ASI20RD)	(sDm_ASI20RD)	cGrd_lR16	sDm_ASI20RD	sDm_ASI20RD	585	imparable	40	43	44	97	86	0	-24	(2543)	(2543)	2693	2543	2543														
+b+2, 3		remplacé : level, first, block, hit, ch		Jz_rplk00	milieu	21	16	18	63	48	0	-13	(sDm_PNGR0_)	(sDm_PNGR0_)	sGrd_hM00	sDm_PNGR0_	sDm_PNGR0_															8004a88c	haut	21	18	18	62	47	0	-1	+1	+1	p538	p627	p627
+b+2, 4		absent de DR																635	haut	10	22	24	65	54	0	-13	-2	-2	2693	2232	2232	8004b830	haut	10	22	24	65	54	0	-13	-2	-2	p510	p627	p627
+b+3, 4		nouveau dans DR		Jz_lk_2_rk	bas	15	26	28	73	60	0	(cGrd_lR00)	+1	(sDm_ASI10LD)	cGrd_lR00	sDm_Ari00G	sDm_ASI10LD																												
+b, 1+4		absent de DR	T3 = b+1, 4															585	imparable	40	43	44	97	86	0	-24	(2543)	(2543)	2693	2543	2543	8004a8f4	imparable	40	43	44	97	86	0	-24	(p705)	(p705)	p510	p705	p705
+d+1, -		commande changée	T3 / TTT1 : d/b+1, -	Jz_bodylp01	milieu	24	21	21	68	53	0	-4	(sDm_2K3_Fy)	(sDm_2K3_Fy)	sGrd_RE11	sDm_2K3_Fy	sDm_2K3_Fy															8004a06c	milieu	24	21	21	68	53	0	-4	(p772)	(p772)	p534	p772	p772
+d+3, 3		nouveau dans DR		Jz_slk_2_so	milieu	10	21	21	67	55	0	-15	-6	-2	sGrd_mM00	sDm_toht28	sDm_toht32																												
+f+2, 3		nouveau dans DR		Jz_10comb2	bas	7	13	14	53	53	0	(cGrd_lR00)	-10	-10	cGrd_lR00	sDm_ASI00R	sDm_ASI00R																												
+f+2, 4		absent de DR																														8004a8c0	milieu	10	15	15	52	40	0	-6	+5	+5	p518	p765	p765
+f+3, 3	f, f+3, 3 / f,f, 3, 3 / 1, 3, -, 3	nouveau dans DR		Jz_tate_kick	milieu	22	22	25	67	47	0	+5	(sDm_KAKCca)	(sDm_KAKCca)	sGrd_tate	sDm_KAKCca	sDm_KAKCca																												
+f, f+3		nouveau dans DR		Jz_mikazuki	milieu	16	12	12	58	36	0	-5	+6	+6	sGrd_mM00	sDm_HAR00M	sDm_HAR00M																												
+u+2, -		modifié : hit, ch		Co_jprp03H	milieu	18	11	13	53	53	0	-23	(sDm_KAK00_)	(sDm_KAK00_)	sGrd_hM00	sDm_KAK00_	sDm_KAK00_	3356	milieu	18	11	13	53	53	0	-23	-12	-12	2693	2385	2385	8003e72c	milieu	18	11	13	53	53	0	-23	-12	-12	p510	p726	p726
+u+3, -	u/b+3, - / u/f+3, -	nouveau dans DR		Jz_spinlk	haut	30	7	9	51	40	0	-5	(ym_y01)	(ym_y01)	sGrd_RE12	ym_y01	ym_y01																												
+u+4, 4		absent de DR																576	bas	15	47	47	86	75	0	-12	(2610)	(2610)	2737	2610	2610	8004a720	bas	15	47	47	86	75	0	-12	(p686)	(p686)	p527	p686	p686
+u, 2+4		absent de DR																588	milieu	28	57	59	128	118	0	-42	(2595)	(2595)	2693	2595	2595	80049880	milieu	30	56	59	128	118	0	-31	(p747)	(p747)	p531	p747	p747
+u, b+2	u, f+2 / u, u+2 / u, u/b+2	absent de DR																373	milieu	18	14	15	48	35	0	-2	(2543)	(2543)	2693	2543	2543	80048708	milieu	18	14	15	48	35	0	-2	(p704)	(p704)	p518	p704	p704
+u, d+1	u, d/b+1 / u, d/f+1 / u/b, d+1	absent de DR																330	milieu spécial	3	8	8	37	29	0	-2	+9	+9	2711	2333	2333	80044810	milieu spécial	3	8	8	37	29	0	-2	+9	+9	p518	p665	p665
+u, d+2	u, d/b+2 / u, d/f+2 / u/b, d+2	absent de DR																331	milieu spécial	8	10	10	39	31	0	-2	+9	+9	2711	2341	2333	80044a4c	milieu spécial	8	10	10	39	31	0	-2	+9	+9	p518	p668	p665
+u, d+3	u, d/b+3 / u/b, d+3 / u/f, d+3	absent de DR																332	bas	12	16	16	60	49	0	-17	-3	-3	2739	2352	2352	80044cf0	bas	12	16	16	60	49	0	-17	-3	-3	p528	p672	p672
+u, d+4	u, d/b+4 / u/b, d+4 / u/f, d+4	absent de DR																333	bas	10	12	12	46	39	0	-8	+3	+3	2734	2355	2352	80044ffc	bas	10	12	12	46	39	0	-8	+3	+3	p525	p675	p672
+u, u+3	u/b, b+3 / u/b, f+3 / u/b, u+3	absent de DR																375	haut	28	16	16	60	51	0	-16	(2556)	(2556)	2705	2556	2556	80048b4c	haut	28	16	16	60	51	0	-16	(p707)	(p707)	p516	p707	p707
+b, d/b+4	d, d/b+4 / f, d/b+4 / d/f, d/b+4	nouveau dans DR	T3 = d/b+4 ; TTT1 = d/b+4	Co_t_srk00	bas	15	20	22	67	53	0	(cGrd_lR00)	+2	(sDm_ASI10LD)	cGrd_lR00	sDm_Ari00G	sDm_ASI10LD	365	bas	7	12	12	46	39	0	-8	+3	+3	2734	2352	2352	800463b0	bas	7	12	12	46	39	0	-8	+3	+3	p525	p672	p672
+d/b+2, 2		nouveau dans DR		Jz_new_com1_H	milieu	12	16	16	60	50	0	-6	-4	(dm_hara_01)	sGrd_RE12	sDm_HAR00M	dm_hara_01																												
+d/f+1, 2		absent de DR																358	milieu	10	13	14	48	48	0	-16	-5	-5	2711	2341	2333	80046a98	milieu	10	13	14	48	48	0	-16	-5	-5	p518	p668	p665
+d/f+1, 4		nouveau dans DR		Jz_t_slpFY	milieu	12	13	14	48	34	0	-2	+9	+9	sGrd_slpFY	sDm_slpFY	sDm_HAR00M																												
+d/f+4, 4		absent de DR																569	milieu	16	15	16	49	49	0	-15	-4	-4	2711	2385	2385	8004a414	milieu	16	15	16	49	49	0	-15	-4	-4	p518	p726	p726
+u, d/f+3	u/b, d/f+3 / u/f, d/f+3 / u, d/f+3+4	absent de DR																336	bas	12	16	16	60	49	0	-17	-3	-3	2739	2352	2352	80045780	bas	12	16	16	60	49	0	-17	-3	-3	p528	p672	p672
+u, d/f+4	u/b, d/f+4 / u/f, d/f+4 / d, u, d/f+4	absent de DR																337	bas	10	12	12	46	39	0	-8	+3	+3	2734	2355	2352	80045988	bas	10	12	12	46	39	0	-8	+3	+3	p525	p675	p672
+u/b, 2+4		absent de DR																589	milieu	20	57	59	128	118	0	-42	(2595)	(2595)	2693	2595	2595	800498e8	milieu	24	56	59	128	118	0	-31	(p747)	(p747)	p531	p747	p747
+u/f+4, 4		absent de DR																574	bas	15	47	47	86	75	0	-12	(2610)	(2610)	2737	2610	2610	8004a684	bas	15	47	47	86	75	0	-12	(p686)	(p686)	p527	p686	p686
+u/f, 2+4		absent de DR																587	milieu	30	57	59	128	118	0	-42	(2595)	(2595)	2693	2595	2595	800498b4	milieu	34	56	59	128	118	0	-31	(p747)	(p747)	p531	p747	p747
+1+2+3, -		nouveau dans DR		Jz_autocom_2	haut	10	14	14	95	95	0	-61	-51	-51	sGrd_narucom02	sDm_KAO00LG	sDm_KAO00L																												
+b+1+2, -		nouveau dans DR		Jz_zettai_1	imparable	0	1	55	160	147	0	-117	-117	-117	sGrd_ToroD	sGrd_ToroD	sGrd_ToroD																												
+d+3+4, -		modifié : damage, block		jz_c20E	haut	15	24	27	77	70	0	-27	(sDw_UP_11_)	(sDw_UP_11_)	sGrd_mM00	sDw_UP_11_	sDw_UP_11_	1909	haut	20	24	27	77	67	0	-24	(2543)	(2543)	2693	2543	2543	80060960	haut	20	24	27	77	64	0	-12	(p705)	(p705)	p538	p705	p705
+d, b+1+2	f, b+1+2 / d/b, b+1+2 / d/f, b+1+2	absent de DR	T3 = b+1															306	haut	10	10	10	39	28	0	+1	+12	+12	2693	2232	2232	800439a4	haut	10	10	10	39	28	0	+1	+12	+12	p510	p627	p627
+f+1+2, -		nouveau dans DR		Jz_rplp01	haut	21	23	24	71	60	0	-9	(sDm_Uk_PNG_)	(sDm_Uk_PNG_)	sGrd_ToroB	sDm_Uk_PNG_	sDm_Uk_PNG_																												
+d/f, d/f+2+3		absent de DR																2834	haut	prise	11	11	42	39	0							8006dfac	haut	prise	11	11	42	39	0						
+f+4, d+1+2		nouveau dans DR		Jz_hiza_up01	milieu	21	16	17	65	49	0	-8	+2	(dm_hara_07L)	sGrd_Tohtai	sDm_hiza_up	dm_hara_07L																												
+d/f+3, d+1+2	d/f+3+4, d+1+2	nouveau dans DR		Jz_t_slkH	milieu	7	15	16	60	45	0	-11	-2	(sDm_nkdoBxC4_D)	sGrd_mM00	sDm_toht28	sDm_nkdoBxC4_D																												
+d/f+4, d+1+2		nouveau dans DR		kaz_k01	milieu	33	19	21	70	55	0	-17	(sDm_kaz_k002)	(sDm_kaz_k002)	sGrd_Toro19	sDm_kaz_k002	sDm_kaz_k002																												
+f,f, 2	f,f, N, f+2	absent de DR (DR : = f+2)	DR = f+2	Jz_rp00F	haut	12	16	17	50	50	0	-15	-9	-9	sGrd_hM00	sDm_KAO025G	sDm_KAO025G	594	haut	7	12	12	41	41	0	-10	+1	+1	2693	2232	2232	8004b1e4	haut	7	12	12	41	41	0	-10	+1	+1	p510	p627	p627
+f,f, 3		modifié : damage, first, block		kz_kakat	milieu	25	22	24	56	47	0	+2	(dw_nog00)	(dw_nog00)	sGrd_kakat	dw_nog00	dw_nog00	562	milieu	23	19	23	61	50	0	-12	(2595)	(2595)	2711	2595	2595	8004a240	milieu	23	19	23	61	50	0	-12	(p747)	(p747)	p518	p747	p747
+1, 1, 2		absent de DR																543	milieu	18	13	13	60	49	0	-17	(2556)	(2556)	2693	2556	2556	80049c5c	milieu	18	13	13	60	49	0	-17	(p707)	(p707)	p510	p707	p707
+1, 2, -		absent de DR	T3 = b+1, 2															297	haut	10	10	10	39	29	0	+0	+10	+9	2693	2312	2285	80040e2c	haut	10	10	10	39	29	0	-5	+10	+9	p515	p663	p650
+1, 2, 3		nouveau dans DR		Jz_lprpFE	haut	11	10	10	40	29	0	-7	+10	+9	sGrd_hM12	sDm_KAOR18G	sDm_KAO00R																												
+1, 2, 4		nouveau dans DR		Jz_rp_2_rk	haut	22	20	22	61	47	0	-4	(sDm_usirotsuki)	(sDm_usirotsuki)	sGrd_ToroB23	sDm_usirotsuki	sDm_usirotsuki																												
+1, 3, -	f,f, 3, 1, 3, -	nouveau dans DR		Jz_narucom_02	haut	10	14	14	95	95	0	-61	-51	-51	sGrd_narucom02	sDm_KAO00LG	sDm_KAO00L																												
+2, 1, 4		nouveau dans DR		Jz_rp_2_lpY	milieu	10	16	17	51	34	0	+1	+12	+12	sGrd_slpFY	sDm_slpFY	sDm_HAR00M																												
+3, 2, -		absent de DR																614	haut	6	19	19	48	48	0	-8	+1	+1	2694	2262	2232	8004b5f4	haut	6	19	19	48	48	0	-8	+1	+1	p512	p630	p627
+u/b, 2, -		absent de DR																3355	milieu	18	11	13	53	53	0	-23	-12	-12	2693	2385	2385	8003e6f8	milieu	18	11	13	53	53	0	-23	-12	-12	p510	p726	p726
+u/f, 2, -	u/f, 2, N / u/f, 2, b / u/f, 2, d	absent de DR																3354	milieu	18	11	13	53	53	0	-23	-12	-12	2693	2385	2385	8003e6c4	milieu	18	11	13	53	53	0	-23	-12	-12	p510	p726	p726
+u/f, N, 1		absent de DR																3401	milieu	12	20	20	52	44	0	-5	(2556)	(2556)	2693	2556	2556	8003fe20	milieu	12	20	20	52	44	0	-5	+6	+6	p510	p765	p765
+u/f, N, 2		absent de DR																3404	milieu	12	39	39	79	73	0	-15	-4	-4	2693	2385	2385	8003ff58	milieu	12	39	39	79	73	0	-15	-4	-4	p510	p726	p726
+u/f, N, 3		absent de DR																3407	milieu	25	29	29	73	64	0	-16	(2556)	(2556)	2693	2556	2556	800401c8	milieu	25	29	29	73	64	0	-16	(p707)	(p707)	p510	p707	p707
+u/f, N, 4		absent de DR																3411	milieu	25	29	29	85	72	0	-24	(2556)	(2556)	2709	2556	2556	800406a8	milieu	25	29	29	85	72	0	-24	(p707)	(p707)	p517	p707	p707
+f,f, f+2		nouveau dans DR	T3 = f+2 ; TTT1 = f+2	Jz_gyakurp	milieu	24	15	16	53	45	0	-11	(sDm_PNG00_)	(sDm_PNG01_)	sGrd_mM00	sDm_PNG00_	sDm_PNG01_	303	milieu	18	17	18	46	48	0	+2	+7	+7	2697	2471	2471	80042ba0	milieu	18	17	18	46	48	0	+1	+7	+7	p514	p758	p758
+f,f, f+4		nouveau dans DR	T3 = 4 ; TTT1 = 4	Jz_migikakato	milieu	19	20	24	54	52	0	(sGrd_KAKLg2)	(sDm_Fjn00_)	(sDm_Fjn00_)	sGrd_KAKLg2	sDm_Fjn00_	sDm_Fjn00_	301	haut	30	19	22	62	48	0	-10	(2556)	(2556)	2709	2556	2556	80041e6c	haut	30	19	22	62	48	0	-10	(p707)	(p707)	p517	p707	p707
+1+2, -, -		nouveau dans DR		Jz_pppp3	milieu	5	28	28	78	74	0	-27	-16	-16	sGrd_mM00	sDm_HAR00M	sDm_HAR00M																												
+1+4, -, 2	1+4, 2, -	absent de DR																553	haut	10	19	19	48	38	0	+0	+11	+9	2693	2299	2285	80049dfc	haut	10	19	19	48	38	0	+0	+11	+9	p510	p653	p650
+b+1, 1, 2		nouveau dans DR		Jz_zan_dslprp	milieu	21	19	20	58	49	0	-11	(sDm_PNG00_)	(sDm_PNG01_)	sGrd_mM00	sDm_PNG00_	sDm_PNG01_																												
+b+1, 2, 2		absent de DR																540	haut	18	17	17	60	48	0	-12	-1	-1	2709	2318	2318														
+b+1, 2, 3		absent de DR																563	milieu	25	25	31	69	50	0	+6	(2595)	(2595)	2759	2595	2595														
+b+1, 4, b		absent de DR																586	imparable	80	63	64	117	106	0	-24	(2543)	(2543)	2693	2543	2543														
+b+2, 4, 2		absent de DR																636	milieu	10	10	12	49	39	0	-1	+1	+1	2779	2333	2333	8004b8cc	milieu	10	10	12	49	39	0	-1	+1	+1	p536	p665	p665
+b+2, 4, 4		absent de DR																625	milieu	10	24	26	87	86	0	-43	-32	-32	2725	2229	2229	8004b934	milieu	10	24	26	87	86	0	-43	-32	-32	p521	p644	p644
+b, 1+4, b		absent de DR																														8004a95c	imparable	80	63	64	117	106	0	-24	(p705)	(p705)	p510	p705	p705
+f+2, 3, 3		nouveau dans DR		Jz_10comb3	milieu	7	21	21	67	67	0	-27	-16	-16	sGrd_mM00	sDm_HAR00M	sDm_HAR00M																												
+u+4, 4, 4		absent de DR																577	bas	12	24	24	70	66	0	-26	(2610)	(2610)	2737	2610	2610	8004a754	bas	12	24	24	70	66	0	-26	(p686)	(p686)	p527	p686	p686
+u, u+1, 2		absent de DR																547	milieu	15	21	22	53	47	0	-7	(2538)	(2538)	2711	2538	2538	80049e98	milieu	15	21	22	53	47	0	-7	(p704)	(p704)	p518	p704	p704
+u, u+4, 4		absent de DR																568	milieu	21	15	16	49	49	0	-15	-4	-4	2711	2385	2385	8004a3e0	milieu	18	15	16	49	49	0	-15	-4	-4	p518	p726	p726
+d/b+2, 2, -		nouveau dans DR		Jz_new_com2	haut	15	8	8	54	50	0	-17	-12	-12	sGrd_rplk00	sDm_KAO00LG	sDm_KAO00L																												
+d/f+1, 4, -	2, 1, 4, -	nouveau dans DR		Jz_t_slprk2	milieu	18	18	22	60	44	0	-7	+2	+2	sGrd_hM00	sDm_KAO28R	sDm_KAO28R																												
+u/f+4, 4, -	b+2, 4, 4, 4, -	absent de DR																575	bas	15	0	0	86	75	0							8004a6b8	bas	15	0	0	86	75	0						
+u/f+4, 4, 4		absent de DR	T3 = u+4, 4, 4															577	bas	12	24	24	70	66	0	-26	(2610)	(2610)	2737	2610	2610	8004a6ec	bas	15	47	47	86	75	0	-12	(p686)	(p686)	p527	p686	p686
+u/f, N, d+3	u/f, N, d/b+3 / u/f, N, d/f+3	absent de DR																3410	bas	15	43	43	92	80	0	-18	+3	+3	2734	2466	2466	80040160	bas	15	43	43	92	80	0	-18	+3	+3	p525	p749	p749
+u/f, N, d+4	u/f, N, d/b+4 / u/f, N, d/f+4	absent de DR																3413	milieu	25	41	41	97	84	0	-24	(2556)	(2556)	2709	2556	2556	80040710	milieu	25	41	41	97	84	0	-24	(p707)	(p707)	p517	p707	p707
+1+2+3, -, -		nouveau dans DR		Jz_autocom_3	milieu	10	32	32	95	95	0	-38	(sDm_jahaL)	(sDm_jahaL)	sGrd_narucom03	sDm_jahaL	sDm_jahaL																												
+d,d/b,b+1+3	d/b, N,d/f,N,d/f+2+4	nouveau dans DR		Thrmv_B1_L0	haut	prise	12	12	40	39	0																																		
+f+3, 3, d/f+3		nouveau dans DR		Jz_tate_sok	milieu	13	19	21	65	50	0	-12	+1	(sDm_nkdoBxC4)	sGrd_mM00G	sDm_toht32	sDm_nkdoBxC4																												
+b+2, 3, d+1+2		nouveau dans DR		Jz_rplk01	milieu	21	16	18	63	45	0	-10	(sDm_PNGR0_)	(sDm_PNGR0_)	sGrd_hM00	sDm_PNGR0_	sDm_PNGR0_																												
+f,f, 2, 1		absent de DR																595	haut	8	14	14	43	43	0	-10	+1	+1	2693	2262	2232	8004b218	haut	8	14	14	43	43	0	-10	+1	+1	p510	p630	p627
+f,f, 3, 1		nouveau dans DR		Jz_ka_2_lp	haut	5	15	15	44	33	0	+1	+7	+7	sGrd_hM00JIN	sDm_KAO025G	sDm_KAO0025																												
+f,f, f, 3	f,f, f, b+3 / f,f, f, f+3	identique		Co_runlk00	milieu	30	22	23	67	59	0	+17	(sDw_KAO00_)	(sDw_KAO00_)	sGrd_YA01G	sDw_KAO00_	sDw_KAO00_	390	milieu	30	22	23	67	59	0	+17	(2556)	(2556)	2746	2556	2556	8004936c	milieu	30	22	23	67	59	0	+17	(p707)	(p707)	p530	p707	p707
+1, 2, -, 2		absent de DR																														80049b58	haut	18	17	17	60	48	0	-12	-1	-1	p517	p654	p654
+1, 2, -, 3		absent de DR																														8004a274	milieu	25	25	31	69	50	0	+6	(p747)	(p747)	p531	p747	p747
+1, 2, 3, -		nouveau dans DR		kz_kakatL	milieu	25	23	26	57	47	0	+1	(dw_nog00)	(dw_nog00)	sGrd_Tohtai	dw_nog00	dw_nog00																												
+1, 3, -, 2		nouveau dans DR		Jz_narucom_03	milieu	10	32	32	95	95	0	-38	(sDm_jahaL)	(sDm_jahaL)	sGrd_narucom03	sDm_jahaL	sDm_jahaL																												
+3, 2, -, 4		absent de DR																615	milieu	10	15	16	54	43	0	-7	-4	-4	2721	2278	2278	8004b628	milieu	10	15	16	54	43	0	-7	-4	-4	p519	p634	p634
+N,b,N,f+2	f, N,b,N,f+2	modifié : hit, ch		Jz_karate01	milieu	18	15	17	54	41	0	-7	+4	+4	sGrd_RE19G	sDm_HAR00M	sDm_HAR00M	125	milieu	18	15	17	54	50	0	-7	-5	(2630)	2779	2333	2630	80049644	milieu	18	15	17	54	50	0	-7	-5	(p721)	p536	p665	p721
+1+2, -, -, -		nouveau dans DR		Jz_pppp4	milieu	7	48	49	78	77	0	-10	+13	+13	sGrd_Tohtai19	sDm_tokusyu	sDm_tokusyu																												
+1+4, -, 2, 4		absent de DR																554	milieu	21	21	23	62	52	0	-12	(2556)	(2556)	2709	2556	2556	80049e30	milieu	21	21	23	62	52	0	-12	(p707)	(p707)	p517	p707	p707
+b+1, 2, 3, 4		absent de DR																571	milieu	30	36	37	73	55	0	+0	+11	+11	2711	2385	2385														
+b+2, 4, 2, 1		absent de DR																637	milieu	10	13	15	51	41	0	+0	+2	+2	2775	2341	2333	8004b900	milieu	10	13	15	51	41	0	+0	+2	+2	p535	p668	p665
+b+2, 4, 4, 4		absent de DR																627	bas	8	46	47	86	75	0	-10	+1	(2613)	2742	2382	2613	8004b99c	bas	8	46	47	86	75	0	-10	+1	(p688)	p529	p681	p688
+u+4, 4, 4, 4		absent de DR																578	milieu	25	22	22	70	51	0	-10	(2556)	(2556)	2709	2556	2556	8004a788	bas	12	24	24	70	66	0	-26	(p686)	(p686)	p527	p686	p686
+d/b+2, 2, -, 3		nouveau dans DR		Jz_new_com3	milieu	21	35	36	75	61	0	-7	(sDm_tanbenn)	(sDm_tanbenn)	sGrd_mM00	sDm_tanbenn	sDm_tanbenn																												
+d/f+1, 4, -, 4		nouveau dans DR		Jz_rkrk_01	bas	15	20	21	64	51	0	(cGrd_lL00)	(sDm_ASIJzLD)	(sDm_ASIJzLD)	cGrd_lL00	sDm_ASIJzLD	sDm_ASIJzLD																												
+b+2, 4, 4, 1/2/3		absent de DR																626	bas	8	46	47	87	80	0	-15	-4	(2613)	2742	2382	2613	8004b968	bas	8	46	47	87	80	0	-15	-4	(p688)	p529	p681	p688
+N,f,N,f+1+2	f,f, N,f,N,f+1+2 / f,f, N, N,f,N,f+1+2	absent de DR																2845	haut	prise	12	12	40	39	0							8006e180	haut	prise	12	12	40	39	0						
+1+2+3, -, -, 1	1, 3, -, 2, 1	nouveau dans DR		Jz_narucom_04	milieu	10	42	42	95	95	0	-28	-21	-21	sGrd_narucom04	sDm_tohtR_G	sDm_tohtR_G																												
+1+4, -, 2, d+4	1+4, -, 2, d/b+4 / 1+4, -, 2, d/f+4	absent de DR																555	bas	14	22	23	62	52	0	-14	(2610)	(2610)	2737	2610	2610	80049e64	bas	14	22	23	62	52	0	-14	(p686)	(p686)	p527	p686	p686
+b+1, 2, 3, f+4		absent de DR																579	milieu	10	30	32	64	54	0	-5	+6	+6	2711	2232	2232														
+b, d,d/b,b+1+3	d/b, d,d/b,b+1+3	absent de DR																2831	haut	prise	11	11	42	39	0							8006df10	haut	prise	11	11	42	39	0						
+f+3, 3, d/f+3, 1+2		nouveau dans DR		Jz_tate_sok01	milieu	13	19	21	65	50	0	-12	+1	(sDm_nkdoBxC4)	sGrd_mM00G	sDm_toht32	sDm_nkdoBxC4																												
+f,N,d,d/f, 1		nouveau dans DR		Jz_dslp	milieu	22	16	17	52	47	0	-12	(sDw_UP_01_)	(sDw_UP_01_)	sGrd_hM00	sDw_UP_01_	sDw_UP_01_																												
+f,N,d,d/f, 2		nouveau dans DR		Jz_shoryu34	haut	25	12	13	50	38	0	-2	(ym_y01)	(ym_y01)	sGrd_shoryu34	ym_y01	ym_y01																												
+f,N,d,d/f, 4	f,N,d,d/f, b+4 / f,N,d,d/f, f+4	commande changée	T3 / TTT1 : u, u+4	Jz_s_trk	milieu	13	11	12	46	33	0	-3	+8	+8	sGrd_mM00	sDm_Jz_s_trk	sDm_Jz_s_trk	376	milieu	13	11	12	46	33	0	-3	+8	+8	2711	2232	2232	80048e58	milieu	13	11	12	46	33	0	-3	+8	+8	p518	p627	p627
+f,f, 2, 1, 2		absent de DR																596	haut	6	10	10	39	39	0	-10	+1	+1	2693	2232	2232	8004b24c	haut	6	10	10	39	39	0	-10	+1	+1	p510	p627	p627
+f,f, 2, 1, 4		absent de DR																604	milieu	7	17	18	52	52	0	-16	-5	-5	2693	2232	2232	8004b3ec	milieu	7	17	18	52	52	0	-16	-5	-5	p510	p627	p627
+f,f, 3, 1, 3		nouveau dans DR		Jz_narucom_S1	haut	6	15	15	44	26	0	+8	+14	+14	sGrd_hM00	sDm_KAO025G	sDm_KAO0025																												
+1, 2, -, 3, 4		absent de DR																														8004a4b0	milieu	30	36	37	73	55	0	+0	+11	+11	p518	p726	p726
+N,b,N,f+2, 1		remplacé : level, damage, first, block, hit, ch		Jz_karate02	haut	10	13	13	48	36	0	-4	+7	+7	sGrd_hM00JIN	sDm_KAO00MG	sDm_KAO30M	126	milieu	18	15	17	54	50	0	-7	-5	(2630)	2779	2333	2630	80049678	milieu	18	15	17	54	50	0	-7	-5	(p721)	p536	p665	p721
+f,N,d,d/f, 1+2	f,N,d,d/f, b+1 / f,N,d,d/f, f+1 / f,N,d,d/f, b+1+2	commande changée	T3 / TTT1 : u, u+1	kaz_up02	milieu	10	13	14	48	38	0	-6	+5	+5	sGrd_mL00	sDm_KAO00L22G	sDm_KAO00L	372	milieu	10	13	14	48	38	0	-6	+5	+5	2725	2321	2318	80048430	milieu	10	13	14	48	38	0	-6	+5	+5	p521	p657	p654
+f,N,d,d/f, b+2	f,N,d,d/f, f+2 / f,N,d,d/f, b+2, -	nouveau dans DR		JIN_up06	milieu	15	14	15	48	35	0	-2	(sDw_UP_00_)	(sDw_UP_00_)	sGrd_mM00	sDw_UP_00_	sDw_UP_00_																												
+f,N,d,d/f, d+4	f,N,d,d/f, d/f+4	nouveau dans DR		Jz_m_k20	bas	18	20	21	64	51	0	(cGrd_lL00)	(sDm_ASIJzLD)	(sDm_ASIJzLD)	cGrd_lL00	sDm_ASIJzLD	sDm_ASIJzLD																												
+1, 2, -, 3, f+4		absent de DR																														8004a858	milieu	10	30	32	64	54	0	-5	+6	+6	p518	p627	p627
+b+2, 4, 2, 1, 2	N,b,N,f+2, 1, -, 2 / N,b,N,f+2, 1, -, b+2 / N,b,N,f+2, 1, -, f+2	absent de DR																118	milieu	24	18	19	56	42	0	-5	(2573)	(2579)	2711	2573	2579	80049818	milieu	24	18	19	56	42	0	-5	(p741)	(p745)	p518	p741	p745
+b+2, 4, 4, 4, 4		absent de DR																628	milieu	6	24	25	59	51	0	-8	+3	+3	2711	2232	2232	8004b9d0	milieu	6	24	25	59	51	0	-8	+3	+3	p518	p627	p627
+u+4, 4, 4, 4, -		absent de DR																														8004a7bc	milieu	25	22	22	70	51	0	-10	(p707)	(p707)	p517	p707	p707
+f,N,d,d/f, d/f+1	f,N,d,d/f, d+1+2 / f,N,d,d/f, d/b+1+2 / f,N,d,d/f, d/f+1+2	nouveau dans DR		Co_syalp00	milieu spécial	5	10	10	219	219	0	-190	-179	-179	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M																												
+f,N,d,d/f, d/f+2		nouveau dans DR		Co_syarp00	milieu spécial	8	11	11	220	220	0	-190	-179	-179	sGrd_mM00	sDm_HAR00MG	sDm_HAR00M																												
+f,N,d,d/f, d+3+4	f,N,d,d/f, d/b+3+4	nouveau dans DR		Co_syalk00	bas	12	16	16	240	240	0	(cGrd_lR16)	-194	-194	cGrd_lR16	sDm_ASI00R	sDm_ASI00R																												
+1+2+3, -, -, 1, 4		nouveau dans DR		Jz_narucom_05	bas	10	59	60	95	80	0	(cGrd_lR00)	+24	+24	cGrd_lR00	sDm_Ari60	sDm_Ari60																												
+f,N,d,d/f, d/f+3+4		nouveau dans DR		Co_syalkF	bas	12	16	16	240	240	0	(cGrd_lR16)	-194	-194	cGrd_lR16	sDm_ASI00R	sDm_ASI00R																												
+f,f, 2, 1, 2, 2		absent de DR																597	haut	7	17	17	60	60	0	-24	-13	-13	2693	2262	2232	8004b280	haut	7	17	17	60	60	0	-24	-13	-13	p510	p630	p627
+f,f, 2, 1, 4, 4		absent de DR																605	milieu	10	15	16	49	49	0	-15	-15	-4	2711	2392	2385	8004b420	milieu	10	15	16	49	49	0	-15	-15	-4	p518	p729	p726
+N,b,N,f+2, 1, -		absent de DR																117	milieu	14	13	15	51	44	0	-3	-1	-1	2775	2341	2333	800497e4	milieu	14	13	15	51	44	0	-3	-1	-1	p535	p668	p665
+N,b,N,f+2, 1, 2		nouveau dans DR		Jz_karate03	milieu	24	19	20	58	44	0	-6	(sDm_PNG00_)	(sDm_PNG01_)	sGrd_mM00	sDm_PNG00_	sDm_PNG01_																												
+f,N,d,d/f, 1+2, 2		commande changée : block, hit, ch	T3 / TTT1 : d/f+1, 2, -	Jz_lusako	milieu	16	20	20	48	48	0	-9	(sDm_KAK00_)	(sDm_KAK00_)	sGrd_mM00	sDm_KAK00_	sDm_KAK00_	548	milieu	16	20	20	48	44	0	-5	+6	+6	2711	2385	2385	80049f9c	milieu	16	20	20	48	44	0	-5	+6	+6	p518	p726	p726
+b+2, 4, 4, 4, 4, 2		absent de DR																629	milieu	6	22	23	55	54	0	-13	-2	-2	2711	2333	2333	8004ba04	milieu	6	22	23	55	54	0	-13	-2	-2	p518	p665	p665
+f,N,d,d/f, d+4, 3+4		nouveau dans DR		Jz_m_k20_D	bas	18	20	21	64	51	0	(cGrd_lL00)	(sDm_ASIJzLD)	(sDm_ASIJzLD)	cGrd_lL00	sDm_ASIJzLD	sDm_ASIJzLD																												
+f,f, 2, 1, 2, 2, 3		absent de DR																598	milieu	6	18	18	62	62	0	-25	+5	+5	2693	2440	2440	8004b2b4	milieu	6	18	18	62	62	0	-25	+5	+5	p510	p757	p757
+f,f, 2, 1, 4, 4, 2		absent de DR																606	bas	5	23	23	68	68	0	-31	-15	-15	2736	2341	2333	8004b454	bas	5	23	23	68	52	0	-15	+1	+1	p526	p668	p665
+N,b,N,f+2, 1, -, d+2	N,b,N,f+2, 1, -, d/b+2 / N,b,N,f+2, 1, -, d/f+2	absent de DR																116	milieu	15	18	19	50	50	0	-13	(2543)	(2543)	2693	2543	2543	80049714	milieu	15	18	19	50	50	0	-13	(p705)	(p705)	p510	p705	p705
+f,f, 2, 1, 2, 2, 3, 4		absent de DR																599	milieu	11	37	39	76	76	0	-20	-20	-9	2711	2392	2385	8004b2e8	milieu	11	37	39	76	76	0	-20	-20	-9	p518	p729	p726
+f,f, 2, 1, 4, 4, 2, 4		absent de DR																607	milieu	7	16	17	51	51	0	-16	-5	-5	2711	2341	2333	8004b488	milieu	7	16	17	51	51	0	-16	-5	-5	p518	p668	p665

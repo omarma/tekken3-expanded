@@ -18,6 +18,11 @@ injected on port 2: a PSX_DEBUG_TOOLS=ON build (build-dbg).
               and again, player 2 takes (arena 14, Dr. B's music 0x19)
     practice  the dummy's pick opens the band on GAME: TEKKEN 3, its STAGE,
               BRYAN, back to GAME, again, PAUL: arena 0, Paul's music 0x07
+    moveset   B128: the same with the TTT1 catalogue (--ttt1), Tekken 3 fighters
+              on both sides: player 1's MOVESET card, the dummy's pick: its
+              card (TTT1), then the band, once; circle, again; T3 PAUL
+    quick     Practice with QUICK SELECT (the VS grid): the dummy's card, then
+              the band, circle back to the grid, again, T3 PAUL: arena 0
     random    RANDOM of both games: the stage drawn and its music together
     option    GAME OPTION's STAGE SELECT row: ON to OFF, kept beside the card;
               OFF: no band in Practice, the game's arena (3)
@@ -38,6 +43,7 @@ import stage_check as sc  # noqa: E402
 
 DATA = Path('C:/TekkenProject/release-1.4.0-test/pc-banc/tekken3-expanded-1.4.0/build-release/mods')
 SCREEN, PHASE, MODE, LINE = 0x800ae204, 0x800ae224, 0x800afa88, 0x80097f40
+QUICK_SELECT = 0x80097f10                  # GAME OPTION's QUICK SELECT (a byte)
 ENTRY, LEVEL = 0x800ead58, 0x800ec020         # GAME OPTION's menu level (src/tekken3_game_options.c)
 MENU_LINES = 0x800db5d0                    # the modes menu's lines: base, count at +4, mode at +16 + 8i + 4
 VS_BLOCKS, VS_STRIDE = 0x800b8d70, 172     # +0 state: 3 choosing, 4 handicap, 12 done
@@ -277,6 +283,119 @@ def practice(args):
         g.stop()
 
 
+def moveset(args):
+    """B128 (GH#175): Practice with the TTT1 catalogue (--ttt1, its
+    natives.txt), so that a Tekken 3 fighter's pick opens its MOVESET card.
+    Player 1 picks Xiaoyu: her card, cross takes T3. The dummy's pick (Xiaoyu
+    too) opens its card first (the user's order, 2026-10-30: the fighter's
+    moves, then the stage); right, TTT1, cross: the band, once. Circle on GAME
+    goes back to the grid; the next pick opens the card again, cross, the
+    band: TEKKEN 3, its STAGE (PAUL), cross: the fight on arena 0 with Paul's
+    music 0x07, the dummy on its TTT1 moves. In 1.4.1 the cross on the
+    dummy's card opened the band a second time."""
+    out = Path(args.out).resolve()
+    ttt1 = Path(args.ttt1)
+    assert (ttt1 / 'natives.txt').is_file(), f'no natives.txt in {ttt1}'
+    g = Game(Path(args.build).resolve(), out / 'run-moveset', Path(args.data), args.aspect == '16:9',
+             env={'TEKKEN3_TTT1_ASSETS': str(ttt1), 'TEKKEN3_STAGE_SELECT': 'vs=default,practice=default'})
+    bands = lambda: g.logtext().count('waits on the STAGE band')
+    cards = lambda p: g.logtext().count(f'Native moves: P{p} opens the MOVESET card')
+    try:
+        to_practice_grid(g)
+        g.press(CROSS); time.sleep(1); g.shot(out / 'mv-1-p1-card.png')
+        assert cards(1) == 1 and bands() == 0, f"player 1's pick: {cards(1)} card(s), {bands()} band(s)"
+        g.press(CROSS); time.sleep(1.5)
+        assert 'P1 takes T3 moves' in g.logtext(), "player 1's card was not taken"
+        g.press(CROSS); time.sleep(.8); g.shot(out / 'mv-2-p2-card.png')
+        assert cards(2) == 1 and bands() == 0, f"the dummy's pick: {cards(2)} card(s), {bands()} band(s)"
+        g.press(RIGHT); g.press(CROSS); time.sleep(.8); g.shot(out / 'mv-3-band.png')
+        assert 'P2 takes TTT1 moves' in g.logtext(), "the dummy's card was not taken on TTT1"
+        assert bands() == 1 and g.value(SCREEN) == 9, f"the dummy's card taken: {bands()} band(s)"
+        g.press(CIRCLE); time.sleep(.5)
+        assert 'Practice, back to the grid' in g.logtext() and g.value(SCREEN) == 9, 'circle did not go back'
+        g.press(CROSS); time.sleep(.8)
+        assert cards(2) == 2 and bands() == 1, f'the pick after circle: {cards(2)} card(s), {bands()} band(s)'
+        g.press(CROSS); time.sleep(.8)
+        assert bands() == 2, f'the card taken again: {bands()} band(s)'
+        g.press(RIGHT); g.press(RIGHT)
+        g.press(CROSS); time.sleep(.5); g.shot(out / 'mv-4-paul.png')
+        g.press(CROSS)
+        arena = fight_on(g, out, 'mv-5-fight')
+        assert 'Practice takes T3 PAUL' in g.logtext(), 'the band did not take T3 PAUL'
+        assert bands() == 2 and cards(2) == 2, f'{bands()} bands, {cards(2)} dummy cards'
+        assert arena == 0, f'not arena 0 ({arena})'
+        assert g.value(MUSIC, 2) == 0x07, f"not Paul's music ({g.value(MUSIC, 2):#x})"
+        assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext()), 'the dummy is not on its TTT1 moves'
+        print('\n'.join(l for l in g.logtext().splitlines()
+                        if 'Stage select' in l or 'Native moves: P' in l or 'on the TTT1 moveset' in l))
+        print("moveset: OK, the dummy's card, then the band, once each")
+    finally:
+        g.stop()
+
+
+def quick(args):
+    """Practice with QUICK SELECT (GAME OPTION, 0x80097F10): the VS grid in
+    mode 5, the player's block 3 -> 11, then the dummy's 7, picked with the
+    player's pad (13). With --ttt1 (natives.txt): player 1's MOVESET card,
+    then the dummy's (Law), right, TTT1, cross: the band (VS grid's place,
+    green arrows); circle on GAME back to the grid, the dummy still to pick;
+    its pick again: the card, cross, the band: TEKKEN 3, its STAGE (PAUL),
+    cross: arena 0, music 0x07, Law on his TTT1 moves. Without a catalogue:
+    the band straight away."""
+    out = Path(args.out).resolve()
+    ttt1 = Path(args.ttt1)
+    env = {'TEKKEN3_STAGE_SELECT': 'vs=default,practice=default'}
+    cards = (ttt1 / 'natives.txt').is_file()
+    if cards: env['TEKKEN3_TTT1_ASSETS'] = str(ttt1)
+    g = Game(Path(args.build).resolve(), out / 'run-quick', Path(args.data), args.aspect == '16:9', env=env)
+    bands = lambda: g.logtext().count('waits on the STAGE band')
+    p2_cards = lambda: g.logtext().count('Native moves: P2 opens the MOVESET card')
+    dummy = lambda: [g.vs_state(p) for p in (0, 1)] in ([11, 7], [7, 11])
+
+    def pick_dummy(n):
+        g.press(CROSS); time.sleep(.8)
+        if cards:
+            g.shot(out / f'qk-{n}-dummy-card.png')
+            assert p2_cards() == n and dummy(), f"the dummy's pick {n}: {p2_cards()} card(s)"
+            if n == 1:
+                g.press(RIGHT); time.sleep(.3)
+            g.press(CROSS); time.sleep(.8)
+            assert g.logtext().count('P2 takes TTT1 moves') == n, "the dummy's card was not taken on TTT1"
+        assert bands() == n and dummy(), \
+            f"the dummy's pick {n}: {bands()} band(s), blocks {g.vs_state(0)}, {g.vs_state(1)}"
+    try:
+        to_menu(g)
+        g.write(QUICK_SELECT, 1, 1)
+        g.write(LINE, menu_line(g, PRACTICE), 4)
+        g.press(CROSS)
+        g.wait(lambda: g.value(SCREEN) == 10 and g.value(MODE) == PRACTICE, 'the quick Practice grid never came', 30)
+        time.sleep(2)
+        g.press(CROSS); time.sleep(1)
+        if 'P1 opens the MOVESET card' in g.logtext():
+            g.press(CROSS); time.sleep(1)
+        g.wait(dummy, f'no dummy to pick (blocks {g.vs_state(0)}, {g.vs_state(1)})', 10)
+        assert bands() == 0, "player 1's pick opened the band"
+        pick_dummy(1); g.shot(out / 'qk-1-band.png')
+        g.press(CIRCLE); time.sleep(.5)
+        assert 'Practice, back to the grid' in g.logtext() and dummy(), 'circle did not go back to the dummy'
+        pick_dummy(2)
+        g.press(RIGHT); g.press(RIGHT)
+        g.press(CROSS); time.sleep(.5); g.shot(out / 'qk-2-paul.png')
+        g.press(CROSS)
+        arena = fight_on(g, out, 'qk-3-fight')
+        assert 'Practice takes T3 PAUL' in g.logtext(), 'the band did not take T3 PAUL'
+        assert bands() == 2, f'{bands()} bands'
+        assert arena == 0, f'not arena 0 ({arena})'
+        assert g.value(MUSIC, 2) == 0x07, f"not Paul's music ({g.value(MUSIC, 2):#x})"
+        if cards:
+            assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext()), 'the dummy is not on its TTT1 moves'
+        print('\n'.join(l for l in g.logtext().splitlines()
+                        if 'Stage select' in l or 'Native moves: P' in l or 'on the TTT1 moveset' in l))
+        print('quick: OK')
+    finally:
+        g.stop()
+
+
 def random(args):
     """RANDOM of both games kept for Practice (the user's run, 2026-10-27:
     TTT's school to the deciding Paul's music): the band opens on GAME
@@ -371,14 +490,15 @@ def off(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('what', choices=['vs', 'practice', 'random', 'option', 'off'])
+    ap.add_argument('what', choices=['vs', 'practice', 'moveset', 'quick', 'random', 'option', 'off'])
     ap.add_argument('out')
     ap.add_argument('--build', default='build-rel-lite')
     ap.add_argument('--data', default=str(DATA))
     ap.add_argument('--aspect', default='16:9', choices=['16:9', '4:3'])
     ap.add_argument('--seed', default=7, type=int, help='random: the draw (7: TTT PAUL)')
+    ap.add_argument('--ttt1', default=str(DATA / 'ttt1'), help='moveset, quick: the TTT1 catalogue (natives.txt)')
     args = ap.parse_args()
-    {'vs': vs, 'practice': practice, 'random': random, 'option': option, 'off': off}[args.what](args)
+    {'vs': vs, 'practice': practice, 'moveset': moveset, 'quick': quick, 'random': random, 'option': option, 'off': off}[args.what](args)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,28 @@
+{
+ "about": "Lee's Tekken Tag Tournament (PS2) ending (scene 25): Lee dreams he beats Kazuya (119-242), then Heihachi (from 243), the dreams under TTT's memory vignette (cmd 23, 120-242 and 350-420). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "lee",
+ "arena": 8,
+ "dark": 0,
+ "trigger": "arcade-end p1=lee",
+ "ttt_stage": {"stage": 8,
+               "why": "the PS2 script's stage 8 (scene table 0x51B388), JIN-A in the PS2 executable (0x440670): TTT arcade's stage 8, Jin's; every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 8 above (tools/ps2/ttt_endings.json)"},
+ "actors": [
+  {"cast": "lee", "costume": 0, "skeleton": "lee",
+   "retarget": ["--basis", "canonical", "--twists", "--collars", "--upper-arms", "--world"],
+   "faces": [{"t": 618, "expression": 3, "why": "Lee smiles in the last shot (the user, 2026-11-02): on the PS2 his mouth nodes (10, 14) move from 415 to 520; the TTT1 face has no in-between and its blink image no smile, so neutral, the PS2's blink (604-617), then the smile (expression 3, his taunt's) as his eyes open again: the blink hides the change (the user's choice over a smile from 460 broken by a smileless blink)"}],
+   "why": "TTT costume -1 (the player's): T3 costume 0"},
+  {"cast": "kazuya", "costume": 0, "skeleton": "kazuya",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--upper-arms"],
+   "why": "TTT costume 0: T3 costume 0, the guest Kazuya",
+   "hide": [{"from": 243, "to": 350, "why": "Lee's shot from behind (cuts at 243 and 350): Heihachi stands beside the camera, out of the PS2's picture (its bones show Lee alone at 257, 287, 320), but in the engine his body so near the camera spread big dark polygons over the wall (seen in the film, 245-276)"}],
+   "swaps": [
+    {"cast": "heihachi", "costume": 0, "skeleton": "kazuya", "idle": "roster/Heihachi-TTT1-idle.poses",
+     "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--upper-arms"],
+     "why": "the script's cmd 1 at 242 (Kazuya becomes Heihachi, TTT costume 2), the capture's new skeleton from 243: the Tekken 3 native on Kazuya's TTT1 skeleton (the same Mishima build), his TTT1 stance; T3 costume 0 until the PS2 picture says otherwise"}
+   ]}
+ ],
+ "ignore": [
+  {"cmd": 31, "why": "0x34CAE0 only clears a halfword per actor (gp-0x62C8 + 2 · actor) at the camera cuts 242, 349 and 420: nothing drawn, the poses are the capture's"},
+  {"task": "0x3a0430", "why": "stage background ambience, as in Armor King's ending: three born every 32 frames with no script command, ~400 frames each; TTT Stages' stage 8 brings its own"}
+ ]
+}

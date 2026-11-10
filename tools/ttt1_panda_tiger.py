@@ -13,7 +13,8 @@ portrait, selector and loading tiles cut from the portrait), which the
 runtime shows once the costume is confirmed (src/tekken3_ttt1_roster.c,
 `alt_face`).
 
-Output: Panda-T3-ui.jui and Tiger-T3-ui.jui (with source PNGs) in --out
+Output: Panda-T3-ui.jui and Tiger-T3-ui.jui (with source PNGs), and their HD grid
+tiles and portraits (<Name>-T3-tile-hd.bin, -portrait-hd.bin, F28), in --out
 (default workspace/ttt1-import/panda-tiger/guest), staged by
 tools/ttt1_stage_roster.py. Game data never leaves workspace/ (ignored by git).
 """
@@ -61,7 +62,8 @@ def main():
         pack, _ = U.pack(images, tile_colors=TILE_COLORS)
         for iname, *_ in U.SPECS: images[iname].save(a.out / f'{name}-T3-{iname}-source.png')
         (a.out / f'{name}-T3-ui.jui').write_bytes(pack)
-        print(f'{name}: portrait {index}, {len(pack)} bytes, tiles: {how}')
+        U.write_hd(images, ui_art.hd_tile(face, box=box)[0], a.out, name)   # HD tile and portrait (F28)
+        print(f'{name}: portrait {index}, {len(pack)} bytes, tiles: {how}, HD tile and portrait')
 
 
 if __name__ == '__main__':

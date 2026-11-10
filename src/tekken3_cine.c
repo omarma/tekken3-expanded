@@ -33,9 +33,12 @@
 #include <string.h>
 
 enum { ACTORS_MAX=8, PLAYED=2, MODELS_MAX=8, FADES_MAX=64, BONES_MAX=32, CHANNELS=57, HAND_STEPS=512 };
-enum { SPARKS_MAX=64, SPRITES_MAX=16, SPRITE_POINTS_MAX=32, SWAPS_MAX=16, LOADS_MAX=2*(SWAPS_MAX+1), SHOWS_MAX=64, STORMS_MAX=64 };
+enum { SPARKS_MAX=64, SPRITES_MAX=64, SPRITE_POINTS_MAX=32, SWAPS_MAX=16, LOADS_MAX=2*(SWAPS_MAX+1), SHOWS_MAX=64, STORMS_MAX=64 };
 enum { ACTOR0=0x800a9228, ACTOR_SIZE=0x188c, STATE=0x800ae204, PHASE=0x800ae224 };
 typedef struct { int from,to,a,b; } Fade;
+/* `filter`: a screen filter over frames from..to (both drawn). */
+enum { FILTERS_MAX=16, FILTER_VIGNETTE=0, FILTER_TINT=1 };
+typedef struct { int from,to,type,p[3]; } Filter;
 typedef struct { int frame,actor,bone,kind; } Spark;
 /* A sprite block: k soft puffs a frame, each x y z (stage), radius, alpha (0: not drawn). */
 typedef struct { int first,count,points; uint32_t colour; int32_t (*p)[5]; } Sprites;
@@ -53,6 +56,8 @@ typedef struct {
     struct { int frame,shown; } shows[SHOWS_MAX]; int show_count;
     /* `eyes`: from each frame on, closed (1) or open (0); the game's own before the first. */
     struct { int frame,closed; } eyes[SHOWS_MAX]; int eye_count;
+    /* `face`: from each frame on, the face its eyes open show: expression n of the costume's .face (0 the plain one). */
+    struct { int frame,expression; } faces[SHOWS_MAX]; int face_count;
 } Actor;
 typedef struct {
     char name[32],dir[1024];
@@ -60,6 +65,7 @@ typedef struct {
     int actor_count; Actor actors[ACTORS_MAX];
     int cam_first,cam_count; int16_t (*cam)[6];
     Fade fades[FADES_MAX]; int fade_count;
+    Filter filters[FILTERS_MAX]; int filter_count;
     Spark sparks[SPARKS_MAX]; int spark_count;
     Sprites sprites[SPRITES_MAX]; int sprite_count;
     char music[1024],music_fallback[1024]; int music_frame,music_fallback_frame;
@@ -176,6 +182,11 @@ static Cine *cine_read(const char *path) {
             if(a->eye_count==SHOWS_MAX || (a->eye_count && frame<a->eyes[a->eye_count-1].frame)) ok=0;
             else { a->eyes[a->eye_count].frame=frame; a->eyes[a->eye_count++].closed=num(w[3])!=0; }
         }
+        else if(!strcmp(w[0],"face") && n==4 && (a=actor_of(c,w[1]))) {
+            int frame=num(w[2]);
+            if(a->face_count==SHOWS_MAX || num(w[3])<0 || (a->face_count && frame<a->faces[a->face_count-1].frame)) ok=0;
+            else { a->faces[a->face_count].frame=frame; a->faces[a->face_count++].expression=num(w[3]); }
+        }
         else if(!strcmp(w[0],"effect") && n==3 && (a=actor_of(c,w[1])))
             snprintf(a->effect,sizeof a->effect,"%s/%s",c->dir,w[2]);
         else if(!strcmp(w[0],"aura") && n>=6 && (a=actor_of(c,w[1]))) {
@@ -184,6 +195,15 @@ static Cine *cine_read(const char *path) {
         }
         else if(!strcmp(w[0],"fade") && n==5 && c->fade_count<FADES_MAX)
             c->fades[c->fade_count++]=(Fade){num(w[1]),num(w[2]),num(w[3]),num(w[4])};
+        else if(!strcmp(w[0],"filter") && n>=4 && !strcmp(w[3],"vignette")) {
+            if(n!=7 || c->filter_count==FILTERS_MAX) ok=0;
+            else c->filters[c->filter_count++]=(Filter){num(w[1]),num(w[2]),FILTER_VIGNETTE,{num(w[4]),num(w[5]),num(w[6])}};
+        }
+        else if(!strcmp(w[0],"filter") && n>=4 && !strcmp(w[3],"tint")) {
+            if(n!=6 || c->filter_count==FILTERS_MAX || num(w[5])<0 || num(w[5])>3) ok=0;
+            else c->filters[c->filter_count++]=(Filter){num(w[1]),num(w[2]),FILTER_TINT,{(int)strtoul(w[4],NULL,16),num(w[5]),0}};
+        }
+        else if(!strcmp(w[0],"filter")) fprintf(stderr,"Cine: %s line %d: filter \"%s\" not played\n",path,lineno,n>3?w[3]:"");
         else if(!strcmp(w[0],"music") && n==3) {
             snprintf(c->music,sizeof c->music,"%s/%s",c->dir,w[1]); c->music_frame=num(w[2]);
         }
@@ -233,8 +253,8 @@ static Cine *cine_read(const char *path) {
         ok=0;
     }
     if(!ok) { cine_free(c); return NULL; }
-    fprintf(stderr,"Cine: %s \"%s\", %d frames, %d actors, camera %d frames, %d fades, %d sparks, %d sprite blocks, %d character changes\n",
-            path,c->name,c->length,c->actor_count,c->cam_count,c->fade_count,c->spark_count,c->sprite_count,
+    fprintf(stderr,"Cine: %s \"%s\", %d frames, %d actors, camera %d frames, %d fades, %d filters, %d sparks, %d sprite blocks, %d character changes\n",
+            path,c->name,c->length,c->actor_count,c->cam_count,c->fade_count,c->filter_count,c->spark_count,c->sprite_count,
             c->actors[0].swap_count+c->actors[1].swap_count);
     if(c->actor_count>PLAYED)
         fprintf(stderr,"Cine: actors %d and after are not drawn yet (two players only)\n",PLAYED);
@@ -290,15 +310,19 @@ int tekken3_cine_hand(unsigned player,unsigned hand) {
     for(int i=0;i<a->hand_count[hand] && a->hands[hand][i].frame<=f;i++) out=a->hands[hand][i].index;
     return out;
 }
-/* A player's eyes at this frame (`eyes`): 1 closed, 0 open, -1 the game's own
- * (its blinking; before the first step), for the guests' faces
+/* A player's eyes at this frame (`eyes`, `face`): 1 closed (the blink image),
+ * 0 open, CINE_FACE + n open on expression n (`face`, n > 0), -1 the game's
+ * own (its blinking; before the first step of either), for the guests' faces
  * (src/tekken3_ttt1_mod.c, tekken3_ttt1_face_tick). */
+enum { CINE_FACE=0x100 };
 int tekken3_cine_eyes(unsigned player) {
     if(!playing || player>=PLAYED || player>=(unsigned)cine->actor_count) return -1;
     const Actor *a=&cine->actors[player];
-    int f=frame_or_zero(),out=-1;
+    int f=frame_or_zero(),out=-1,face=-1;
     for(int i=0;i<a->eye_count && a->eyes[i].frame<=f;i++) out=a->eyes[i].closed;
-    return out;
+    for(int i=0;i<a->face_count && a->faces[i].frame<=f;i++) face=a->faces[i].expression;
+    if(out==1 || face<0) return out;
+    return face?CINE_FACE+face:0;
 }
 /* A player's lightning pack and the strong-hit light while it plays. */
 const char *tekken3_cine_effect(unsigned player) {
@@ -516,7 +540,7 @@ static void far_tile(void) {
  * (rotation in the GTE as the floor left it, translation 0x800ADF70 + 0x14:
  * camera = R · p + T), linked near the front of the display list (one packet
  * a puff: E1 additive, then its polygons). */
-enum { WORLD_VIEW=0x800adf70, NEAR_PX=120, PUFFS_MAX=64, SEGMENTS=10, PUFF_WORDS=1+SEGMENTS*6+2*SEGMENTS*8 };
+enum { WORLD_VIEW=0x800adf70, NEAR_PX=120, PUFFS_MAX=96, SEGMENTS=10, PUFF_WORDS=1+SEGMENTS*6+2*SEGMENTS*8 };
 static uint32_t puffs;              /* PUFFS_MAX packets per buffer */
 static void sprites(CPUState *cpu) {
     int f=tekken3_cine_engine_frame();
@@ -593,6 +617,137 @@ static void sprites(CPUState *cpu) {
         }
     }
     #undef XY
+}
+
+/* ---- Screen filters -------------------------------------------------------- */
+
+/* Each `filter` of this frame, linked at the front of the display list (in
+ * front of everything drawn so far, the fade drawn over it), in a chain of
+ * packets of our own (GPU-DMA memory, one area a display buffer). The PS2
+ * draws them on its 640 x 448 screen: their coordinates are scaled to the
+ * fight's (the far tile's 368 x 480), stretched across the margins True
+ * Widescreen adds each side (psx_mod_widescreen_x_margin: 490 wide): a band
+ * left at 368 was a black bar inside the picture.
+ *
+ * vignette rx ry force: TTT's memory / dream filter (cmd 23, 0x3AC8E0 drawing
+ * through 0x3CFA38): black, nothing inside the centred ellipse of half axes
+ * rx, ry, rising to `force` (PS2 alpha, 128 = black, TTT's 192) at the
+ * corners of its box, black outside the box. The PS2 blends black at alpha
+ * (Gouraud from 0 on the ellipse to `force` at the corner, 16 segments a
+ * quadrant, clamped at 128); a PS1 GPU cannot multiply, so the ramp is
+ * subtracted (semi-transparency 2, B - F: F 0 to 255 where the PS2's alpha
+ * goes 0 to 128, 255 beyond), the same on white, darker on dark colours (the
+ * user's choice, 2026-11-02, over a softer ramp and a half-tone).
+ *
+ * tint RRGGBB mode: a full screen rectangle of this colour with the PS1
+ * semi-transparency `mode` (0 B/2 + F/2, 1 B + F, 2 B - F, 3 B + F/4). TTT's
+ * cmd 24 entry 2 (0x3AC940: colour a23332 at alpha 64 of 128) is mode 0
+ * exactly. */
+enum { SCREEN_W=368, SCREEN_H=480, PS2_W=640, PS2_H=448, VIGNETTE_STEPS=16, FILTER_WORDS=2048, PACKET_WORDS=200 };
+static uint32_t filter_area;        /* FILTER_WORDS words per buffer */
+static uint32_t chain_at,chain_end,chain_packet,chain_head;
+static int chain_open(uint32_t area) {
+    chain_at=area; chain_end=area+4*FILTER_WORDS; chain_packet=0; chain_head=0;
+    return 1;
+}
+/* A primitive of n words, in the current packet or a new one chained to it. */
+static int chain_prim(const uint32_t *w,unsigned n) {
+    if(chain_packet && (chain_at-chain_packet)/4-1+n>PACKET_WORDS) {
+        uint32_t words=(chain_at-chain_packet)/4-1;
+        psx_mod_write_word(chain_packet,(psx_mod_read_word(chain_packet)&0xffffffu)|words<<24);
+        chain_packet=0;
+    }
+    if(!chain_packet) {
+        if(chain_at+4*(1+n)>chain_end) return 0;
+        if(chain_head) {          /* the previous packet links to this one */
+            uint32_t prev=chain_head;
+            while((psx_mod_read_word(prev)&0xffffffu)!=0xffffffu) prev=0x80000000u|(psx_mod_read_word(prev)&0xffffffu);
+            psx_mod_write_word(prev,(psx_mod_read_word(prev)&0xff000000u)|(chain_at&0xffffffu));
+        } else chain_head=chain_at;
+        chain_packet=chain_at; psx_mod_write_word(chain_packet,0x00ffffffu); chain_at+=4;
+    }
+    if(chain_at+4*n>chain_end) return 0;
+    for(unsigned i=0;i<n;i++) psx_mod_write_word(chain_at+4*i,w[i]);
+    chain_at+=4*n;
+    return 1;
+}
+/* The chain linked at the front of the display list. */
+static void chain_close(void) {
+    if(!chain_head) return;
+    uint32_t words=(chain_at-chain_packet)/4-1,slot=ot();
+    psx_mod_write_word(chain_packet,(psx_mod_read_word(slot)&0xffffffu)|words<<24);
+    psx_mod_write_word(slot,(psx_mod_read_word(slot)&0xff000000u)|(chain_head&0xffffffu));
+}
+static int margin;                  /* the widescreen's x margin each side (True Widescreen), 0 in 4:3 */
+static uint32_t sxy(double x,double y) {
+    long sx=lround(-margin+x*(SCREEN_W+2*margin)/PS2_W),sy=lround(y*SCREEN_H/PS2_H);
+    return ((uint32_t)sy&0xffffu)<<16|((uint32_t)sx&0xffffu);
+}
+static uint32_t grey(double v) { uint32_t g=(uint32_t)lround(v<0?0:v>255?255:v); return g|g<<8|g<<16; }
+static void vignette(const Filter *fl) {
+    double rx=fl->p[0],ry=fl->p[1],cx=PS2_W/2.0,cy=PS2_H/2.0;
+    double k=fl->p[2]>0?128.0/fl->p[2]:2.0;     /* where along a ray to the corner the PS2 is black */
+    uint32_t w[16];
+    w[0]=0xE1000000u|2u<<5|1u<<9|1u<<10;        /* B - F, dither, draw on the shown area */
+    chain_prim(w,1);
+    for(int q=0;q<4;q++) {
+        double sx=q&1?-1:1,sy=q&2?-1:1,kx=cx+sx*rx,ky=cy+sy*ry;  /* the box's corner of this quadrant */
+        for(int s=0;s<VIGNETTE_STEPS;s++) {
+            double a0=s*(3.141592653589793/2)/VIGNETTE_STEPS,a1=(s+1)*(3.141592653589793/2)/VIGNETTE_STEPS;
+            double x0=cx+sx*rx*sin(a0),y0=cy+sy*ry*cos(a0),x1=cx+sx*rx*sin(a1),y1=cy+sy*ry*cos(a1);
+            if(k>=1) {          /* never black inside the box: one Gouraud triangle */
+                w[0]=0x32000000u|grey(0); w[1]=sxy(x0,y0);
+                w[2]=grey(255/k);         w[3]=sxy(kx,ky);
+                w[4]=grey(0);             w[5]=sxy(x1,y1);
+                chain_prim(w,6);
+                continue;
+            }
+            /* Black from k of the way to the corner on: the ramp up to there
+             * (a Gouraud quad), black past it (a flat triangle). */
+            double mx0=x0+(kx-x0)*k,my0=y0+(ky-y0)*k,mx1=x1+(kx-x1)*k,my1=y1+(ky-y1)*k;
+            w[0]=0x3A000000u|grey(0); w[1]=sxy(x0,y0);
+            w[2]=grey(0);             w[3]=sxy(x1,y1);
+            w[4]=grey(255);           w[5]=sxy(mx0,my0);
+            w[6]=grey(255);           w[7]=sxy(mx1,my1);
+            chain_prim(w,8);
+            w[0]=0x22000000u|grey(255); w[1]=sxy(mx0,my0); w[2]=sxy(kx,ky); w[3]=sxy(mx1,my1);
+            chain_prim(w,4);
+        }
+    }
+    /* Outside the box: opaque black bands. */
+    const double band[4][4]={{0,0,PS2_W,cy-ry},{0,cy+ry,PS2_W,PS2_H},{0,0,cx-rx,PS2_H},{cx+rx,0,PS2_W,PS2_H}};
+    for(int b=0;b<4;b++) {
+        uint32_t a=sxy(band[b][0],band[b][1]),z=sxy(band[b][2],band[b][3]);
+        int bw=(int)(z&0xffff)-(int)(a&0xffff),bh=(int)(z>>16)-(int)(a>>16);
+        if(bw<=0 || bh<=0) continue;
+        w[0]=0x60000000u; w[1]=a; w[2]=(uint32_t)bh<<16|(uint32_t)bw;
+        chain_prim(w,3);
+    }
+}
+static void tint(const Filter *fl) {
+    uint32_t c=(uint32_t)fl->p[0],w[3];
+    w[0]=0xE1000000u|(uint32_t)fl->p[1]<<5|1u<<9|1u<<10;
+    chain_prim(w,1);
+    w[0]=0x62000000u|(c>>16&255)|(c&0xff00u)|(c&255)<<16;   /* BGR */
+    w[1]=sxy(0,0); w[2]=(uint32_t)SCREEN_H<<16|(uint32_t)(SCREEN_W+2*margin);
+    chain_prim(w,3);
+}
+static void filters(void) {
+    int f=tekken3_cine_engine_frame();
+    if(f<0 || !cine->filter_count) return;
+    if(!filter_area && !(filter_area=psx_mod_alloc_gpu_dma_memory(2*4*FILTER_WORDS,16))) {
+        static int told;
+        if(!told++) fprintf(stderr,"Cine: no GPU-DMA memory left for the screen filters, they are not drawn\n");
+        return;
+    }
+    margin=psx_mod_widescreen_x_margin(); if(margin<0) margin=0;
+    chain_open(filter_area+(psx_mod_read_word(0x800adefc)&1)*4*FILTER_WORDS);
+    for(int i=0;i<cine->filter_count;i++) {
+        const Filter *fl=&cine->filters[i];
+        if(f<fl->from || f>fl->to) continue;
+        if(fl->type==FILTER_VIGNETTE) vignette(fl); else tint(fl);
+    }
+    chain_close();
 }
 
 /* The engine's records: each actor's stance (its record when the cinematic
@@ -737,7 +892,7 @@ extern int tekken3_guest_id(const char *key);
 extern int tekken3_t3_key_id(const char *key);
 extern void tekken3_guest_follow(unsigned player,unsigned id,unsigned costume);
 extern int tekken3_native_moves_force(unsigned player,unsigned id);
-extern int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset);
+extern int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset,const char *source);
 extern void tekken3_ttt1_guest_now(unsigned player);
 extern void tekken3_cine_swap_loading(int on,unsigned side);
 extern void tekken3_cine_swap_forget(void);
@@ -798,7 +953,7 @@ static int load_begin(unsigned p,int s,int *id,int *costume) {
     if(*id<NATIVES) {
         /* A native plays the poses on its TTT1 moves (mode 4), as the scene loads it. */
         if(!tekken3_native_moves_force(p,(unsigned)*id)) fprintf(stderr,"Cine: no TTT1 moves for native %d, its poses will not play\n",*id);
-    } else tekken3_native_moves_set(p,0,NULL,0);
+    } else tekken3_native_moves_set(p,0,NULL,0,NULL);
     fprintf(stderr,"Cine: actor %u becomes %s (%d, costume %d) at tick %d\n",p,who,*id,*costume,tick);
     tekken3_cine_swap_loading(1,0);
     return 1;
@@ -952,6 +1107,7 @@ static int run(CPUState *cpu) {
         CALL0(0x80039f84);
         CALL0(0x80036000);
         CALL0(0x800378f8);
+        filters();                  /* `filter`: in front of everything linked so far, the fade over it */
         {
             int on,level=fade_level(&on);
             if(on) {

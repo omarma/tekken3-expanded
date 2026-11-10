@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { PACK_VERSION = 3,                /* tools/ps2/laser_version.py LASER_VERSION */
+enum { PACK_VERSION = 5,                /* tools/ps2/laser_version.py LASER_VERSION */
        TIMS = 32, ORB_BYTES = 16 * 64 * 2, SEGMENT_BYTES = 16 * 32 * 2,
        CELLS = TEKKEN3_PS2_LASER_ORBS + 8 + 1, PALETTE_CELL = CELLS - 1, ANGEL_ROW = 32,
        SCREEN = 0x800ae204, OPTIONS = 5, FIGHT = 8,
@@ -67,6 +67,7 @@ extern int tekken3_stage_high_vram_used(int x, int y, int w, int h);
 extern unsigned tekken3_stage_high_vram_generation(void);
 extern int tekken3_hit_effect_high_vram_used(int x, int y, int w, int h);
 extern int tekken3_ttt1_wolf_high_vram_used(int x, int y, int w, int h);
+extern int tekken3_ps2_weapons_high_vram_used(int x, int y, int w, int h);
 extern int tekken3_ttt1_has_lasers(unsigned p);
 extern const char *tekken3_guest_moves_prefix_for(unsigned player);
 
@@ -217,7 +218,15 @@ static void menu(void) {
 
 static int cell_free(int x, int y) {
     return !tekken3_stage_high_vram_used(x, y, 16, 64) && !tekken3_hit_effect_high_vram_used(x, y, 16, 64) &&
-           !tekken3_ttt1_wolf_high_vram_used(x, y, 16, 64);
+           !tekken3_ttt1_wolf_high_vram_used(x, y, 16, 64) && !tekken3_ps2_weapons_high_vram_used(x, y, 16, 64);
+}
+/* For Unknown's PS2 weapons (src/tekken3_ttt1_ps2_weapons.c): whether
+ * rectangle x, y, w, h overlaps the cells once chosen. */
+int tekken3_ps2_laser_high_vram_used(int x, int y, int w, int h) {
+    if (cells.chosen != 1) return 0;
+    for (unsigned i = 0; i < CELLS; i++)
+        if (x < cells.x[i] + 16 && cells.x[i] < x + w && y < cells.y[i] + 64 && cells.y[i] < y + h) return 1;
+    return 0;
 }
 /* Additive (ABR 1), 4 bits, the upper half (texpage bit 11, CLUT bit 15). */
 static Tekken3Ps2LaserImage image_at(unsigned x, unsigned y, unsigned clut_x, unsigned clut_y) {

@@ -13,7 +13,7 @@ written once the boot has read the card, with a roster (0x80097EF0) that gives i
 the game's log ("Embu rotation, ...embu.cine", "guests", "v2" or "the game's variant N"; headless, the TTT
 Embu's state 6 lasts less than a poll), and each TTT one must then be played; without either Embu of the mod
 (--off ttt-cinematics,ttt1-embu: no decision), from state 6 entered and the variant (0x80097F20). The guests
-grafted during an Embu ("TTT1 Embu: ... on ...'s model") are counted with it. --hold: that button held from the
+grafted during an Embu ("TTT1 Embu: ... on ...'s model", not a native's "(TTT1 model)") are counted with it. --hold: that button held from the
 first demo fight until the next Embu is chosen (T3's L1 / R1 / L1 + R1, our L2): that Embu is noted "held".
 --off: those features off (state.toml; ttt-stages, ttt-cinematics, ttt1-embu). --card-save: OPTION MODE >
 MEMORY CARD > CARD SAVE after the last Embu (the card and <card>-embu-rotation.txt written). OUT/states.txt:
@@ -119,7 +119,10 @@ def main():
             found = []
             log = g.log(); new = log[log_at:log.rfind('\n') + 1]; log_at += len(new)
             for line in new.splitlines():
-                if re.search(r"TTT1 Embu: P\d .* on \w+'s model", line) and grafts: grafts[-1] += 1
+                # A guest's graft; a native on its own TTT1 model (F32 E5, "Paul (TTT1 model) on paul's model")
+                # is in every Embu.
+                if re.search(r"TTT1 Embu: P\d .* on \w+'s model", line) and '(TTT1 model)' not in line and grafts:
+                    grafts[-1] += 1
                 if not decided or 'Cine trigger: Embu rotation, ' not in line: continue
                 m = re.search(r"the game's variant (\d+)|rotation, (guests|v\d) ", line)
                 found.append(((f'v{m.group(1)}' if m.group(1) else m.group(2)) if m else 'TTT',

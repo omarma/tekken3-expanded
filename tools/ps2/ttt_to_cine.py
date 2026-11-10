@@ -88,7 +88,7 @@ UNSUPPORTED = {                  # script command -> what it is (ttt_script.ENDI
     29: 'screen task 0x3AA420', 30: 'screen task 0x3AD140', 32: 'screen task 0x3AA378',
     26: 'flag gp-28292', 31: 'flag 0x34CAE0',
 }
-PLAYED = {2, 3, 4, 27, 5, 6, 19, 20, 10, 17, 18}   # motions and camera (in the capture), fades, sparks, sprites (below)
+PLAYED = {2, 3, 4, 27, 5, 6, 19, 20, 10, 17, 18, 23, 24}   # motions and camera (in the capture), fades, sparks, sprites, filters (below)
 # The Embu's script has commands of its own (ttt_script.py): 11 a white flash
 # held (a fade, ttt_cine_report.script_fades), 13 the music (its packet, the
 # declaration's "music_packet").
@@ -98,7 +98,8 @@ SPARK_TASK = '0x346b60'          # cmd 10's hit effect: T3 draws its own (the `s
 DEVIL_SPARK_TASK = '0x347398'    # cmd 10 of a Devil (Kazuya's ending, Jin): his lightning, T3's own effect too
 SPRITE_TASKS = {'0x3a0668'}      # cmd 18 (kind 3) puffs: position float x y z at +0x20, drawn while +0x74 != 0
 SPRAY_TASKS = {'0x3a0570'}       # cmd 17 (kind 2) sparks: the anchor float x y z at +0x20 plus the spark's own offset at +0x80, drawn while +0x74 != 0
-EXPECTED_TASKS = {10: {SPARK_TASK, DEVIL_SPARK_TASK}, 17: SPRAY_TASKS, 18: SPRITE_TASKS}
+VIGNETTE_TASK, TINT_TASK = '0x3ac8e0', '0x3aca18'   # cmd 23 and 24's screen filters (`filter`)
+EXPECTED_TASKS = {10: {SPARK_TASK, DEVIL_SPARK_TASK}, 17: SPRAY_TASKS, 18: SPRITE_TASKS, 23: {VIGNETTE_TASK}, 24: {TINT_TASK}}
 # PS2 node -> T3 bone (actor + 0x908 + 68 · bone; 0 the pelvis, 6 / 10 the hands):
 # 79 is the legs' root, at the hips. A node not here stops the conversion.
 # Measured on Baek's ending (both actors, frames 119 and 300: the T3 bones
@@ -222,6 +223,10 @@ def check(key, e, scene, head, by_t, relinks, capture_name):
         if c in (0, 1) and (t == 0 or id(ev) in matched): continue
         if c == 10 and e.get('spark_bones') != 't3' and ev['b'] not in NODE_BONE:
             problems.append(f"script {t}: cmd 10 on PS2 node {ev['b']}: no T3 bone for it (NODE_BONE)")
+        if c == 24 and ev['a'] not in TINTS:
+            problem(f"script {t}: cmd 24 entry {ev['a']} (0x3AC940: (colour - picture) times the frame buffer's alpha, "
+                    "no PS1 semi-transparency for it)", cmd=c, t=t)
+            continue
         if c in PLAYED or (embu(scene) and c in EMBU_PLAYED) or (c == 7 and e.get('ttt_stage')): continue
         problem(f"script {t}: cmd {c} ({UNSUPPORTED.get(c, 'unknown command')}) a={ev['a']} b={ev['b']} c={ev['c']}", cmd=c, t=t)
 
@@ -257,7 +262,8 @@ def check(key, e, scene, head, by_t, relinks, capture_name):
     for (kind, cause), (count, n, t0, t1) in groups.items():
         if cause and kind in EXPECTED_TASKS.get(cause[1], ()):
             notes.append(f"capture {t0}-{t1 if t1 is not None else 'end'}: engine task {kind} ×{count} of script {cause[0]} cmd {cause[1]}: "
-                         + ("T3's own hit effect (`spark`)" if cause[1] == 10 else 'its puffs (`sprite`)'))
+                         + {10: "T3's own hit effect (`spark`)", 23: 'its screen filter (`filter`)',
+                            24: 'its screen filter (`filter`)'}.get(cause[1], 'its puffs (`sprite`)'))
             continue
         problem(f"capture {t0}-{t1 if t1 is not None else 'end'}: engine task {kind} ×{count}"
                 + (f' in {n} bursts' if n > 1 else '')
@@ -359,6 +365,25 @@ def storms(scene, e):
 
 STORM_GAP = 30
 
+# cmd 23 (task 0x3AC8E0, drawing through 0x3CFA38(220, 133, 192)): a black
+# vignette, the ellipse's half axes 220 * 133 / 100 and 220 PS2 pixels, alpha
+# 192 at its box's corners. cmd 24 (task 0x3ACA18, 0x3AC940(a)): entry a of the
+# table 0x437C10, a full screen rectangle; entry 2, colour a23332 at alpha 64
+# of 128 blended over the picture, is the PS1's semi-transparency 0 (B/2 + F/2).
+VIGNETTE = [220 * 133 // 100, 220, 192]
+TINTS = {2: ['a23332', 0]}
+
+
+def filters(scene):
+    """cmd 23 and 24 as [first, last, kind, params...]: the task is born the
+    frame after the command and lives a (23) or b (24) frames, drawn on each
+    (Lee's 119 for 123: 120-242 in the capture)."""
+    out = []
+    for ev in scene['events']:
+        if ev['cmd'] == 23: out.append([ev['t'] + 1, ev['t'] + ev['a'], 'vignette', *VIGNETTE])
+        elif ev['cmd'] == 24 and ev['a'] in TINTS: out.append([ev['t'] + 1, ev['t'] + ev['b'], 'tint', *TINTS[ev['a']]])
+    return out
+
 
 def sparks(scene, e):
     """cmd 10 as [frame, actor, T3 bone, kind]: kind = the actor whose effect it is.
@@ -376,8 +401,8 @@ def sprites(scene, by_t, calib, cmd=18, tasks=SPRITE_TASKS, offset=None, every=1
     """Each cmd 18's puffs: one block {first, rows: [[x, y, z, alive] per puff]},
     positions through the retarget's calibration (to_t3 of ttt_retarget.py).
     cmd 17's sprays the same way, each spark at its anchor plus `offset`'s
-    vector (SPRAY_TASKS), one spark in `every` kept: the engine draws 64
-    puffs a frame, 32 a block (Armor King's four sprays at 936-942: 180)."""
+    vector (SPRAY_TASKS), one spark in `every` kept: the engine draws 96
+    puffs a frame, 32 a block, 64 blocks (Armor King's four sprays at 936-942: 180)."""
     import numpy as np, struct
     C, scale, origin = np.array(calib['C']), calib['scale'], np.array(calib['origin'])
     ts = sorted(by_t); out = []; seen = set()      # tasks claimed by an earlier command, or left out
@@ -655,6 +680,11 @@ def main(argv=None):
     first, last = min(by_t), max(by_t)
     frames = list(range(first, last + 1))
     hidden = [hidden_spans(scene, i) if e.get('hide_idle') else [] for i in range(len(e['actors']))]
+    # The declaration's "hide" of an actor: frames from..to-1 not drawn, where the
+    # PS2's camera has it out of sight but the engine's near-plane drew it
+    # (Lee's ending: Heihachi beside the camera in Lee's shot 243-349).
+    for i, x in enumerate(e['actors']):
+        hidden[i] = sorted(hidden[i] + [[h['from'], h['to'] - 1] for h in x.get('hide', [])])
     fits = [max(r['fit_deg']) for s in segments for r in s if r.get('fit_deg')]
     data = dict(
         about=f"{e['about']} Data of tools/ps2/ttt_to_cine.py from capture {capture.name} and the scene's script "
@@ -666,6 +696,7 @@ def main(argv=None):
                      poses=nudged(spliced(segments[i], [t for t, _, _ in found.get(i, [])], 'poses', frames), x.get('nudge', []), frames),
                      side=r['calibration'].get('side', 0), fingers=fingers(head, by_t, i, frames, relinks),
                      eyes=eyes(head, by_t, relinks, i, frames),
+                     faces=[[f['t'], f['expression']] for f in x.get('faces', [])],
                      swaps=[dict(t=t, cast=w['cast'], costume=w['costume'], side=s['calibration'].get('side', 0),
                                  models=w.get('models', []))
                             for (t, w, _), s in zip(found.get(i, []), segments[i][1:])],
@@ -678,7 +709,7 @@ def main(argv=None):
         spray_look=dict(SPRAY_LOOK, radius=round(SPRAY_LOOK['radius'] * rs[0]['calibration']['scale']),
                         colour=e.get('spray_colour', 'ffffff')),
         ttt_stage=(e.get('ttt_stage') or {}).get('stage'), ttt_courtyard=(e.get('ttt_stage') or {}).get('courtyard'),
-        storms=storms(scene, e),
+        storms=storms(scene, e), filters=filters(scene),
         sprite_look=dict(SPRITE_LOOK, radius=round(SPRITE_LOOK['radius'] * rs[0]['calibration']['scale']),
                          colour=e.get('sprite_colour', 'ffffff')))
     (DATA / f'{key}.json.gz').write_bytes(gzip.compress(json.dumps(data, separators=(',', ':')).encode(), 9, mtime=0))

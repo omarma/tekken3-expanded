@@ -171,6 +171,8 @@ static void to_attract(void) {
 /* The game left the scene (Start: the modes menu, src/tekken3_cine_scene.c):
  * neither the title nor the credits follow, the next trigger can play. */
 void tekken3_cine_trigger_left(void) { active=NULL; }
+/* The cinematic playing is the attract's Embu (not an ending). */
+int tekken3_cine_trigger_embu(void) { return active && active->event==EV_ATTRACT; }
 static void title_tick(unsigned state) {
     static unsigned before;
     if(titled && before==3 && state!=3) { psx_mod_write_byte(CYCLE,CYCLE_AFTER_EMBU); titled=0; }

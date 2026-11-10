@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-LASER_VERSION = 3           # 2: Angel's yellow (ANGEL_FILE); 3: the Mishima's strong-hit effects (HITSPARK_FILES)
+LASER_VERSION = 5           # 2: Angel's yellow (ANGEL_FILE); 3: the Mishima's strong-hit effects (HITSPARK_FILES); 4: Unknown's weapons (WEAPONS_FILE); 5: Unknown's strong-hit effect (F33)
 FILE = 'ps2-laser.tim'      # Devil's: 32 TIMs, read by the game (step 3 of the PS2 laser)
 ANGEL_FILE = 'ps2-laser-angel.tim'   # Angel's: the same images, yellow palettes
-# The Mishima's PS2 strong-hit effects (ttt_hitspark_ps2.py), 64 x 64 packs of TTT Hitspark's format.
-HITSPARK_FILES = tuple(f'{name}-PS2-hiteffect64.hfx' for name in ('Jin', 'Heihachi', 'Kazuya', 'Devil', 'Angel'))
+# The Mishima's and Unknown's PS2 strong-hit effects (ttt_hitspark_ps2.py), 64 x 64 packs of TTT Hitspark's format.
+HITSPARK_FILES = tuple(f'{name}-PS2-hiteffect64.hfx' for name in ('Jin', 'Heihachi', 'Kazuya', 'Devil', 'Angel', 'Unknown'))
+# Unknown's PS2 katana and dagger (ttt_weapons.py, F29): both costumes, reduced to the arcade's budget.
+WEAPONS_FILE = 'unknown-weapons.bin'
 STAMP = 'version.txt'
 
 
@@ -28,4 +30,4 @@ def read_stamp(folder: Path) -> int:
 def current(folder: Path) -> bool:
     """The folder holds the laser and strong-hit effect files of this version."""
     folder = Path(folder)
-    return read_stamp(folder) >= LASER_VERSION and all((folder / f).is_file() for f in (FILE, ANGEL_FILE, *HITSPARK_FILES))
+    return read_stamp(folder) >= LASER_VERSION and all((folder / f).is_file() for f in (FILE, ANGEL_FILE, *HITSPARK_FILES, WEAPONS_FILE))

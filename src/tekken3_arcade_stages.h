@@ -26,6 +26,10 @@ int tekken3_ttt_stage_force(int stage);
  * sparks around it. */
 unsigned tekken3_stage_high_vram_generation(void);
 int tekken3_stage_high_vram_used(int x, int y, int w, int h);
+/* Another mod wrote over those rectangles while no stage drew: the stage
+ * puts them back before it draws again (the pack is not loaded again for
+ * the same arena). */
+void tekken3_stage_high_vram_disturbed(void);
 
 /* Stage 4's storm: a lightning flash of `type` 0..5 (0-2 lit clouds, 3-5 a
  * visible bolt; 4 runs into 5) starting at this frame (the stage's next
@@ -49,7 +53,8 @@ void tekken3_ttt_floor_centre(int on, int x, int z, int half);
 
 /* B126: TTT stage 11's wind this frame, x and z (world, 4096 = 1), or 0:
  * none (another stage, or not drawn). TTT pulls the accessory bones in the
- * air sideways by it times their gravity / 256. */
+ * air sideways by it times their gravity / 256. B141: T3 arcade's stage 11
+ * (King) blows the same, but with Gun Jack in the fight. */
 int tekken3_ttt_stage_wind(int wind[2]);
 
 /* B87: the T3 arcade stage drawn (0..12, the PS1 arena), or -1: none, a TTT

@@ -1,0 +1,23 @@
+format_version = 5
+id = "tekken3.character.dr"
+version = "1.0.0"
+name = "Tekken 5 DR Content"
+author = "Tekken3Recomp"
+description = "Experimental. Tekken 5: Dark Resurrection content made locally from your own PSP disc. It will hold Tekken 5 DR's content; for now it holds only Jin's traditional karate moveset. Needs TTT1 Characters and the setup's Tekken 5 DR Content option."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00402"
+exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
+
+[[feature]]
+id = "dr-content"
+name = "Tekken 5 DR Content"
+description = "Experimental: the Tekken 5 DR content imported by the setup. For now, Jin's traditional karate moveset from Tekken 5: Dark Resurrection, a third choice (TEKKEN 5 DR) on his MOVESET card and a CPU MOVESET value. Off, the game has none of it. Restart after changing."
+group = "Characters"
+default_enabled = true
+
+[[plugin]]
+feature = "dr-content"
+id = "tekken3.dr-content"

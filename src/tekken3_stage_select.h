@@ -22,13 +22,16 @@ int tekken3_stage_select_arena(void);
  * owner's for a TTT stage (under the TTT piece); -1 none. */
 int tekken3_stage_select_music(void);
 
-/* The selector's pads (src/tekken3_ttt1_selector.c), before the MOVESET
- * cards: the line's own presses, kept from the game. */
+/* The selector's pads (src/tekken3_ttt1_selector.c), after the MOVESET
+ * cards (B128): the line's own presses, kept from the game. */
 uint16_t tekken3_stage_select_input(int player, uint16_t buttons);
+/* The Practice band is open: the cards leave its presses alone. */
+int tekken3_stage_select_open(void);
 
 /* What the line shows now, for the selector's packets
  * (src/tekken3_native_moves.c), under its STAGE SELECT title: 0 nothing,
- * 1 VS BATTLE SELECT's band, 2 the Practice grid's. *label: GAME or the
+ * 1 the band in VS BATTLE SELECT's place (VS, and the Practice with QUICK
+ * SELECT), 2 the Practice grid's. *label: GAME or the
  * game; *name: the game or
  * the stage; *arrows: -1 none, else the colour of the player who changes it
  * (0 player 1, 1 player 2, 2 the CPU's green, 3 both: player 1's on the

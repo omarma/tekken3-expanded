@@ -36,9 +36,11 @@ purple ones here, nothing more is read on the disc. Each colour's brightness
 is placed on one gradient, black -> gold -> white (gold()), so the hearts of
 the orb and of the beam stay white as in the purple. Devil's is the disc's.
 
-With them, the PS2 strong-hit effects of Jin, Heihachi, Kazuya, Devil and
-Angel (laser_version.HITSPARK_FILES, ttt_hitspark_ps2.py): the rest of the
-PS2 EFFECTS content, read on the same disc.
+With them, the PS2 strong-hit effects of Jin, Heihachi, Kazuya, Devil,
+Angel and Unknown (laser_version.HITSPARK_FILES, ttt_hitspark_ps2.py): the rest of the
+PS2 EFFECTS content, read on the same disc. And Unknown's own PS2 katana and
+dagger (laser_version.WEAPONS_FILE, ttt_weapons.py), for her styles of
+Yoshimitsu and Kunimitsu.
 
 The files and version.txt (laser_version.LASER_VERSION) go to a temporary
 folder that then replaces DIR (default workspace/ttt-ps2/laser-pack);
@@ -191,22 +193,26 @@ def ps1_images(pack: bytes):
 
 def install(disc: Path, out: Path = DEFAULT_OUT, say=print) -> Path:
     import ttt_hitspark_ps2
+    import ttt_weapons
     start = time.time()
     entry, run = laser_set(disc)
     pack, angel = build(run), build(run, gold)
     hitsparks = ttt_hitspark_ps2.files(disc)
+    weapons = ttt_weapons.build(disc)
     temp = out.with_name(out.name + '.new')
     shutil.rmtree(temp, ignore_errors=True)
     temp.mkdir(parents=True)
     (temp / version.FILE).write_bytes(pack)
     (temp / version.ANGEL_FILE).write_bytes(angel)
     for name in version.HITSPARK_FILES: (temp / name).write_bytes(hitsparks[name])
+    (temp / version.WEAPONS_FILE).write_bytes(weapons)
     (temp / version.STAMP).write_text(f'{version.LASER_VERSION}\n', encoding='utf-8')
     shutil.rmtree(out, ignore_errors=True)
     temp.replace(out)
     say(f"Devil's and Angel's PS2 laser version {version.LASER_VERSION}: {len(run)} images from TEKKEN.BIN file "
         f'{entry}, Devil {len(pack)} and Angel {len(angel)} bytes, and the strong-hit effects of '
-        f'{", ".join(n.split("-")[0] for n in version.HITSPARK_FILES)} in {out} ({time.time() - start:.1f} s)')
+        f'{", ".join(n.split("-")[0] for n in version.HITSPARK_FILES)}, and Unknown\'s weapons ({len(weapons)} bytes) '
+        f'in {out} ({time.time() - start:.1f} s)')
     return out
 
 

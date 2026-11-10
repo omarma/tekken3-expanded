@@ -24,12 +24,17 @@
  * the handicap. Two takes in the same frame: the second one is held.
  * Practice (mode 5): the Arcade grid (screen 9), blocks at 0x8011864C +
  * 0x7C * player. Player 1's pad picks the dummy in block 2 (state 3); that
- * pick opens the band under the clock on GAME and waits: left and right
- * change it, cross or start goes to its STAGE (DEFAULT and RANDOM: takes it),
- * where cross or start takes the stage (the pick goes to the game then, its
+ * pick, once past the dummy's MOVESET card (a native with other moves: the
+ * cards come first in the selector's chain, the user's, 2026-10-30, B128),
+ * opens the band under the clock on GAME and waits: left and right change
+ * it, cross or start goes to its STAGE (DEFAULT and RANDOM: takes it), where
+ * cross or start takes the stage (the pick goes to the game then, its
  * button, so its costume); circle or select goes back a step, to the grid
- * from GAME. TTT's PS2 Practice has no stage choice (a dojo); this one is the
- * mod's own.
+ * from GAME (the next pick opens the card again). With QUICK SELECT the
+ * Practice chooses on the VS grid (mode 5): the player's pad picks the dummy
+ * in its block's state 7, card and band the same, the band in VS BATTLE
+ * SELECT's place. TTT's PS2 Practice has no stage choice (a dojo); this one
+ * is the mod's own.
  *
  * The stages: Tekken 3's by fighter, the arena and the music of the
  * fighter's record (0x80097D40, bytes 10 and 11; the user's, 2026-10-27):
@@ -78,6 +83,7 @@
 enum { SCREEN = 0x800ae204, PHASE = 0x800ae224, MODE = 0x800afa88, FIGHT = 8, ARCADE_GRID = 9, VS_GRID = 10,
        ARENA = 0x800adc84, ARENA_COPY = 0x800afaa2, MUSIC = 0x800add08, MUSIC_COPY = 0x800afaa3,
        VS_BLOCKS = 0x800b8d70, VS_STRIDE = 172, VS_CHOOSING = 3, VS_HANDICAP = 4, VS_DONE = 12,
+       QUICK_CPU = 7, QUICK_DONE = 11,
        GRID_BLOCKS = 0x8011864c, GRID_STRIDE = 0x7c, CHOOSING = 1, CHOOSING_CPU = 3, ABSENT = 22,
        VS = 1, PRACTICE = 5, OPTIONS = 5, OPTION_MODES = 1u << VS | 1u << PRACTICE };
 /* Pad bits, active low. */
@@ -284,6 +290,27 @@ static int practice_dummy(void) {
            psx_mod_read_word(0x8010ff4c) == 0x27bdffd0 && psx_mod_read_half(PHASE) <= 1 &&
            grid_state(0) != CHOOSING && grid_state(1) == CHOOSING_CPU;
 }
+/* With QUICK SELECT (GAME OPTION), the Practice chooses on the VS grid,
+ * mode 5 (grid_side_update): the player's block goes 3 -> 11, then the
+ * dummy's 6 -> 7, where the player's pad picks it (13). The player's pad,
+ * -1 when no dummy waits. */
+static int quick_dummy(void) {
+    if (psx_mod_read_word(SCREEN) != VS_GRID || psx_mod_read_word(MODE) != PRACTICE) return -1;
+    for (unsigned d = 0; d < 2; d++)
+        if (vs_state(d) == QUICK_CPU && vs_state(d ^ 1) == QUICK_DONE) return (int)(d ^ 1);
+    return -1;
+}
+/* The pad that picks the dummy, -1 none. */
+static int dummy_pad(void) { return practice_dummy() ? 0 : quick_dummy(); }
+/* The fighter under the dummy's cursor: the Arcade grid's block, else the VS
+ * grid's cell (block +8 column, +12 row; its Tag page holds the guests). */
+extern unsigned tekken3_ttt1_grid_character(unsigned cell);
+static unsigned dummy_under(int pad) {
+    if (practice_dummy()) return psx_mod_read_word(GRID_BLOCKS + GRID_STRIDE + 0x1c);
+    uint32_t block = VS_BLOCKS + (unsigned)(pad ^ 1) * VS_STRIDE;
+    unsigned x = psx_mod_read_word(block + 8), y = psx_mod_read_word(block + 12);
+    return x < 7 && y < 4 ? tekken3_ttt1_grid_character(y * 7 + x) : ABSENT;
+}
 
 /* Each line's step: 0 GAME, 1 STAGE (DEFAULT and RANDOM have none). */
 static int on_stage[LINES];
@@ -363,7 +390,9 @@ uint16_t tekken3_stage_select_input(int player, uint16_t buttons) {
         return buttons | vs_hold[p];
     }
     waiting = -1; vs_inject = 0; vs_hold[p] = 0;      /* a take still held off the screen: not the next one's */
-    if (p != 0 || !practice_dummy()) { if (p == 0) band = inject = hold = 0; return buttons; }
+    int pad = dummy_pad();
+    if (pad < 0) { band = inject = hold = 0; return buttons; }
+    if (p != (unsigned)pad) return buttons;
     if (inject > 0) { inject--; return (uint16_t)~injecting; }
     if (band) {
         int *stage = &on_stage[LINE_PRACTICE];
@@ -387,7 +416,7 @@ uint16_t tekken3_stage_select_input(int player, uint16_t buttons) {
     int leaving = (!(buttons & PAD_SELECT) && (edges & PAD_START)) ||
                   (!(buttons & PAD_SQUARE) && !(buttons & PAD_TRIANGLE));
     uint16_t picks = edges & PICK;
-    unsigned under = psx_mod_read_word(GRID_BLOCKS + GRID_STRIDE + 0x1c);
+    unsigned under = dummy_under(pad);
     if (under < ABSENT && !(psx_mod_read_word(0x80097ef4) >> (under & 31) & 1)) picks &= (uint16_t)~PAD_START;
     if (picks && !leaving) {
         band = (uint16_t)(picks & -picks);
@@ -397,6 +426,8 @@ uint16_t tekken3_stage_select_input(int player, uint16_t buttons) {
     }
     return buttons | hold;
 }
+
+int tekken3_stage_select_open(void) { return band != 0; }
 
 /* GAME and the game while on GAME, the game and the stage on STAGE. */
 static void shown(int line, const char **label, const char **name) {
@@ -416,10 +447,10 @@ int tekken3_stage_select_line(const char **label, const char **name, int *arrows
         shown(LINE_VS, label, name);
         return 1;
     }
-    if (band && practice_dummy()) {
+    if (band && dummy_pad() >= 0) {      /* the VS grid's place with QUICK SELECT */
         *arrows = 2;
         shown(LINE_PRACTICE, label, name);
-        return 2;
+        return practice_dummy() ? 2 : 1;
     }
     return 0;
 }
@@ -449,7 +480,7 @@ static void tick(void) {
     if (!psx_mod_game_started()) return;
     unsigned screen = psx_mod_read_word(SCREEN);
     if (on && screen == OPTIONS) menu();
-    if (band && !practice_dummy()) band = 0;          /* the clock picked, the grid left */
+    if (band && dummy_pad() < 0) band = 0;            /* the clock picked, the grid left */
     if (!arena_pending) return;
     if (screen == FIGHT) { arena_pending = 0; return; }
     if (psx_mod_read_half(ARENA) != (uint16_t)fight.arena) psx_mod_write_half(ARENA, (uint16_t)fight.arena);

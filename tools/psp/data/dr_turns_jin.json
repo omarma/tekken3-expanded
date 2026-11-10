@@ -1,0 +1,4 @@
+{
+  "_doc": "DR's own turn of the fighter during a move (player +0x20, degrees from the move's first frame, one value per DR frame), not in the animation: measured in PPSSPP (workspace/dr-a4/probe_dr_jin.py, Jin against Paul at contact). dr_pack.py turns the converted clip by it.",
+  "Jz_t_srk00": [0.0, 0.11, 0.2, 0.29, 0.39, 0.52, 0.72, 1.1, 1.86, 3.19, 5.32, 8.32, 11.32, 14.32, 17.32, 19.86, 19.86, 19.86, 19.86, 19.86, 19.86, 20.01, 20.17, 20.32, 20.47, 20.63, 20.63, 20.63, 20.63, 20.63, 20.63, 20.41, 20.19, 19.97, 19.75, 19.53, 18.97]
+}

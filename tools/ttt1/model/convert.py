@@ -38,6 +38,7 @@ NROWS = 27
 HDR = 24 + NROWS * 56
 
 HOSTROW = {}        # ligne PS1 integree -> ligne TTT1 de l'accessoire frere hote (sinon absent)
+KEEP = frozenset()  # lignes TTT1 a garder sur leur propre partie d'accessoire (convert(keep=...))
 
 def set_layout(s2t, second, hosts=None):
     global S2T, SECOND, DRAW, TORDER, BAKED, HOSTROW
@@ -103,8 +104,12 @@ def layouts(T):
     #     (Michelle costume 2 : la meche 28 dans la partie de la meche 27, ce qui
     #     libere une partie d'accessoire pour la piece du dos 26) ;
     #  3. dernier recours : maillage de tete supplementaire pour tout parent.
-    for mode in ('same', 'rigid', 'head'):
-        yield from _layouts(T, heads, mode)
+    # Pieces a garder (KEEP, convert(keep=...)) : d'abord les placements ou aucune n'est integree
+    # ni n'accueille de piece integree (elle balance seule, comme la borne), puis tous.
+    keep = KEEP & set(accessory_rows(T))
+    for avoid in ((keep, frozenset()) if keep else (frozenset(),)):
+        for mode in ('same', 'rigid', 'head'):
+            yield from _layouts(T, heads, mode, avoid)
 
 def rigid_root(T, t):
     """Os anime qui porte la ligne t et la pose de repos de t dans son repere :
@@ -122,13 +127,14 @@ def rigid_root(T, t):
         par = wr[6]
     return par, M, p
 
-def _layouts(T, heads, mode):
+def _layouts(T, heads, mode, avoid=frozenset()):
     from itertools import combinations
     acc = heads + accessory_rows(T)
     if len(acc) > len(ACC_ROWS) + len(BAKE_ROWS):
         raise ValueError(f'{len(acc)} os d accessoires, {len(ACC_ROWS) + len(BAKE_ROWS)} places')
     for k in range(max(0, len(acc) - len(ACC_ROWS)), len(BAKE_ROWS) + 1):
         for baked in combinations([t for t in acc if t not in heads], k):
+            if avoid & set(baked): continue
             parts = [t for t in acc if t not in baked]
             s2t = dict(BASE_S2T)
             mesh = lambda t: row(T, t)[10] and row(T, t)[1] > 2
@@ -174,7 +180,8 @@ def _layouts(T, heads, mode):
                                 (u in heads and head_parent))]
                     if mode == 'head' and not any(u in heads and not head_parent for u in sib):
                         raise ValueError('deja essaye sans hote de tete')
-                    sib = [u for u in sib if P2R.index(next(k for k, v in s2t.items() if v == u)) not in second]
+                    sib = [u for u in sib if P2R.index(next(k for k, v in s2t.items() if v == u)) not in second
+                           and u not in avoid]
                     if not sib: raise ValueError('aucun hote')
                     h = sib[0]; hq = P2R.index(next(k for k, v in s2t.items() if v == h))
                     second[hq] = s; hosts[s] = h
@@ -228,10 +235,13 @@ def rewired(T, t):
         if not between: return vs
         # Cases ecrasees : la liste de chaque ligne intercalee, et les cases ou
         # elle copie des sommets (groupe 4, Michelle costume 2, Kunimitsu
-        # costume 3) ; les autres restent lisibles.
+        # costume 3) ; les autres restent lisibles. Lues sur la liste brute : le
+        # reroutage ne change ni sa longueur ni le groupe 4, et rewired(x) pourrait
+        # redemander t (accessoires dessines a l'envers de TTT1, 25 avant 24 :
+        # recursion sans fin chez Hwoarang Poing et Julia Pied).
         over = set()
         for x in between:
-            for rx in rewired(T, x):
+            for rx in SM.variants(block(T, row(T, x - 1)[12]), True) if row(T, x - 1)[12] > 2 else []:
                 over |= set(range(list_len(rx)))
                 over |= {(f & 0xff) // 2 - 1 for f in rx['tails'][4]}
     else:
@@ -537,7 +547,8 @@ def remap_prims(b, mp):
 def unplaced(T):
     """Lignes TTT1 qui portent un maillage mais n'ont aucune place PS1 (ex. le
     troisieme maillage de tete de Michelle, ligne 23) : perdues, a signaler."""
-    return [t for t in range(nrows(T)) if row(T, t)[10] and row(T, t)[1] > 2 and t not in S2T.values()]
+    return [t for t in range(nrows(T)) if row(T, t)[10] and row(T, t)[1] > 2 and t not in S2T.values()
+            and t not in FOLDED and t not in MERGED and t not in MOVED]
 
 # Soudures sur un sommet entier. TTT1 soude un sommet propre V a la valeur lue (case du tampon,
 # groupe 3, ou entree du cache, groupe 2) avec les poids 16 (valeur entiere) et w :
@@ -599,6 +610,73 @@ def rebuild(T, new, added=None, words=None):
                 e = struct.unpack_from('<I', out, p + 4 * i)[0]
                 o = max(x for x in so[:-1] if x <= e); struct.pack_into('<I', out, p + 4 * i, at[o] + e - o)
     return bytes(out)
+
+# Soudures a poids libres. TTT1 soude au genou (et aux autres articulations) un sommet propre V du
+# lecteur a la case du tampon ou l'ecrivain a depose son sommet U avec les poids w et 16 - w :
+# (pw U + w V) / 16 a l'ecran. Le PS1 ne sait que V/2 + U/2 : 14/2 devenu 8/8 tirait le mollet de
+# Devil de 6/16 vers la cuisse (B145, 45 a 78 unites), 12/4 le poussait de 4/16 vers le tibia. Si
+# le lecteur est l'enfant de l'ecrivain (ou son parent), l'articulation est l'origine de l'enfant :
+# le point o (decalage de l'enfant) dans le repere du parent, 0 dans le sien. Mettre chaque sommet a
+# l'echelle autour d'elle, enfant v -> v w / 8, parent u -> o + (u - o) pw / 8, rend la soudure 8/8
+# exacte dans toute pose (les deux os passent par o). Seulement pour un depot lu par ce seul lecteur,
+# dans l'ordre TTT1 comme dans l'ordre PS1, et qu'aucun polygone de l'ecrivain ne dessine.
+EXACT_WELDS = True
+EXACT_DONE = []     # soudures rendues exactes : (ligne lectrice, ligne ecrivain, poids lecteur, poids ecrivain)
+
+def exact_welds(T, order):
+    """Modele TTT1 ou les soudures du groupe 3 a poids complementaires autres que 8/8 sont mises a
+    l'echelle autour de l'articulation et passent a 8/8. `order` : ordre de dessin PS1 (TORDER)."""
+    lists = {r: SM.variants(block(T, row(T, r - 1)[12]), True) for r in range(1, nrows(T)) if row(T, r - 1)[12] > 2}
+    one = {r: dict(vs[0], tails=[list(g) for g in vs[0]['tails']], verts=[list(v) for v in vs[0]['verts']])
+           for r, vs in lists.items() if len(vs) == 1}
+    def bounds(a):
+        b = [0]
+        for g in a['tails'][:5]: b.append(b[-1] + len(g))
+        return b
+    def reads(order):
+        """Lectures du tampon : (lecteur, groupe 3 ou 'g1', rang) -> ecrivain (ligne, sommet propre,
+        poids, rang dans le groupe 5) ou None (case de liste, ligne a poses)."""
+        cur, out = {}, {}
+        for r in order:
+            if r not in one:
+                for p in range(max(len(a['g1']) + len(a['g2']) + len(a['verts']) for a in lists[r])): cur[p] = None
+                continue
+            a = one[r]; b = bounds(a)
+            for j, f in enumerate(a['tails'][2]): out[(r, 2, j)] = cur.get((f & 0xff) // 2 - 1)
+            for j, x in enumerate(a['g1']): out[(r, 'g1', j)] = cur.get(x // 2 - 1)
+            for p in range(len(a['g1']) + len(a['g2']) + len(a['verts'])): cur[p] = None
+            for j, f in enumerate(a['tails'][4]): cur[(f & 0xff) // 2 - 1] = (r, b[4] + j, (f >> 8) & 0x1f, j)
+        return out
+    rt, rp = reads(sorted(lists)), reads([r for r in order if r in lists])
+    readers = {}
+    for k, wr in rt.items():
+        if wr: readers.setdefault(wr[:2], []).append(k)
+    def drawn(r, i):                            # sommet propre i de la ligne r dessine par un de ses polygones
+        a = one[r]; s = len(a['g1']) + len(a['g2']) + i
+        return any(s in prim_verts(k, p) for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))) for p in fl) if row(T, r)[1] > 2 else False
+    part = lambda r: next((p for p in range(nrows(T)) if ttt1_part_row(p) == r), None)
+    changed = set()
+    for (r, g, j), wr in rt.items():
+        if g != 2 or not wr or rp.get((r, g, j)) != wr: continue
+        a = one[r]; i = bounds(a)[2] + j; w = (a['tails'][2][j] >> 8) & 0x1f
+        x, u, pw, j5 = wr
+        if w in (0, 8, 16) or pw + w != 16 or readers[wr[:2]] != [(r, g, j)] or drawn(x, u): continue
+        R, W = row(T, r), row(T, x)
+        if R[6] == part(x): o, (cs, ps), (cw, pp) = R[3:6], (w, False), (pw, True)        # lecteur enfant
+        elif W[6] == part(r): o, (cs, ps), (cw, pp) = W[3:6], (w, True), (pw, False)      # ecrivain enfant
+        else: continue
+        scale = lambda v, c, parent: [round(o[k] + (v[k] - o[k]) * c / 8) if parent else round(v[k] * c / 8) for k in range(3)]
+        V, U = scale(a['verts'][i], cs, ps), scale(one[x]['verts'][u], cw, pp)
+        if any(abs(c) > 32767 for c in V + U): continue
+        a['verts'][i][:3], one[x]['verts'][u][:3] = V, U
+        a['tails'][2][j] = (a['tails'][2][j] & ~0x1f00) | 8 << 8
+        one[x]['tails'][4][j5] = (one[x]['tails'][4][j5] & ~0x1f00) | 8 << 8
+        changed |= {r, x}; EXACT_DONE.append((r, x, w, pw))
+    new = {}
+    for r in changed:
+        o = row(T, r - 1)[12]; bts = list_bytes(dict(one[r], verts=[tuple(v) for v in one[r]['verts']]))
+        new[o] = bts + block(T, o)[len(bts):]
+    return rebuild(T, new) if new else T
 
 def half_welds(T, order):
     """Modele TTT1 ou les soudures que convert_positions vient de changer en copies (COPIED, passe
@@ -684,6 +762,7 @@ def half_welds(T, order):
             for it, p in zip(rest, [p for p in rng if p not in kept]): place[it] = p
             ordered.append(sorted(blk, key=lambda it: place[it])); start += len(blk)
         L0, L1 = s0 + V, s0 + start
+        if L1 > BUFFER_TOP + 1: return 'liste trop longue'   # 110 cases (Eddy Poing, ligne 23 : 108 + 5)
         mp = {s0 + it[1]: s0 + p for it, p in place.items() if it[0] == 'v' and it[1] != p}
         if any(live_across(s, times[k][q], times[k][q], k) for s in range(L0, L1) for k in (0, 1)):
             return 'liste agrandie'             # la liste agrandie ecraserait une valeur encore lue
@@ -804,20 +883,724 @@ def half_welds(T, order):
         if bts != block(T, o)[:len(bts)]: new[o] = bts
     return rebuild(T, new, added, words) if new or added else T
 
-def convert(src):
-    """Essaie les placements candidats dans l'ordre ; le premier qui se convertit gagne. Avec
+# Pieces repliees (F32). Le PS1 a six places pour les accessoires et les maillages de tete en plus
+# (parties 18..21, lignes 25 / 26 a os integre) ; les anciens costumes de Hwoarang et de Julia
+# (emplacements TTT1 12 et 21) en ont sept : un troisieme maillage de tete (ligne 23) et six os
+# d'accessoires. Comme F26 (to_ps1 : les pieces en trop repliees dans leur parent au repos), une piece
+# B passe dans une piece A de la meme chaine rigide : sommets et normales dans le repere de A (bake,
+# hote A), liste, normales, polygones et textures a la suite de ceux de A ; la ligne B devient vide.
+# Seulement pour une feuille sans effet sur le reste : B ne lit ni n'ecrit le tampon, n'ecrit pas le
+# cache, ne porte aucune piece ; A n'ecrit rien ; aucune ligne apres A ne lit les cases (positions,
+# couleurs) que la liste agrandie recouvre. B suit A rigidement : si A balance (ressort), B balance
+# avec elle, au repos par rapport a elle.
+FOLDED = {}         # ligne TTT1 repliee -> ligne TTT1 qui l'accueille (dernier convert)
+COLOUR_LIMIT = 90   # couleurs d'une piece : 0x1F800290 + 4 (k + 1), sous le tampon des profondeurs
+
+def colour_fields(fam, ws):
+    """Octets des couleurs d'un polygone (800361A8 : couleur k a SCR_COL + 4 (k + 1))."""
+    if fam == 0: return [ws[1]]
+    if fam == 1: return [ws[1] & 0x1fc]
+    if fam == 2: return [ws[1] & 0x1fc, (ws[1] >> 7) & 0x1fc, ws[1] >> 16]
+    return [ws[1] & 0x1fc, ws[2] & 0x1fc, (ws[2] >> 7) & 0x1fc, ws[2] >> 16]
+
+def remap_polygon(fam, rec, slots, colours):
+    """Enregistrement de polygone aux cases (positions) et couleurs renumerotees."""
+    ws = list(struct.unpack_from(f'<{len(rec) // 4}I', rec))
+    w = ws[0]
+    for sh in ((0, 7, 14) if fam in (0, 2) else (0, 7, 14, 23)):
+        sl = ((w >> sh) & 0x1fc) // 4
+        w = (w & ~(0x1fc << sh)) | ((slots[sl] * 4) << sh)
+    ws[0] = w & 0xffffffff
+    c = [4 * (colours[f // 4 - 1] + 1) for f in colour_fields(fam, ws)]
+    gour = lambda x, c3: (x & ~(0x1fc | 0x1fc << 7 | 0xffff0000)) | c3[0] | c3[1] << 7 | c3[2] << 16
+    if fam == 0: ws[1] = c[0]
+    elif fam == 1: ws[1] = (ws[1] & ~0x1fc) | c[0]
+    elif fam == 2: ws[1] = gour(ws[1], c)
+    else: ws[1] = (ws[1] & ~0x1fc) | c[0]; ws[2] = gour(ws[2], c[1:])
+    return struct.pack(f'<{len(ws)}I', *[x & 0xffffffff for x in ws])
+
+def texture_bytes(prims):
+    """Bloc c TTT1 (l'inverse de parse_c_ttt1) : [(famille, materiau, [(u, v)...])] par famille."""
+    mats, uvs, fam = [], [], [[] for _ in range(4)]
+    for k, mat, uv in prims:
+        if mat not in mats: mats.append(mat)
+        idx = []
+        for u, v in uv:
+            if u | v << 8 not in uvs: uvs.append(u | v << 8)
+            idx.append(uvs.index(u | v << 8))
+        fam[k].append(bytes([mats.index(mat)] + idx))
+    if len(mats) > 255 or len(uvs) > 255 or any(len(f) > 255 for f in fam): raise ValueError('textures trop grandes')
+    out = struct.pack('<I', 4 + 4 * len(mats)) + b''.join(struct.pack('<I', m) for m in mats)
+    out += struct.pack('<H', 2 + 2 * len(uvs)) + b''.join(struct.pack('<H', e) for e in uvs)
+    for f in fam: out += bytes([len(f)]) + b''.join(f)
+    return pad4(out)
+
+def normal_bytes(a):
+    """Bloc de normales sans depot de couleurs (deux groupes vides), comme parse_a le lit."""
+    out = struct.pack('<I', 4 * (1 + len(a['g1']) + len(a['g2'])))
+    for g in (a['g1'], a['g2']): out += struct.pack('<I', len(g)) + pad4(bytes(g))
+    out += struct.pack('<I', len(a['verts'])) + b''.join(struct.pack('<4h', *v) for v in a['verts'])
+    return out + b'\0' * 8
+
+def fold_rows(T, A, B):
+    """Modele TTT1 ou la piece B est repliee dans la piece A (voir FOLDED), ou ValueError."""
+    if not (A < B and {A, B} <= set(accessory_rows(T))): raise ValueError('pas deux accessoires')
+    if row(T, A - 1)[13] > 2 or row(T, B - 1)[13] > 2 or row(T, A - 1)[12] <= 2 or row(T, B - 1)[12] <= 2:
+        raise ValueError('table de poses ou liste absente')
+    if any(row(T, u)[6] == PART_OF_ROW[B] for u in range(nrows(T)) if u != B): raise ValueError('B porte une piece')
+    if rigid_root(T, A)[0] != rigid_root(T, B)[0]: raise ValueError('chaines rigides differentes')
+    vA, vB = (SM.variants(block(T, row(T, r - 1)[12]), True) for r in (A, B))
+    if len(vA) > 1 or len(vB) > 1: raise ValueError('variantes')
+    LA, LB = vA[0], vB[0]
+    if any(LA['tails'][g] for g in (0, 3, 4)): raise ValueError('A ecrit')
+    if LB['g1'] or any(LB['tails'][g] for g in (0, 2, 3, 4)): raise ValueError('B lit le tampon ou ecrit')
+    between = [u for u in range(A + 1, B) if row(T, u - 1)[12] > 2]
+    written = {f & 0xff for u in between for a in SM.variants(block(T, row(T, u - 1)[12]), True)
+               for g in (0, 3) for f in a['tails'][g]}
+    if written & (set(LB['g2']) | {f & 0xff for f in LB['tails'][1]}): raise ValueError('cache de B reecrit avant B')
+    NA, NB = (parse_a(block(T, row(T, r)[0])) for r in (A, B))
+    for r, N in ((A, NA), (B, NB)):
+        if block(T, row(T, r)[0])[N['used']:] != b'\0' * 8: raise ValueError('depots de couleurs')
+    if NB['g2'] and any(block(T, row(T, u)[0])[parse_a(block(T, row(T, u)[0]))['used']:].strip(b'\0')
+                        for u in between if row(T, u)[0] > 2):
+        raise ValueError('couleurs de B reecrites avant B')
+    nA, nB = list_len(LA), list_len(LB)
+    cA = len(NA['g1']) + len(NA['g2']) + len(NA['verts'])
+    cB = len(NB['g1']) + len(NB['g2']) + len(NB['verts'])
+    nM, cM = nA + nB, cA + cB - len(NB['g1'])
+    if nM > BUFFER_TOP + 1 or cM > COLOUR_LIMIT: raise ValueError('liste trop longue')
+    if NB['g1'] and B != A + 1: raise ValueError('couleurs empruntees par B')
+    if any(not (0 <= b // 2 - 1 < cA) for b in NB['g1']): raise ValueError('couleurs empruntees hors de A')
+    for u in range(A + 1, nrows(T)):                 # lecteurs apres A : tampon et couleurs
+        if u == B: continue
+        if row(T, u - 1)[12] > 2:
+            for a in SM.variants(block(T, row(T, u - 1)[12]), True):
+                if any(b // 2 - 1 < nM for b in a['g1']) or any((f & 0xff) // 2 - 1 < nM for f in a['tails'][2]):
+                    raise ValueError(f'ligne {u} lit les cases de la liste agrandie')
+        if row(T, u)[0] > 2 and any(b // 2 - 1 < cM for b in parse_a(block(T, row(T, u)[0]))['g1']):
+            raise ValueError(f'ligne {u} lit les couleurs de la piece agrandie')
+    # Liste agrandie : emprunts de A, cache de A puis de B, sommets groupe par groupe (A puis B)
+    LBb = bake(T, B, LB, host=A)
+    def starts(a):                                   # premiere case de chaque groupe, puis fin de liste
+        b = [len(a['g1']) + len(a['g2'])]
+        for g in a['tails'][:5]: b.append(b[-1] + len(g))
+        return b + [b[0] + len(a['verts'])]
+    sA, sB = starts(LA), starts(LB)
+    mA = {j: j for j in range(len(LA['g1']) + len(LA['g2']))}
+    mB = {len(LB['g1']) + j: len(LA['g1']) + len(LA['g2']) + j for j in range(len(LB['g2']))}
+    verts, at = [], len(LA['g1']) + len(LA['g2']) + len(LB['g2'])
+    for g in range(6):
+        for L, s, m in ((LA, sA, mA), (LBb, sB, mB)):
+            for i in range(s[g], s[g + 1]):
+                m[i] = at; at += 1; verts.append(L['verts'][i - s[0]])
+    M = dict(g1=list(LA['g1']), g2=list(LA['g2']) + list(LB['g2']), verts=verts,
+             tails=[list(LA['tails'][g]) + list(LB['tails'][g]) for g in range(6)])
+    for r, L, n, m in ((A, LA, nA, mA), (B, LB, nB, mB)):  # cases hors liste : seulement au-dela de la liste agrandie
+        for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))):
+            for p in fl:
+                for sl in prim_verts(k, p):
+                    if sl >= n and (r == B or sl < nM): raise ValueError(f'ligne {r} dessine une case hors liste')
+                    if sl >= n: m[sl] = sl
+    # Normales : emprunts de A, cache de A puis de B, normales de A puis de B (tournees vers A)
+    _, Mt, _ = rigid_root(T, B); _, Mh, _ = rigid_root(T, A)
+    turn = lambda v: tuple(sum(Mh[k][i] * (sum(Mt[k][j] * v[j] for j in range(3)) >> 12) for k in range(3)) >> 12
+                           for i in range(3)) + (0,)
+    n1, n2 = len(NA['g1']), len(NA['g2'])
+    cmA = {k: (k if k < n1 + n2 else k + len(NB['g2'])) for k in range(cA)}
+    cmB = {k: cmA[NB['g1'][k] // 2 - 1] for k in range(len(NB['g1']))}
+    cmB.update({len(NB['g1']) + j: n1 + n2 + j for j in range(len(NB['g2']))})
+    cmB.update({len(NB['g1']) + len(NB['g2']) + j: cA + len(NB['g2']) + j for j in range(len(NB['verts']))})
+    N = dict(g1=list(NA['g1']), g2=list(NA['g2']) + list(NB['g2']),
+             verts=list(NA['verts']) + [turn(v) for v in NB['verts']])
+    fams = [[], [], [], []]
+    for r, m, cm in ((A, mA, cmA), (B, mB, cmB)):
+        for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))):
+            fams[k] += [remap_polygon(k, p, m, cm) for p in fl]
+    polys = b''.join(struct.pack('<I', len(f)) + b''.join(f) for f in fams)
+    tex = parse_c_ttt1(block(T, row(T, A)[2])) + parse_c_ttt1(block(T, row(T, B)[2]))
+    tex = texture_bytes(sorted(tex, key=lambda x: x[0]))          # stable : A puis B dans chaque famille
+    # Lignes : A recoit les nouveaux blocs, B devient une ligne vide (sans maillage ni liste)
+    mine = {(A - 1, 12), (A, 0), (A, 1), (A, 2), (B - 1, 12), (B, 0), (B, 1), (B, 2)}
+    old = {row(T, r)[k] for r, k in mine}
+    others = {row(T, r)[k] for r in range(nrows(T)) for k in (0, 1, 2, 12, 13) if (r, k) not in mine}
+    new = {o: b'' for o in old - others if o > 2}
+    added = {(A - 1, 12): list_bytes(M), (A, 0): normal_bytes(N), (A, 1): polys, (A, 2): tex}
+    words = {(B - 1, 12): 0, (B, 0): 0, (B, 1): 0, (B, 2): 0, (B, 10): 0, (B, 11): 0,
+             **{(B, k): v for k, v in zip(range(3, 10), (0, 0, 0, -1, 0, 0, 0))}}
+    return rebuild(T, new, added, words)
+
+def fold_accessories(T):
+    """Replie des pieces (fold_rows) tant qu'il y en a plus que de places PS1. Preference : B enfant
+    de A, puis meme parent, puis meme chaine rigide ; a egalite, la plus petite liste agrandie."""
+    FOLDED.clear()
+    while len(head_extra_rows(T) + accessory_rows(T)) > len(ACC_ROWS) + len(BAKE_ROWS):
+        acc = accessory_rows(T); best = None
+        for A in acc:
+            for B in acc:
+                if B <= A: continue
+                try: T2 = fold_rows(T, A, B)
+                except (ValueError, StopIteration): continue
+                rank = (row(T, B)[6] != PART_OF_ROW[A], row(T, B)[6] != row(T, A)[6],
+                        list_len(SM.variants(block(T, row(T, A - 1)[12]), True)[0]) +
+                        list_len(SM.variants(block(T, row(T, B - 1)[12]), True)[0]))
+                if best is None or rank < best[0]: best = (rank, A, B, T2)
+        if best is None: break                       # _layouts dira combien de pieces pour combien de places
+        _, A, B, T = best; FOLDED[B] = A
+    return T
+
+# Troisiemes maillages de la poitrine et du bassin (F32). TTT1 dessine jusqu'a trois maillages par
+# partie : poitrine 1 / 2 / 3, bassin 4 / 5 / 6 (meme os, sans decalage). Le PS1 n'en a que deux
+# (lignes 1 / 2 et 3 / 4) : les lignes 3 et 5 etaient perdues, et la ligne suivante empruntait au
+# tampon des sommets qu'elles n'avaient pas ranges (17 natifs : Yoshimitsu, Xiaoyu, Eddy, Tiger, Jin,
+# Hwoarang, Gun Jack, Lei). Les parties 18..21 se dessinent apres la tete, loin des lignes 4..7 qui
+# lisent ce que 3 et 5 laissent dans le tampon et le cache. Deux voies, essayees dans l'ordre :
+# - fusion (merge_rows) : B est fondue dans la piece A dessinee juste avant elle sur le meme os
+#   (2 + 3, 5 + 6 ou 4 + 5), une seule liste : emprunts de A, cache de A puis de B, sommets groupe
+#   par groupe (A puis B), polygones a la suite. Les emprunts de B disparaissent : ses polygones
+#   lisent les valeurs la ou elles sont ;
+# - place d'accessoire (move_row), si la liste fondue depasse 110 cases (Gun Jack, Lei) : B se
+#   dessine apres la tete, rattachee a la poitrine sans decalage ; ses sommets lus par d'autres lignes
+#   restent calcules a leur rang, dans la liste de A (ou de la ligne 1).
+# Le modele est repris par provenance (ir_build) : chaque emprunt, soudure au tampon et coin de
+# polygone designe la valeur qu'il lit, pas une case ; emit repasse les lignes dans l'ordre TTT1 et
+# place chaque lecture la ou sa valeur se trouve. Le tampon est plein (Yoshimitsu Poing : cases 39 a
+# 109 occupees apres la ligne 3) : une valeur que la liste plus longue ecraserait passe par le cache
+# (_to_cache : son depot ecrit une entree neuve, ses lecteurs l'y lisent ; _reroute si l'entree est
+# reprise avant la lecture). Meme chose pour les couleurs (tampon SCR_COL, table globale).
+# Verifie hors jeu : memes coins (simulateur TTT1, 6 poses), memes couleurs, memes textures.
+MERGED = {}         # ligne TTT1 fondue -> ligne TTT1 qui l'accueille (dernier convert)
+EXTRA_MESHES = ((2, 3), (5, 6), (4, 5))   # fusions (A, B) candidates, dans l'ordre (voir merge_extra_meshes)
+
+def _own(r, j): return ('L', r, j)          # sommet propre j (case j de la liste) de la ligne r
+
+def pos_flow(T, rename=None):
+    """Provenance du tampon (128 cases) et du cache des positions, lignes dans l'ordre TTT1.
+    Etiquettes : ('L', r, j) valeur de la case j de la liste de r (un emprunt porte l'etiquette de ce
+    qu'il recopie), ('D', e, w) depot partiel, ('C3', e, w) depot partiel au cache, ('V', r) ligne a
+    poses, ('P', k) / ('PC', e) etat initial. Rend (etats du tampon avant / apres chaque ligne, cache
+    avant / apres, lectures). Lecture : (ligne, variante, sorte, rang, case ou entree, etiquette) ;
+    sortes 'g1', 'g2' (emprunts), 0 / 1 / 2 (soudures), ('poly', famille, rang, coin) hors liste."""
+    rename = rename or {}
+    sc = [('P', k) for k in range(128)]; ca = {}; reads = []; pre, post, cpre, cpost = {}, {}, {}, {}
+    cg = lambda c, e: c.get(e, ('PC', e))
+    for r in range(1, nrows(T)):
+        pre[r], cpre[r] = list(sc), dict(ca); n = 0
+        if row(T, r - 1)[12] > 2:
+            vs = SM.variants(block(T, row(T, r - 1)[12]), True)
+            for vi, a in enumerate(vs):
+                for j, b in enumerate(a['g1']): reads.append((r, vi, 'g1', j, b // 2 - 1, pre[r][b // 2 - 1]))
+                for j, e in enumerate(a['g2']): reads.append((r, vi, 'g2', j, e, cg(cpre[r], e)))
+                for gi in (0, 1):
+                    for j, f in enumerate(a['tails'][gi]): reads.append((r, vi, gi, j, f & 0xff, cg(cpre[r], f & 0xff)))
+                for j, f in enumerate(a['tails'][2]):
+                    reads.append((r, vi, 2, j, (f & 0xff) // 2 - 1, pre[r][(f & 0xff) // 2 - 1]))
+            if len(vs) == 1:
+                a = vs[0]; s0 = len(a['g1']) + len(a['g2']); n = s0 + len(a['verts'])
+                own = lambda j: rename.get(r, {}).get(j, _own(r, j))
+                lst = [pre[r][b // 2 - 1] for b in a['g1']] + [cg(cpre[r], e) for e in a['g2']] + [own(j) for j in range(s0, n)]
+                sc[:n] = lst; b0 = s0
+                for gi, g in enumerate(a['tails'][:5]):
+                    for j, f in enumerate(g):
+                        s, w, e = b0 + j, (f >> 8) & 0x1f, f & 0xff
+                        if gi == 0: ca[e] = lst[s]
+                        elif gi == 3: ca[e] = lst[s] if w == 16 else ('D', lst[s], w)
+                        elif gi == 4: sc[e // 2 - 1] = lst[s] if w == 16 else ('D', lst[s], w)
+                    b0 += len(g)
+            else:
+                n = max(list_len(a) for a in vs)
+                for k in range(n): sc[k] = ('V', r)
+                for a in vs:
+                    for f in a['tails'][4]: sc[(f & 0xff) // 2 - 1] = ('V', r)
+                    for gi in (0, 3):
+                        for f in a['tails'][gi]: ca[f & 0xff] = ('V', r)
+                n = min(list_len(a) for a in vs)
+        post[r], cpost[r] = list(sc), dict(ca)
+        if row(T, r)[1] > 2:
+            for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))):
+                for i, p in enumerate(fl):
+                    for c, sl in enumerate(prim_verts(k, p)):
+                        if sl >= n: reads.append((r, 0, ('poly', k, i, c), 0, sl, sc[sl]))
+    return pre, post, cpre, cpost, reads
+
+def colour_list(T, r):
+    """Bloc de normales de la ligne r : parse_a et les deux groupes de renvois (cache global, tampon)."""
+    b = block(T, row(T, r)[0]); N = parse_a(b); p = N['used']; dep = []
+    for _ in range(2):
+        n = struct.unpack_from('<I', b, p)[0] if p + 4 <= len(b) else 0; p += 4
+        dep.append(list(b[p:p + n])); p += (n + 3) & ~3
+    return N, dep
+
+def colour_bytes(N, dep):
+    out = normal_bytes(N)[:-8]
+    for g in dep: out += struct.pack('<I', len(g)) + pad4(bytes(g))
+    return out
+
+def colour_flow(T, rename=None):
+    """Provenance des couleurs (char_render_model, etape 2) : tampon SCR_COL (case k = octet 2k + 2
+    des emprunts et des renvois, 4k + 4 des polygones), table globale. Etiquettes ('K', r, j) ou
+    ('PK', k) / ('PG', e). Rend comme pos_flow ; lectures 'g1', 'g2', ('poly', famille, rang, champ)."""
+    rename = rename or {}
+    sc = [('PK', k) for k in range(128)]; gt = {}; reads = []; pre, post, gpre, gpost = {}, {}, {}, {}
+    gg = lambda g, e: g.get(e, ('PG', e))
+    for r in range(1, nrows(T)):
+        pre[r], gpre[r] = list(sc), dict(gt); n = 0
+        if row(T, r)[0] > 2:
+            N, dep = colour_list(T, r)
+            for j, b in enumerate(N['g1']): reads.append((r, 0, 'g1', j, b // 2 - 1, pre[r][b // 2 - 1]))
+            for j, e in enumerate(N['g2']): reads.append((r, 0, 'g2', j, e, gg(gpre[r], e)))
+            s0 = len(N['g1']) + len(N['g2']); n = s0 + len(N['verts'])
+            own = lambda j: rename.get(r, {}).get(j, ('K', r, j))
+            lst = [pre[r][b // 2 - 1] for b in N['g1']] + [gg(gpre[r], e) for e in N['g2']] + [own(j) for j in range(s0, n)]
+            sc[:n] = lst
+            for j, e in enumerate(dep[0]): gt[e] = lst[s0 + j]
+            for j, e in enumerate(dep[1]): sc[e // 2 - 1] = lst[s0 + len(dep[0]) + j]
+        post[r], gpost[r] = list(sc), dict(gt)
+        if row(T, r)[1] > 2:
+            for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))):
+                for i, p in enumerate(fl):
+                    ws = struct.unpack_from(f'<{len(p) // 4}I', p)
+                    for c, f in enumerate(colour_fields(k, ws)):
+                        if f // 4 - 1 >= n: reads.append((r, 0, ('poly', k, i, c), 0, f // 4 - 1, sc[f // 4 - 1]))
+    return pre, post, gpre, gpost, reads
+
+KINDS = ('pos', 'col')
+DEP_GROUP = {'pos': 4, 'col': 1}               # groupe des depots au tampon
+LIST_TOP = {'pos': BUFFER_TOP + 1, 'col': COLOUR_LIMIT}
+
+def _items(T, r, kind):
+    """Liste de la ligne r : (g1, g2, sommets propres [(sommet, groupe, champ)]), groupes dans l'ordre
+    du flux. Positions : groupes 0..4 des soudures, 5 (champ 8 bits), 6 (sans champ) ; couleurs :
+    0 (renvoi au cache global), 1 (renvoi au tampon), 2 (rien)."""
+    if kind == 'pos':
+        a = SM.variants(block(T, row(T, r - 1)[12]), True)[0]; it = []; i = 0
+        for g in range(6):
+            for f in a['tails'][g]: it.append((a['verts'][i], g, f)); i += 1
+        it += [(v, 6, None) for v in a['verts'][i:]]
+        return list(a['g1']), list(a['g2']), it
+    N, dep = colour_list(T, r); it = []; i = 0
+    for g in range(2):
+        for f in dep[g]: it.append((N['verts'][i], g, f)); i += 1
+    it += [(v, 2, None) for v in N['verts'][i:]]
+    return list(N['g1']), list(N['g2']), it
+
+def _set_slot(f, s): return (f & ~0xff) | 2 * (s + 1)
+
+class Lost(Exception):
+    """Valeur introuvable pendant l'emission (flux, etiquette, ligne, sorte, etats)."""
+    def __init__(self, kind, tag, r, how, pre, cache, post=None, lst=None):
+        super().__init__(f'{kind} : ligne {r} ({how}) : valeur {tag} perdue')
+        self.kind, self.tag, self.r, self.how, self.pre, self.cache, self.post, self.lst = kind, tag, r, how, pre, cache, post, lst
+
+def _find(state, t, k):
+    if 0 <= k < 128 and state[k] == t: return k
+    return next((i for i in range(128) if state[i] == t), None)
+
+def ir_build(T):
+    """Lignes de T par provenance : chaque emprunt, soudure au tampon et coin de polygone designe la
+    valeur qu'il lit (etiquette de pos_flow / colour_flow) et la case d'origine, preferee a l'emission.
+    ir[r] = dict(pos, col, raw, polys) ; pos / col : dict(g1 [(etiquette, case)], g2 [(entree,
+    etiquette attendue)], own [dict(v, g, f, id, ...)]) ; raw : lectures d'une ligne a poses ;
+    polys : par famille [(enregistrement, [(etiquette, case)] positions, [(etiquette, case)] couleurs)]."""
+    pre, post, cpre, cpost, reads = pos_flow(T)
+    kpre, kpost, gpre, gpost, _ = colour_flow(T)
+    ir = {}
+    for r in range(1, nrows(T)):
+        R = ir[r] = dict(pos=None, col=None, raw=None, polys=None)
+        if row(T, r - 1)[12] > 2:
+            vs = SM.variants(block(T, row(T, r - 1)[12]), True)
+            if len(vs) > 1:
+                R['raw'] = [x[1:] for x in reads if x[0] == r and not isinstance(x[2], tuple)]
+            else:
+                g1, g2, it = _items(T, r, 'pos'); s0 = len(g1) + len(g2); c = dict(cpre[r]); own = []
+                for i, (v, g, f) in enumerate(it):
+                    d = dict(v=v, g=g, f=f, id=_own(r, s0 + i))
+                    if g == 0: d['exp'] = c.get(f & 0xff, ('PC', f & 0xff)); c[f & 0xff] = d['id']
+                    elif g == 1: d['exp'] = cpre[r].get(f & 0xff, ('PC', f & 0xff))
+                    elif g == 2: d['src'] = (pre[r][(f & 0xff) // 2 - 1], (f & 0xff) // 2 - 1)
+                    elif g == 4: d['slot'] = (f & 0xff) // 2 - 1
+                    own.append(d)
+                R['pos'] = dict(g1=[(pre[r][b // 2 - 1], b // 2 - 1) for b in g1],
+                                g2=[(e, cpre[r].get(e, ('PC', e))) for e in g2], own=own)
+        if row(T, r)[0] > 2:
+            g1, g2, it = _items(T, r, 'col'); s0 = len(g1) + len(g2)
+            own = [dict(v=v, g=g, f=f, id=('K', r, s0 + i), slot=(f & 0xff) // 2 - 1 if g == 1 else None)
+                   for i, (v, g, f) in enumerate(it)]
+            R['col'] = dict(g1=[(kpre[r][b // 2 - 1], b // 2 - 1) for b in g1],
+                            g2=[(e, gpre[r].get(e, ('PG', e))) for e in g2], own=own)
+        if row(T, r)[1] > 2:
+            R['polys'] = []
+            for fam, fl in enumerate(parse_b(block(T, row(T, r)[1]))):
+                out = []
+                for p in fl:
+                    ws = struct.unpack_from(f'<{len(p) // 4}I', p)
+                    out.append((p, [(post[r][s], s) for s in prim_verts(fam, p)],
+                                [(kpost[r][f // 4 - 1], f // 4 - 1) for f in colour_fields(fam, ws)]))
+                R['polys'].append(out)
+    return ir
+
+def _value(kind, d):
+    """Etiquette de la valeur que le sommet propre d depose (tampon ou cache), ou None."""
+    if kind == 'pos':
+        if d['g'] in (3, 4): w = (d['f'] >> 8) & 0x1f; return d['id'] if w == 16 else ('D', d['id'], w)
+        return d['id'] if d['g'] == 0 else None
+    return d['id'] if d['g'] in (0, 1) else None
+
+def emit(T, ir, rows_new=None):
+    """Repasse les lignes dans l'ordre TTT1 en placant chaque lecture la ou sa valeur se trouve ;
+    rend {(ligne, mot): octets} des blocs changes, ou leve Lost. Verifie les lectures du cache."""
+    sc = [('P', k) for k in range(128)]; ca = {}; ks = [('PK', k) for k in range(128)]; kg = {}
+    out = {}
+    for r in range(1, nrows(T)):
+        R = ir[r]; pre, c0 = list(sc), dict(ca); n = 0; lst = []
+        if R['raw'] is not None:
+            o = row(T, r - 1)[12]
+            vs = [dict(a, g1=list(a['g1']), tails=[list(g) for g in a['tails']]) for a in SM.variants(block(T, o), True)]
+            for vi, kind, j, s, t in R['raw']:
+                if kind in ('g1', 2):
+                    ns = _find(pre, t, s)
+                    if ns is None: raise Lost('pos', t, r, 'raw', pre, c0)
+                    if kind == 'g1': vs[vi]['g1'][j] = 2 * (ns + 1)
+                    else: vs[vi]['tails'][2][j] = _set_slot(vs[vi]['tails'][2][j], ns)
+                elif c0.get(s, ('PC', s)) != t: raise Lost('pos', t, r, 'cache', pre, c0)
+            out[(r - 1, 12)] = b''.join(list_bytes(a) for a in vs)
+            n = max(list_len(a) for a in vs)
+            for k in range(n): sc[k] = ('V', r)
+            for a in vs:
+                for f in a['tails'][4]: sc[(f & 0xff) // 2 - 1] = ('V', r)
+                for gi in (0, 3):
+                    for f in a['tails'][gi]: ca[f & 0xff] = ('V', r)
+            n = min(list_len(a) for a in vs)
+        elif R['pos']:
+            P = R['pos']; g1 = []
+            for t, s in P['g1']:
+                ns = _find(pre, t, s)
+                if ns is None: raise Lost('pos', t, r, 'g1', pre, c0)
+                g1.append(2 * (ns + 1))
+            for e, t in P['g2']:
+                if c0.get(e, ('PC', e)) != t: raise Lost('pos', t, r, 'cache', pre, c0)
+            own = sorted(P['own'], key=lambda d: d['g']); c = dict(c0); fields = []
+            for d in own:
+                g, f = d['g'], d['f']
+                if g == 0:
+                    if c.get(f & 0xff, ('PC', f & 0xff)) != d['exp']: raise Lost('pos', d['exp'], r, 'cache', pre, c0)
+                    c[f & 0xff] = d['id']
+                elif g == 1:
+                    if c0.get(f & 0xff, ('PC', f & 0xff)) != d['exp']: raise Lost('pos', d['exp'], r, 'cache', pre, c0)
+                elif g == 2:                     # le PS1 range toute la liste avant les soudures : la
+                    t_, s_ = d['src']            # valeur lue doit etre au-dela (engine_rules)
+                    nl = len(g1) + len(P['g2']) + len(own)
+                    # la case d'un depot marque garde sa moitie (voir plus bas) : une soudure la lit
+                    # comme avant (convert_positions la sait moitie : soudure 8/8)
+                    ok = lambda x: x[0] == 'Hd' and x[1] == t_
+                    ns = next((i for i in [s_] * (s_ >= nl) + list(range(nl, 128)) if pre[i] == t_), None)
+                    if ns is None: ns = s_ if s_ >= nl and ok(pre[s_]) else next((i for i in range(nl, 128) if ok(pre[i])), None)
+                    if ns is None: raise Lost('pos', t_, r, 't2', pre, c0)
+                    f = _set_slot(f, ns)
+                elif g == 3: c[f & 0xff] = _value('pos', d)
+                elif g == 4: f = _set_slot(f, d['slot'])
+                fields.append(f)
+            lst = [pre[b // 2 - 1] for b in g1] + [c0.get(e, ('PC', e)) for e, _ in P['g2']] + [d['id'] for d in own]
+            n = len(lst)
+            if n > LIST_TOP['pos']: raise ValueError(f'ligne {r} : liste de {n} sommets')
+            sc[:n] = lst
+            # Regle PS1 (0x80036CAC), pas TTT1 : apres la liste, les groupes passent dans l'ordre et sur
+            # place ; un depot marque (poids < 16, groupes 3 et 4) ne laisse que la moitie dans sa propre
+            # case, et une copie (groupe 4) recopie la case telle qu'elle est a ce moment (une copie
+            # precedente a pu la recouvrir). Lue comme entiere, cette moitie tirait des pointes vers le
+            # coin haut gauche de l'ecran (Eddy 87 / 17, lignes 3 / 5 fondues).
+            s0 = len(g1) + len(P['g2'])
+            for i, d in enumerate(own):
+                if d['g'] not in (3, 4): continue
+                s = s0 + i
+                w = (d['f'] >> 8) & 0x1f
+                if w < 16: sc[s] = ('Hd', d['id'], w) if sc[s] == d['id'] else ('H', r, s)
+                if d['g'] == 4: sc[d['slot']] = _value('pos', d) if sc[s][0] == 'Hd' else sc[s]
+            ca = c
+            out[(r - 1, 12)] = list_bytes(dict(g1=g1, g2=[e for e, _ in P['g2']], verts=[d['v'] for d in own],
+                                              tails=[[f for d, f in zip(own, fields) if d['g'] == k] for k in range(6)]))
+        kpre_, g0 = list(ks), dict(kg); klst = []
+        if R['col']:
+            K = R['col']; g1 = []
+            for t, s in K['g1']:
+                ns = _find(kpre_, t, s)
+                if ns is None: raise Lost('col', t, r, 'g1', kpre_, g0)
+                g1.append(2 * (ns + 1))
+            for e, t in K['g2']:
+                if g0.get(e, ('PG', e)) != t: raise Lost('col', t, r, 'cache', kpre_, g0)
+            own = sorted(K['own'], key=lambda d: d['g'])
+            klst = [kpre_[b // 2 - 1] for b in g1] + [g0.get(e, ('PG', e)) for e, _ in K['g2']] + [d['id'] for d in own]
+            if len(klst) > LIST_TOP['col']: raise ValueError(f'ligne {r} : {len(klst)} couleurs')
+            ks[:len(klst)] = klst
+            for d in own:
+                if d['g'] == 0: kg[d['f'] & 0xff] = d['id']
+                elif d['g'] == 1: ks[d['slot']] = d['id']
+            dep = [[d['f'] for d in own if d['g'] == 0], [2 * (d['slot'] + 1) for d in own if d['g'] == 1]]
+            out[(r, 0)] = colour_bytes(dict(g1=g1, g2=[e for e, _ in K['g2']], verts=[d['v'] for d in own]), dep)
+        if R['polys'] is not None:
+            b = b''
+            for fam, fl in enumerate(R['polys']):
+                b += struct.pack('<I', len(fl))
+                for p, cs, cc in fl:
+                    sl = {}
+                    for (t, s), s_old in zip(cs, prim_verts(fam, p)):
+                        ns = _find(sc, t, s)
+                        if ns is None: raise Lost('pos', t, r, 'poly', pre, c0, sc, lst)
+                        sl[s_old] = ns
+                    co = {}
+                    ws = struct.unpack_from(f'<{len(p) // 4}I', p)
+                    for (t, s), f in zip(cc, colour_fields(fam, ws)):
+                        ns = _find(ks, t, s)
+                        if ns is None: raise Lost('col', t, r, 'poly', kpre_, g0, ks, klst)
+                        co[f // 4 - 1] = ns
+                    b += remap_polygon(fam, p, sl, co)
+            out[(r, 1)] = b
+    return out
+
+def _fresh(ir, kind):
+    used = set()
+    for R in ir.values():
+        X = R[kind]
+        if X:
+            used |= {e for e, _ in X['g2']} | {d['f'] & 0xff for d in X['own'] if d['f'] is not None and d['g'] in ((0, 1, 3) if kind == 'pos' else (0,))}
+    if kind == 'pos':
+        for R in ir.values():
+            for vi, k, j, s, t in R['raw'] or []:
+                if k in ('g2', 0, 1): used.add(s)
+    return next(e for e in range(254, 1, -2) if e not in used and e not in (0,))
+
+def _to_cache(ir, kind, t, T=None):
+    """La valeur t ne passe plus par le tampon : son depot (ou le sommet qui la porte) l'ecrit dans le
+    cache, et ses lecteurs l'y lisent (emprunt au cache, soudure au cache). ValueError si impossible."""
+    base = t[1] if t[0] == 'D' else t
+    hit = [(r, d) for r, R in ir.items() if R[kind] for d in R[kind]['own'] if d['id'] == base]
+    if not hit: raise ValueError(f'{kind} : valeur {t} sans sommet')
+    r0, d = hit[0]
+    if _value(kind, d) == t and (kind == 'pos' and d['g'] in (0, 3) or kind == 'col' and d['g'] == 0):
+        e = d['f'] & 0xff
+    elif kind == 'pos' and ((d['g'] == 4 and _value(kind, d) == t) or (d['g'] in (5, 6) and t == base)):
+        e = _fresh(ir, 'pos'); w = (d['f'] >> 8) & 0x1f if d['g'] == 4 else 16
+        d['g'], d['f'] = 3, (w << 8) | e; d.pop('slot', None)
+    elif kind == 'col' and d['g'] in (1, 2) and t == base:
+        e = _fresh(ir, 'col'); d['g'], d['f'], d['slot'] = 0, e, None
+    else: raise ValueError(f'{kind} : valeur {t} soudee, ni deposee')
+    for r, R in ir.items():
+        X = R[kind]
+        if R['raw'] and kind == 'pos' and any(tt == t for _, k, _, _, tt in R['raw'] if k in ('g1', 2)):
+            raise ValueError(f'ligne a poses {r} lit {t}')
+        if not X: continue
+        if any(tt == t for tt, _ in X['g1']):
+            X['g1'] = [(tt, s) for tt, s in X['g1'] if tt != t]; X['g2'].append((e, t))
+        if kind == 'pos':
+            for o in X['own']:
+                if o['g'] == 2 and o['src'][0] == t:
+                    o['g'], o['f'], o['exp'] = 1, (o['f'] & ~0xff) | e, t; o.pop('src')
+    return e
+
+def _reroute(ir, kind, t):
+    """La valeur t, ecrasee dans son entree du cache avant d'etre lue, passe par une entree neuve :
+    son depot (groupe 4 des positions, renvoi global des couleurs) et ses lecteurs changent d'entree."""
+    hit = [d for R in ir.values() if R[kind] for d in R[kind]['own']
+           if _value(kind, d) == t and d['g'] == (3 if kind == 'pos' else 0)]
+    if not hit: raise ValueError(f'{kind} : entree du cache de {t} ecrasee, sans depot a deplacer')
+    d = hit[0]; old = d['f'] & 0xff; e = _fresh(ir, kind); d['f'] = (d['f'] & ~0xff) | e
+    for R in ir.values():
+        X = R[kind]
+        if R['raw'] and kind == 'pos' and any(tt == t for _, k, _, _, tt in R['raw'] if k in ('g2', 0, 1)):
+            raise ValueError(f'ligne a poses : lit {t} au cache')
+        if not X: continue
+        X['g2'] = [(e if (ee, tt) == (old, t) else ee, tt) for ee, tt in X['g2']]
+        for o in X['own']:
+            if kind == 'pos' and o['g'] in (0, 1) and o.get('exp') == t and o['f'] & 0xff == old:
+                if o['g'] == 0: raise ValueError(f'{kind} : {t} relu et reecrit au cache (groupe 1)')
+                o['f'] = (o['f'] & ~0xff) | e
+
+def _split(ir, t):
+    """La valeur entiere t est celle d'un depot marque : au PS1 sa case n'en garde que la moitie (emit).
+    Un sommet simple aux memes coordonnees, ajoute a la fin de sa ligne, porte la valeur entiere ; les
+    lecteurs de t le lisent. Rend False si t n'est pas un tel depot (ou deja dedouble)."""
+    hit = [R['pos'] for R in ir.values() if R['pos'] for d in R['pos']['own']
+           if d['id'] == t and d['g'] in (3, 4) and (d['f'] >> 8) & 0x1f < 16]
+    new = ('S', t)
+    if not hit or any(o['id'] == new for o in hit[0]['own']): return False
+    X = hit[0]; d = next(o for o in X['own'] if o['id'] == t)
+    X['own'].append(dict(v=d['v'], g=6, f=None, id=new))
+    rn = lambda x: new if x == t else x
+    for R in ir.values():
+        if R['raw'] and any(tt == t for *_, tt in R['raw']): raise ValueError(f'ligne a poses lit {t}')
+        if R['pos']:
+            R['pos']['g1'] = [(rn(tt), s) for tt, s in R['pos']['g1']]
+            for o in R['pos']['own']:
+                if 'src' in o: o['src'] = (rn(o['src'][0]), o['src'][1])
+        if R['polys']:
+            R['polys'] = [[(p, [(rn(tt), s) for tt, s in cs], cc) for p, cs, cc in fl] for fl in R['polys']]
+    return True
+
+def _fix(ir, L):
+    """Une correction pour la perte L, ou ValueError."""
+    if L.kind == 'pos' and L.how != 'cache' and _split(ir, L.tag): return
+    if L.how == 'cache': return _reroute(ir, L.kind, L.tag)
+    X = ir[L.r][L.kind]
+    cache_has = next((e for e, v in L.cache.items() if v == L.tag), None)
+    if L.how == 'poly' and X:
+        if L.tag in L.pre: X['g1'].append((L.tag, L.pre.index(L.tag))); return
+        if cache_has is not None: X['g2'].append((cache_has, L.tag)); return
+        if L.tag in L.lst:                       # valeur de la liste ecrasee par un depot de la ligne
+            p = L.lst.index(L.tag)
+            d = next((d for d in X['own'] if d.get('slot') == p and d['g'] == DEP_GROUP[L.kind]), None)
+            if d is not None: _to_cache(ir, L.kind, _value(L.kind, d)); return
+    if L.how in ('g1', 't2') and cache_has is not None and X:
+        if L.how == 'g1':
+            X['g1'] = [(tt, s) for tt, s in X['g1'] if tt != L.tag]; X['g2'].append((cache_has, L.tag)); return
+        for o in X['own']:
+            if o['g'] == 2 and o['src'][0] == L.tag:
+                o['g'], o['f'], o['exp'] = 1, (o['f'] & ~0xff) | cache_has, L.tag; o.pop('src')
+        return
+    _to_cache(ir, L.kind, L.tag)
+
+def ir_merge(T, ir, A, B):
+    """Ligne A de ir = A puis B (meme os) : emprunts de A, cache de A puis de B (sauf valeurs de A),
+    sommets groupe par groupe, polygones a la suite ; les emprunts de B au tampon disparaissent (ses
+    polygones lisent les valeurs la ou elles sont). Ligne B vide."""
+    _, _, cpre, _, _ = pos_flow(T); _, _, gpre, _, _ = colour_flow(T)
+    RA, RB = ir[A], ir[B]
+    for kind, cp, P in (('pos', cpre, 'PC'), ('col', gpre, 'PG')):
+        XA, XB = RA[kind], RB[kind]
+        mine = {_value(kind, d) for d in XA['own']} - {None}
+        g2 = list(XA['g2'])
+        for e, t in XB['g2']:
+            if t == cp[A].get(e, (P, e)): g2.append((e, t))
+            elif t not in mine: raise ValueError(f'{kind} : ligne {B} : cache {e} : depot partiel de A')
+        RA[kind] = dict(g1=list(XA['g1']), g2=g2, own=[dict(d) for d in XA['own']] + [dict(d) for d in XB['own']])
+    RA['polys'] = [a + b for a, b in zip(RA['polys'], RB['polys'])]
+    ir[B] = dict(pos=None, col=None, raw=None, polys=None)
+
+def merge_rows(T, A, B):
+    """Modele TTT1 ou la piece B est fondue dans la piece A (voir MERGED), ou ValueError."""
+    wa, wb = row(T, A), row(T, B)
+    if wa[3:10] != wb[3:10] or any(wa[3:6]) or any(wa[7:10]): raise ValueError('pas le meme os')
+    for r in (A, B):
+        if not (row(T, r)[10] and row(T, r)[1] > 2 and row(T, r)[2] > 2 and row(T, r)[0] > 2):
+            raise ValueError(f'ligne {r} sans maillage')
+        if row(T, r - 1)[12] <= 2 or row(T, r - 1)[13] > 2: raise ValueError(f'ligne {r} : liste absente ou a poses')
+        if len(SM.variants(block(T, row(T, r - 1)[12]), True)) > 1: raise ValueError('variantes')
+    pre, post, cpre, cpost, _ = pos_flow(T)
+    LA, LB = (SM.variants(block(T, row(T, r - 1)[12]), True)[0] for r in (A, B))
+    # Lectures de B qui verraient l'etat d'avant A une fois fondues : refusees si A a change la valeur
+    wA0 = {f & 0xff for f in LA['tails'][0]}; wA3 = {f & 0xff for f in LA['tails'][3]}
+    if {f & 0xff for f in LB['tails'][0]} & wA3: raise ValueError('cache : depot de A relu ou recouvert par B (groupe 1)')
+    if {f & 0xff for f in LB['tails'][1]} & (wA0 | wA3): raise ValueError('cache : soudure de B sur une valeur de A')
+    if any(post[A][(f & 0xff) // 2 - 1] != pre[A][(f & 0xff) // 2 - 1] for f in LB['tails'][2]):
+        raise ValueError('tampon : soudure de B sur une valeur de A')
+    ir = ir_build(T); ir_merge(T, ir, A, B)
+    tex = parse_c_ttt1(block(T, row(T, A)[2])) + parse_c_ttt1(block(T, row(T, B)[2]))
+    return _assemble(T, ir, B, [A], {(A, 2): texture_bytes(sorted(tex, key=lambda x: x[0]))}, {})
+
+def _solve(T, ir):
+    seen = {}
+    while True:
+        try: return emit(T, ir)
+        except Lost as L:
+            key = (L.kind, L.tag, L.r, L.how); seen[key] = seen.get(key, 0) + 1
+            if seen[key] > 30 or sum(seen.values()) > 3000: raise ValueError(str(L))
+            _fix(ir, L)
+
+def _assemble(T, ir, B, rebuilt, added, words):
+    """Modele final : blocs emis (ceux des lignes `rebuilt`, et des lignes sans bloc, ajoutes),
+    ligne B vide."""
+    out = _solve(T, ir)
+    mine = {(r - 1, 12) for r in rebuilt + [B]} | {(r, k) for r in rebuilt + [B] for k in (0, 1, 2)}
+    old = {row(T, r)[k] for r, k in mine}
+    keep = {row(T, r)[k] for r in range(nrows(T)) for k in (0, 1, 2, 12, 13) if (r, k) not in mine}
+    keep |= {v[1] for v in words.values() if isinstance(v, tuple)}
+    new = {o: b'' for o in old - keep if o > 2}
+    for (r, k), b in out.items():
+        o = row(T, r)[k]
+        if (r, k) in mine or o <= 2: added[(r, k)] = b; continue
+        ob = block(T, o)
+        if ob[:len(b)] == b and not ob[len(b):].strip(b'\0'): continue
+        new[o] = b + ob[len(b):] if k == 12 and ir[r + 1]['raw'] is not None else b
+    words = {(B - 1, 12): 0, (B, 0): 0, (B, 1): 0, (B, 2): 0, (B, 10): 0, (B, 11): 0,
+             **{(B, k): v for k, v in zip(range(3, 10), (0, 0, 0, -1, 0, 0, 0))}, **words}
+    return rebuild(T, new, added, words)
+
+# Si la liste fondue depasse le tampon (Gun Jack, Lei : 111 a 121 cases), B garde sa liste mais se
+# dessine dans une place d'accessoire libre D (24..29), rattachee a la partie de A sans decalage ni
+# rotation (meme os), apres la tete. Ses sommets que d'autres lignes lisent (sorties) restent calcules
+# a leur place d'origine dans l'ordre : ils passent dans la liste d'une ligne hote du meme os dessinee
+# avant B (A, sinon la ligne 1). Ces sommets doivent etre bruts (aucune soudure). Ses emprunts et ses
+# polygones retrouvent leurs valeurs comme pour la fusion (cache au besoin).
+MOVED = {}          # ligne TTT1 deplacee -> place d'accessoire (dernier convert)
+
+def move_row(T, B, host):
+    """Modele TTT1 ou la piece B se dessine en place d'accessoire (voir MOVED), ou ValueError."""
+    if row(T, host)[3:10] != row(T, B)[3:10] or any(row(T, B)[3:6]) or any(row(T, B)[7:10]):
+        raise ValueError('pas le meme os')
+    for r in {host, B}:
+        if row(T, r - 1)[12] <= 2 or row(T, r - 1)[13] > 2 or len(SM.variants(block(T, row(T, r - 1)[12]), True)) > 1:
+            raise ValueError(f'ligne {r} : liste absente ou a poses')
+    if not (row(T, B)[10] and row(T, B)[1] > 2 and row(T, B)[2] > 2 and row(T, B)[0] > 2): raise ValueError(f'ligne {B} sans maillage')
+    D = next((d for d in range(24, nrows(T)) if not row(T, d)[10] and all(row(T, d)[k] <= 2 for k in (0, 1, 2))
+              and row(T, d - 1)[12] <= 2 and row(T, d - 1)[13] <= 2), None)
+    if D is None: raise ValueError('aucune place d accessoire libre')
+    read = {k: {x[5] for x in f(T)[4] if x[0] != B} for k, f in (('pos', pos_flow), ('col', colour_flow))}
+    ir = ir_build(T); RB = ir[B]; RH = ir[host]; moved = 0
+    for kind in KINDS:
+        outs = [d for d in RB[kind]['own'] if d['id'] in read[kind] or _value(kind, d) in read[kind]]
+        if kind == 'pos' and any(d['g'] in (0, 1, 2) for d in outs): raise ValueError('sortie de B soudee')
+        RB[kind]['own'] = [d for d in RB[kind]['own'] if d not in outs]
+        RH[kind]['own'] = RH[kind]['own'] + [dict(d) for d in outs]; moved += len(outs)
+    ir[D] = dict(RB); ir[B] = dict(pos=None, col=None, raw=None, polys=None)
+    part = 1 if B <= 3 else 2                         # poitrine (lignes 1..3) ou bassin (4..6)
+    words = {(D, 2): ('bloc', row(T, B)[2]), (D, 10): row(T, B)[10], (D, 11): row(T, B)[11],
+             **{(D, k): v for k, v in zip(range(3, 10), (0, 0, 0, part, 0, 0, 0))}}
+    out = _assemble(T, ir, B, [], {}, words)
+    MOVED[B] = D
+    return out
+
+def merge_extra_meshes(T):
+    """Fond les troisiemes maillages de la poitrine et du bassin (merge_rows) tant qu'une ligne 3 ou 5
+    porte un maillage sans place PS1. Les modeles sans ces lignes ne changent pas."""
+    MERGED.clear(); MOVED.clear()
+    mesh = lambda t: row(T, t)[10] and row(T, t)[1] > 2
+    # (ligne perdue, second maillage qui garde sa place, essais : fusion (A, B) ou deplacement (B, hote))
+    for lost, second, tries in ((3, 2, (('fond', 2, 3), ('place', 3, 2), ('place', 3, 1))),
+                                (5, 6, (('fond', 5, 6), ('fond', 4, 5), ('place', 5, 4)))):
+        if not (mesh(lost) and mesh(second)): continue      # sans second maillage, 5 en prend la place
+        why = []
+        for how, x, y in tries:
+            try:
+                if how == 'fond': T2 = merge_rows(T, x, y); MERGED[y] = x
+                else: T2 = move_row(T, x, y)
+            except (ValueError, StopIteration, KeyError) as e:
+                why.append(f'{how} {x} {y} : {e}'); continue
+            T = T2; break
+        else: print(f'ligne {lost} sans place : ' + ' ; '.join(why))
+    return T
+
+def convert(src, keep=()):
+    """Essaie les placements candidats dans l'ordre ; le premier qui se convertit gagne. keep :
+    lignes TTT1 d'accessoires que la borne balance avec une borne (mode 1 de son solveur,
+    tools/ttt1/accessories.py keep_rows) ; quand il faut integrer une piece (plus de pieces que de
+    parties 18..21), une autre qu'elles l'est, et pas sur elles, si un placement se convertit (Heihachi
+    LK / RK : son pan droit, borne par la cuisse droite, suivait le pan gauche et entrait dans la
+    cuisse ; F32). Sans keep, les placements de toujours. Avec
+    EXACT_WELDS, les soudures a poids libres sont d'abord rendues exactes (exact_welds). Avec
     HALF_WELDS, le placement est converti deux fois : a blanc (soudures perdues, COPIED), puis sur
-    le modele aux soudures moitie (half_welds) ; la conversion a blanc reste si la seconde echoue."""
-    errors = []; HALF_DONE.clear(); HALF_SKIPPED.clear()
+    le modele aux soudures moitie (half_welds) ; la conversion a blanc reste si la seconde echoue.
+    Plus de pieces que de places PS1 : certaines sont d'abord repliees (fold_accessories)."""
+    global KEEP
+    errors = []; HALF_DONE.clear(); HALF_SKIPPED.clear(); KEEP = frozenset(keep)
+    src = fold_accessories(merge_extra_meshes(src))
     for s2t, second, hosts in layouts(src):
         set_layout(s2t, second, hosts)
+        EXACT_DONE.clear(); T = exact_welds(src, TORDER) if EXACT_WELDS else src
         try:
-            out = convert_layout(src)
+            out = convert_layout(T)
         except ValueError as e:
             errors.append(f'{sorted(s2t.items())[21:]} : {e}'); continue
         if HALF_WELDS:
-            dropped = len(DROPPED); T2 = half_welds(src, TORDER)
-            if T2 is not src:
+            dropped = len(DROPPED); T2 = half_welds(T, TORDER)
+            if T2 is not T:
                 try:
                     out2 = convert_layout(T2)
                     if len(DROPPED) <= dropped: return out2
@@ -825,7 +1608,7 @@ def convert(src):
                 except ValueError as err: e = err
                 print(f'soudures moitie abandonnees ({e})')
                 HALF_SKIPPED.extend(('conversion', r, w) for _, r, _, w in HALF_DONE)
-                HALF_DONE.clear(); out = convert_layout(src)
+                HALF_DONE.clear(); out = convert_layout(T)
         return out
     raise ValueError('aucun placement ne se convertit :\n' + '\n'.join(errors))
 

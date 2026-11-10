@@ -70,6 +70,10 @@ def ready():
         # TTT's stages and their music, older than this checkout, or never made
         # for an install set up with the TTT1 characters before they existed.
         if not ttt_stages_ready(state):return False
+        # Dark Resurrection movesets older than this checkout (tools/dr_import_version.py).
+        if state.get('dr') and not dr_current(INSTALLED):return False
+        # An add-on added, removed or updated since the build.
+        if addons_signature()!=state.get('addons',[]):return False
     except OSError:return False
     return True
 
@@ -94,6 +98,7 @@ def android_ready():
     if state.get('ttt_music') and not ttt_music_current(TTT_MUSIC_PACK):return False
     if state.get('ttt_ps2_music') and not ttt_ps2_music_current(TTT_PS2_MUSIC_PACK):return False
     if state.get('ttt_ps2_laser') and not ttt_ps2_laser_current(TTT_PS2_LASER_PACK):return False
+    if state.get('dr') and not dr_current(ROSTER):return False
     return (state.get('release')==RELEASE and (ROOT/'generated/SLUS_004.02_dispatch.c').is_file()
             and (ROOT/'disc/Tekken 3 (USA).cue').is_file())
 
@@ -249,26 +254,27 @@ def ttt_ps2_laser_made(pc=True):
                                                          and ttt_ps2_laser_current(TTT_PS2_LASER_INSTALLED))
 
 def prepare_ttt_ps2_laser(ttt_disc,env,pc=True,keep=False):
-    """The TTT PS2 effects: Devil's and Angel's laser textures and the
-    Mishima's strong-hit effects, read on the TTT PS2 disc and converted
-    (tools/ps2/ttt_laser_install.py) unless this version is already there.
-    Optional, as the PS2 music: without the disc an earlier copy goes; a
-    failure, or another version of the disc, only keeps the arcade's yellow
-    beam and TTT1's hit effects. keep: as for the PS2 music. Ready or not."""
+    """The TTT PS2 effects: Devil's and Angel's laser textures, the
+    Mishima's and Unknown's strong-hit effects and her katana and dagger, read on
+    the TTT PS2 disc and converted (tools/ps2/ttt_laser_install.py) unless
+    this version is already there. Optional, as the PS2 music: without the
+    disc an earlier copy goes; a failure, or another version of the disc,
+    only keeps the arcade's yellow beam, TTT1's hit effects and Unknown's
+    energy blade. keep: as for the PS2 music. Ready or not."""
     if not ttt_disc:
         if keep:return ttt_ps2_laser_made(pc)
         for folder in (TTT_PS2_LASER_PACK,*([TTT_PS2_LASER_INSTALLED] if pc else [])):shutil.rmtree(folder,ignore_errors=True)
         return False
     if ttt_ps2_laser_made(pc):return True
     if not Path(ttt_disc).is_file():
-        log_line(f"{ttt_disc}: missing, the TTT PS2 effects (Devil's and Angel's laser, the Mishima's hit effects) skipped")
+        log_line(f"{ttt_disc}: missing, the TTT PS2 effects (Devil's and Angel's laser, the Mishima's and Unknown's hit effects, Unknown's weapons) skipped")
         emit(message="Skipping the TTT PS2 effects",detail='Your Tekken Tag Tournament PS2 disc is no longer where the setup found it. Choose it again to add it.')
         return False
-    emit(message="Preparing the TTT PS2 effects",detail="Reading Devil's and Angel's laser and the strong-hit effects of Jin, Heihachi, Kazuya, Devil and Angel on your PS2 disc.")
+    emit(message="Preparing the TTT PS2 effects",detail="Reading Devil's and Angel's laser, the strong-hit effects of Jin, Heihachi, Kazuya, Devil and Angel, and Unknown's katana and dagger on your PS2 disc.")
     try:run([sys.executable,ROOT/'tools/ps2/ttt_laser_install.py','--ttt-disc',ttt_disc,'--out',TTT_PS2_LASER_PACK],
             environment=env,friendly="The TTT PS2 effects could not be prepared.")
     except SetupError:
-        emit(message="Skipping the TTT PS2 effects",detail="They could not be read on your PS2 disc (see the setup log). Devil's and Angel's lasers keep the arcade's yellow beam, the Mishima their TTT1 hit effects.")
+        emit(message="Skipping the TTT PS2 effects",detail="They could not be read on your PS2 disc (see the setup log). Devil's and Angel's lasers keep the arcade's yellow beam, the Mishima and Unknown their TTT1 hit effects, Unknown her energy blade.")
         return False
     return True
 
@@ -317,6 +323,107 @@ def cinematics_off(folder):
 def cinematics_models_ready():
     """Jin's models for the TTT cinematics, made once from the import's work files."""
     return all((CINEMATICS/f'{m}-TTT1-arcade-P1.{e}').is_file() for m in ('JinPlain','DevilJinEnd') for e in ('3dm','relocs','tim'))
+
+# The Dark Resurrection movesets (tools/dr_setup.py): a native's DR moves, a third choice on
+# its MOVESET card, read from the player's PSP disc. Optional, with the TTT1 characters
+# (a DR pack starts from the native's TTT1 pack): written into the catalogue after the TTT1
+# import, then copied beside the game with it.
+DR_EXPECTED='Expected: Tekken: Dark Resurrection USA for PSP (ULUS-10139), as an .iso, and PPSSPP installed on this computer.'
+
+def dr_tools():
+    """tools/dr_import_version.py and tools/dr_setup.py (this checkout's, as import_version)."""
+    tools=str(Path(__file__).resolve().parents[1]/'tools')
+    if tools not in sys.path:sys.path.insert(0,tools)
+    import dr_import_version,dr_setup
+    return dr_import_version,dr_setup
+
+def names_and(names):
+    return ', '.join(names[:-1])+' and '+names[-1] if len(names)>1 else ''.join(names)
+
+def dr_words():
+    """What the DR import makes, for the player: (the natives given a DR moveset, the DR
+    characters), by name, from this checkout's tools/dr_import_version.py."""
+    V=dr_tools()[0];import dr_catalog
+    return [k.capitalize() for k in V.NATIVES],[dr_catalog.NAMES.get(k,k) for k in V.CHARACTERS]
+
+def dr_converting():
+    natives,characters=dr_words()
+    made=([f"{natives[0]}'s moves" if len(natives)==1 else f'the moves of {names_and(natives)}'] if natives else [])+\
+         ([f'making {names_and(characters)}'] if characters else [])
+    return f"Converting {' and '.join(made) or 'nothing'} from your Tekken: Dark Resurrection PSP disc. This takes a few minutes."
+
+def dr_without():
+    """What the player has without the DR import: the natives on their own moves, no DR page
+    (a page only when this version makes DR characters: none in 1.5.0, F34)."""
+    V=dr_tools()[0]
+    natives=V.NATIVES and dr_words()[0]
+    page=' and the selector has no DARK RESURRECTION page' if V.CHARACTERS else ''
+    if not natives:return 'The selector has no DARK RESURRECTION page.' if V.CHARACTERS else 'nothing changes.'
+    one=len(natives)==1
+    return (f"{names_and(natives)} {'keeps his' if one else 'keep their'} Tekken 3 and TTT1 moves (no TEKKEN 5 DR on "
+            f"{'his' if one else 'their'} MOVESET card){page}.")
+
+def dr_missing(folder):
+    """What this checkout's DR import makes and the folder lacks (tools/dr_catalog.py missing)."""
+    dr_tools();import dr_catalog
+    return dr_catalog.missing(folder)
+
+def dr_current(folder):
+    V,_=dr_tools()
+    return V.read_stamp(folder)>=V.DR_IMPORT_VERSION
+
+def dr_made():
+    """This version's DR movesets are in the catalogue (or, workspace/ freed, beside the game)."""
+    return dr_current(ROSTER) or (not ttt1_ready(ROSTER) and dr_current(INSTALLED))
+
+def dr_off(folder):
+    """Tekken 5 DR Content unticked: the DR import taken out of a catalogue (its <Name>-DR-*
+    files, natives.txt's "dr" lines, dr-characters.txt, the stamp and dr_pack's report), as if
+    never made."""
+    folder=Path(folder)
+    if not folder.is_dir():return
+    V=dr_tools()[0]
+    gone=sorted(folder.glob('*-DR-*'))
+    for p in gone:p.unlink()
+    natives=folder/'natives.txt'
+    if natives.is_file():
+        lines=natives.read_text().splitlines()
+        kept=[l for l in lines if not (len(l.split())==4 and l.split()[3]=='dr')]
+        if kept!=lines:natives.write_text(''.join(l+'\n' for l in kept))
+    # report.json: tools/psp/dr_pack.py's report, written beside its pack (nothing else writes one there).
+    for name in (V.CATALOG,V.STAMP,'report.json'):(folder/name).unlink(missing_ok=True)
+    if gone:log_line(f'Tekken 5 DR Content off: {len(gone)} DR files removed from {folder}')
+
+def prepare_dr(dr_iso,env,keep=False):
+    """The DR movesets in the catalogue, unless this version is already there.
+    Optional: without the disc an earlier version stays; a failure or a missing
+    disc leaves the natives on their Tekken 3 and TTT1 moves. Ready or not."""
+    if not dr_iso or keep:return dr_made()
+    # A partial import (a DR character or moveset left out) is tried again with the disc.
+    if dr_current(ROSTER) and not dr_missing(ROSTER):return True
+    if not Path(dr_iso).is_file():
+        log_line(f'{dr_iso}: missing, the Dark Resurrection movesets skipped')
+        emit(message='Skipping the Dark Resurrection movesets',detail='Your Dark Resurrection PSP disc is no longer where the setup found it. Choose it again to add them.')
+        return False
+    if not ttt1_ready(ROSTER) and ttt1_ready(INSTALLED):
+        # workspace/ was deleted: the catalogue beside the game, as update_ttt1 does.
+        shutil.rmtree(ROSTER,ignore_errors=True);shutil.copytree(INSTALLED,ROSTER)
+    emit(message='Adding the Dark Resurrection movesets',detail=dr_converting())
+    try:run([sys.executable,ROOT/'tools/dr_setup.py','--iso',dr_iso,'--roster',ROSTER],environment=env,
+            friendly='The Dark Resurrection movesets could not be prepared.')
+    except SetupError:
+        emit(message='Skipping the Dark Resurrection movesets',detail='They could not be prepared from your PSP disc (see the setup log). '+dr_without())
+        return False
+    dr_partial(ROSTER)
+    return True
+
+def dr_partial(folder):
+    """Said, like an optional file set aside (B85), when the import left something out."""
+    gone=dr_missing(folder)
+    if not gone:return
+    log_line(f"Dark Resurrection import partial, missing: {', '.join(gone)}")
+    emit(message='Going on without part of Dark Resurrection',
+         detail=f"Your PSP disc did not give {', '.join(gone)} (see the setup log). The rest of Dark Resurrection is in the game.")
 
 def ttt1_plan(tekken3=None,cinematics=False):
     """What brings the TTT1 characters to this import version: ('current',[])
@@ -553,8 +660,9 @@ def remove_retired():
 # sources.json: size, date, SHA-256) is dated now, newer than any object built
 # so far, in build-release/ as in build-android/; with no record yet (an
 # install set up before this check), all of them. Not what the setup and the
-# builds make, nor the player's ROMs and discs (.gitignore).
-NOT_SOURCES=('.git','.setup','.runtime','build*','disc','generated','workspace','saves','out','dist','toolchain','export',
+# builds make, nor the player's ROMs and discs (.gitignore), nor the add-ons'
+# folders (their authors' files, their own repositories).
+NOT_SOURCES=('.git','.setup','.runtime','build*','disc','generated','workspace','saves','out','dist','toolchain','export','addons/*',
              'psxrecomp/generated','psxrecomp/recompiler/build*','Tekken 3 Expanded*','*.apk',
              '*.zip','*.7z','*.cue','*.iso','*.chd')
 
@@ -652,9 +760,66 @@ class kept_mods:
         restore_mods()
         return False
 
-def build_game(toolchain,env,include_ttt1):
+# Add-ons: addons/<id>/addon.cmake, built into the game by CMakeLists.txt
+# (MODDING.md, "Add-ons"). Each may name a setup step in that file,
+# set(TEKKEN3_ADDON_SETUP <script>), run here before the build with
+# --no-build: it makes what the add-on needs; the build is the game's.
+ADDONS=ROOT/'addons'
+
+def addons():
+    """[(id, folder)] of the add-ons in addons/, by id."""
+    if not ADDONS.is_dir():return []
+    return [(d.name,d) for d in sorted(ADDONS.iterdir()) if (d/'addon.cmake').is_file()]
+
+def addon_setup(folder):
+    """The add-on's setup step (TEKKEN3_ADDON_SETUP in its addon.cmake), or None."""
+    text=(folder/'addon.cmake').read_text(encoding='utf-8',errors='replace')
+    match=re.search(r'^\s*set\(\s*TEKKEN3_ADDON_SETUP\s+"?([^")\s]+)"?\s*\)',text,re.M)
+    return folder/match[1] if match else None
+
+def addons_signature():
+    """What the build took from the add-ons: each one's id and addon.cmake.
+    A change (an add-on added, removed or updated) asks for the setup again."""
+    return [[name,digest(folder/'addon.cmake')] for name,folder in addons()]
+
+def prepare_addons(env):
+    """Each add-on's setup step; the ids whose step failed, left out of the build."""
+    skip=[]
+    for name,folder in addons():
+        script=addon_setup(folder)
+        if not script:continue
+        emit(message=f'Preparing the add-on {name}',detail=f'Its own setup step ({script.relative_to(ROOT).as_posix()}).')
+        try:
+            if not script.is_file():raise SetupError(f'{script} is missing')
+            run([sys.executable,'-u',script,'--no-build'],environment=env,directory=folder,
+                friendly=f'The add-on {name} could not finish its setup.')
+        except SetupError as error:
+            log_line(f'Add-on {name}: left out of the build ({error})')
+            skip.append(name)
+    return skip
+
+def forget_project_include():
+    """An add-on's developer build (before the hook) kept its include in the
+    build's cache and may have renamed symbols in the game's objects: those
+    objects go, compiled again as the game's own."""
+    cache=BUILD/'CMakeCache.txt'
+    try:text=cache.read_text(encoding='utf-8',errors='replace')
+    except OSError:return
+    match=re.search(r'^CMAKE_PROJECT_INCLUDE:\w+=(.+)$',text,re.M)
+    if not match or not match[1].strip():return
+    gone=0
+    for state in BUILD.glob('*chain_state.json'):
+        for objects in load_json(state).values():
+            for obj in objects if isinstance(objects,list) else []:
+                try:Path(obj).unlink();gone+=1
+                except OSError:pass
+        state.unlink(missing_ok=True)
+    log_line(f'Dropped the developer include {match[1].strip()} from the build ({gone} object(s) to compile again)')
+
+def build_game(toolchain,env,include_ttt1,skip_addons=()):
     cmake=toolchain/'bin/cmake.exe' if toolchain else shutil.which('cmake')
     emit(message='Preparing the game to build',detail='First setup can take several minutes.')
+    forget_project_include()
     # Setup explicitly configures on every attempt, after generation/import.
     # Skip Ninja's automatic regeneration checks: future-dated archive inputs
     # otherwise keep build.ninja dirty even after 100 successful regenerations.
@@ -666,7 +831,8 @@ def build_game(toolchain,env,include_ttt1):
                '-DCMAKE_MAKE_PROGRAM='+str(toolchain/'bin/ninja.exe'),'-DPSX_STATIC_RUNTIME=ON']
     args+=['-DPSX_DEBUG_TOOLS=OFF','-DPSX_DEBUG_SERVER_LITE=OFF','-DPSX_NETPLAY=OFF',
           '-DPSXRECOMP_BIOS_STEMS=OpenBIOS','-DPSXRECOMP_FORCE_SETUP_HOST=OFF','-DPSXRECOMP_REQUIRE_GAME_C=ON',
-          '-DTEKKEN3_BUILD_PC_PORT=OFF','-DTEKKEN3_TTT1_CHARACTERS='+('ON' if include_ttt1 else 'OFF')]
+          '-DTEKKEN3_BUILD_PC_PORT=OFF','-DTEKKEN3_TTT1_CHARACTERS='+('ON' if include_ttt1 else 'OFF'),
+          '-UCMAKE_PROJECT_INCLUDE','-DTEKKEN3_ADDONS_SKIP='+';'.join(skip_addons)]
     run(args,environment=env,friendly='The build tools could not finish setup. Open the setup log for details, then click Try again.')
     emit(message='Building your game',detail='This is the long part. Next time you can play immediately.')
     run([cmake,'--build',BUILD,'--target','psx-runtime','--parallel',env['CMAKE_BUILD_PARALLEL_LEVEL']],
@@ -824,8 +990,9 @@ def needs(include_ttt1,tekken3=None,cinematics=False):
 def ttt_disc_supported(path):
     """A Tekken Tag Tournament USA PS2 disc (version 1.00 or 2.00: the same
     music, tools/ps2/ttt_disc.py TABLES) with the endings' music, the stages'
-    music (tools/ttt_stages/ps2_music_install.py checks the same) and Devil's
-    and Angel's laser textures (tools/ps2/ttt_laser_install.py)."""
+    music (tools/ttt_stages/ps2_music_install.py checks the same), Devil's
+    and Angel's laser textures and Unknown's weapons
+    (tools/ps2/ttt_laser_install.py)."""
     tools=Path(__file__).resolve().parents[1]/'tools'
     if str(tools) not in sys.path:sys.path.insert(0,str(tools))
     import ttt_cinematics
@@ -857,7 +1024,7 @@ TEKKEN3_EXPECTED=('Expected: MAME set tekken3, Tekken 3 (World, TET2/VER.E1), wi
 TTT_DISC_EXPECTED=('Expected: Tekken Tag Tournament USA for PS2 (SLUS-20001), version 1.00 or 2.00 (Greatest Hits), '
                    'as a .cue with its .bin, a .bin or an .iso.')
 
-def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True):
+def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True,dr_iso=None,dr_content=True):
     """The optional files given that this setup reads and cannot use: a
     list of dicts (key, file, name, path, reason, without, expected)."""
     problems=[]
@@ -878,6 +1045,27 @@ def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,p
             without='the TTT stages play their arcade music, also with BGM SELECT: REMIXED'
                     +(", and TTT Cinematics' endings play over Tekken 3's music" if cinematics else '')+'.',
             expected=TTT_DISC_EXPECTED))
+    # Read only when this version's DR movesets and characters are not made yet, or a
+    # partial import is tried again. Without the disc, an older DR import is said too:
+    # what it keeps (B85). A partial one is said when the import ends (dr_partial).
+    # Only with Tekken 5 DR Content ticked: unticked, the DR import is taken out (dr_off).
+    if include_ttt1 and dr_content:
+        V=dr_tools()[0]
+        made=dr_made();folder=ROSTER if ttt1_ready(ROSTER) else INSTALLED
+        stamp=V.read_stamp(folder);gone=dr_missing(folder) if stamp else []
+        reason=dr_tools()[1].iso_problem(dr_iso) if dr_iso and (not made or gone) else None
+        if not dr_iso and stamp and not made:
+            reason='Your Dark Resurrection movesets and characters were made by an older version of this setup.'
+        if reason:
+            try:reimport=ttt1_plan(tekken3,cinematics)[0]=='import'
+            except Exception:reimport=False
+            problems.append(dict(key='dr_iso',file='Dark Resurrection PSP disc',name='Tekken: Dark Resurrection · USA PSP disc',
+                path=str(dr_iso or 'Not given'),reason=reason,
+                without=(dr_without()
+                         if not stamp or reimport else
+                         f'Dark Resurrection stays as an earlier setup made it (version {stamp}; this setup makes version {V.DR_IMPORT_VERSION}).' if not made else
+                         'Dark Resurrection stays as it is, without what is missing.'),
+                expected=DR_EXPECTED))
     return problems
 
 def optional_text(problems):
@@ -911,7 +1099,7 @@ def prepare_cinematics(ttt_disc,catalogue=None,out=None):
     run([sys.executable,ROOT/'tools/ttt_cinematics.py','--catalogue',catalogue,'--out',out,*(['--ttt-disc',ttt_disc] if ttt_disc else [])],
         friendly="The TTT cinematics could not be prepared. Open the setup log for details, then click Try again.")
 
-def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,android=False,pc=True):
+def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,android=False,pc=True,dr_iso=None,dr_content=None):
     """First setup, or an update: generate the game again only for a new
     RELEASE, and bring the TTT1 characters to this import version with the
     least work (ttt1_plan). pc=False (with android, Build Android APK): only
@@ -925,26 +1113,31 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
     date_changed_sources()
     if shutil.disk_usage(ROOT).free<4*1024**3:raise SetupError('Setup needs at least 4 GB of free space in this folder.')
     updating=bool(load_json(STATE/'ready.json'))
+    # Tekken 5 DR Content (experimental): ticked, or a DR disc given (the terminal setup).
+    dr_content=bool(dr_content or dr_iso)
     save_json(STATE/'last-inputs.json',{'disc':str(disc),'ttt1':str(ttt) if include_ttt1 else '',
         'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),
-        'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'android':android})
+        'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'dr_iso':str(dr_iso or ''),'dr_content':dr_content,'android':android})
     # The TTT cinematics come with the TTT1 characters (Jin's red lightning: tools/ttt1_hitspark.py).
     cinematics=cinematics and include_ttt1
     # The TTT PS2 disc, optional with the TTT1 characters: the TTT stages' PS2
     # music, Devil's and Angel's PS2 laser textures, and the endings' music of
     # the TTT cinematics. Missing, an earlier copy of the stages' music stays
     # and the endings play over T3's music.
-    if not include_ttt1:ttt_disc=None
+    if not include_ttt1:ttt_disc=dr_iso=None;dr_content=False
+    if not dr_content:dr_iso=None
     # Optional: an unsupported tekken3.zip only costs the arcade difficulty
     # levels and the arcade stages, an unsupported TTT PS2 disc the PS2 music;
     # checked now rather than failing at the end of the import. The terminal
     # setup asks whether to go on (the window asked before starting).
-    problems=optional_problems(include_ttt1,tekken3,ttt_disc,cinematics,pc)
+    problems=optional_problems(include_ttt1,tekken3,ttt_disc,cinematics,pc,dr_iso,dr_content)
     go_on_without(problems)
     if any(p['key']=='tekken3' for p in problems):tekken3=None
     # A disc set aside keeps what it made before (prepare_ttt_ps2_music's keep).
     disc_set_aside=any(p['key']=='ttt_disc' for p in problems)
     if disc_set_aside:ttt_disc=None
+    # The DR disc set aside: an earlier version of the DR movesets stays.
+    dr_set_aside=any(p['key']=='dr_iso' for p in problems)
     # Checked whenever the cinematics are on (they read it at every setup).
     cinematics_disc=ttt_disc if cinematics else None
     generate=not game_current()
@@ -979,6 +1172,12 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
         run(command,
             environment=env,friendly="The TTT1 characters' import could not finish. Open the setup log for details, then click Try again.")
     elif plan=='update':update_ttt1(steps,env)
+    # The Dark Resurrection movesets and characters, from the TTT1 catalogue just made (before install_roster).
+    if dr_content:dr=prepare_dr(dr_iso,env,keep=dr_set_aside)
+    else:
+        # Unticked: no DR content, in the catalogue nor beside the game.
+        dr=False
+        for folder in (ROSTER,INSTALLED):dr_off(folder)
     # Before the build: CMakeLists.txt stages the packs from workspace/.
     arcade_stages=bool(tekken3) and prepare_arcade_stages(tekken3,env,pc)
     # TTT's stages and music come from the same tektagt.zip as the characters.
@@ -996,11 +1195,12 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
         else:cinematics_off(ANDROID_CINEMATICS)
         save_json(STATE/'android.json',{'release':RELEASE,'ttt1':include_ttt1,'ttt_cinematics':cinematics,'arcade_stages':arcade_stages,
                                         'ttt_stages':ttt_stages,'ttt_music':ttt_music,'ttt_ps2_music':ttt_ps2_music,
-                                        'ttt_ps2_laser':ttt_ps2_laser})
-        android_apk(toolchain,env)
-        emit('complete',message='Android APK ready',detail='Setup is complete.')
+                                        'ttt_ps2_laser':ttt_ps2_laser,'dr':dr})
+        skip=android_apk(toolchain,env)[1]
+        emit('complete',message='Android APK ready',detail='Setup is complete.'+left_out_text(skip))
         return
-    with kept_mods():build_game(toolchain,env,include_ttt1)
+    skip=prepare_addons(env)
+    with kept_mods():build_with_addons(lambda skip:build_game(toolchain,env,include_ttt1,skip),skip)
     if not EXE.is_file():raise SetupError('The game executable was not created.')
     if include_ttt1:
         install_roster()
@@ -1009,27 +1209,58 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
     else:cinematics_off(CINEMATICS)
     save_json(STATE/'ready.json',{'release':RELEASE,'ttt1':include_ttt1,'exe_sha256':digest(EXE),'ttt_cinematics':cinematics,
                                   'arcade_stages':arcade_stages,'ttt_stages':ttt_stages,'ttt_music':ttt_music,'ttt_ps2_music':ttt_ps2_music,
-                                  'ttt_ps2_laser':ttt_ps2_laser,'ttt1_import':import_version().TTT1_IMPORT_VERSION if include_ttt1 else None})
+                                  'ttt_ps2_laser':ttt_ps2_laser,'dr':dr,
+                                  'ttt1_import':import_version().TTT1_IMPORT_VERSION if include_ttt1 else None,
+                                  'addons':addons_signature(),'addons_left_out':skip})
     # After ready.json: the PC game plays even if the Android build stops.
-    if android:android_apk(toolchain,env)
-    emit('complete',message='Ready to play',detail='Setup is complete.')
+    if android:skip=sorted(set(skip)|set(android_apk(toolchain,env,skip)[1]))
+    emit('complete',message='Ready to play',detail='Setup is complete.'+left_out_text(skip))
+
+def left_out_text(skip):
+    return (' Without the add-on(s) '+', '.join(skip)+': they could not be set up or built with this release'
+            f' (details in {STATE/"setup.log"}).') if skip else ''
+
+def build_with_addons(build,skip):
+    """build(skip) until it goes through: after a failure, without the add-ons
+    whose sources failed (the build's FAILED lines in the setup log), else
+    without them all. The ids left out, skip's included."""
+    skip=list(skip)
+    while True:
+        log=STATE/'setup.log';start=log.stat().st_size if log.is_file() else 0
+        try:build(skip);return skip
+        except SetupError:
+            left=[name for name,_ in addons() if name not in skip]
+            if not left:raise
+            with log.open('rb') as f:f.seek(start);text=f.read().decode('utf-8','replace')
+            failed=[name for name in left if re.search(rf'^FAILED: .*addons/{re.escape(name)}/',text,re.M)]
+            out=failed or left
+            log_line('The build stopped with the add-on(s) '+', '.join(out)+': building again without them')
+            skip+=out
 
 APK=ROOT/'Tekken3Expanded.apk'
 
-def android_apk(toolchain=None,env=None):
+def android_apk(toolchain=None,env=None,skip=None):
     """The Android APK of the game just set up: tools/android/make_apk.py,
-    its progress shown here and its build output in the setup log."""
+    its progress shown here and its build output in the setup log. The
+    add-ons go in as on PC (their setup steps first, unless skip says those
+    already ran). (the APK, the add-ons left out)."""
     sys.path.insert(0,str(ROOT/'tools/android'))
     import make_apk
+    if skip is None:skip=prepare_addons(env)
     emit(message='Building the Android APK',detail='The first time downloads the Android tools (about 1 GB).')
     def step(command,environment):
         run(command,environment=environment,progress='Building the Android game',
             friendly='The Android build stopped. Open the setup log for the specific error, then click Try again. Completed work is kept.')
-    try:apk=make_apk.build(out=APK,say=lambda message,detail='':emit(message=message,detail=detail),run=step,toolchain=toolchain,env=env)
-    except make_apk.Stop as error:raise SetupError(str(error)) from error
+    made=[]
+    def build(skip):
+        try:made.append(make_apk.build(out=APK,say=lambda message,detail='':emit(message=message,detail=detail),run=step,
+                                       toolchain=toolchain,env=env,defines=['TEKKEN3_ADDONS_SKIP='+';'.join(skip)]))
+        except make_apk.Stop as error:raise SetupError(str(error)) from error
+    skip=build_with_addons(build,skip)
+    apk=made[-1]
     log_line(f'Android APK: {apk}')
-    emit('apk',message='Android APK ready',detail=f'{apk}\n\n'+make_apk.install_hint(apk),apk=str(apk))
-    return apk
+    emit('apk',message='Android APK ready',detail=f'{apk}\n\n'+make_apk.install_hint(apk)+left_out_text(skip),apk=str(apk))
+    return apk,skip
 
 def android_only():
     """--android without --disc: the APK of a game already set up."""
@@ -1042,8 +1273,8 @@ def android_only():
         update_install()
         with (STATE/'setup.log').open('a',encoding='utf-8') as f:f.write('Tekken 3 Android APK '+RELEASE+'\n')
     else:date_changed_sources()
-    android_apk(tools())
-    emit('complete',message='Android APK ready',detail=str(APK))
+    skip=android_apk(tools())[1]
+    emit('complete',message='Android APK ready',detail=str(APK)+left_out_text(skip))
 
 def update_install():
     """--update: an existing install brought to this version with the files it
@@ -1052,7 +1283,9 @@ def update_install():
     if not saved or not load_json(STATE/'ready.json'):raise SetupError('No earlier setup was found here. Run the first setup.')
     path=lambda key:Path(saved[key]) if saved.get(key) else Path()
     prepare(path('disc'),path('ttt1'),saved.get('include_ttt1',True),path('tekken3') if saved.get('tekken3') else None,
-            saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None)
+            saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None,
+            dr_iso=path('dr_iso') if saved.get('dr_iso') else None,
+            dr_content=saved.get('dr_content',bool(saved.get('dr_iso'))))
 
 def launch_game(settings=False):
     """The game opens on its launcher unless the player ticked its "Skip
@@ -1071,6 +1304,8 @@ if __name__=='__main__':
     parser.add_argument('--tekken3',type=Path,help='tekken3.zip: the arcade difficulty levels and arcade stages')
     parser.add_argument('--ttt-cinematics',action='store_true',help="TTT Cinematics, the Tekken Tag Tournament endings")
     parser.add_argument('--ttt-disc',type=Path,help="Tekken Tag Tournament USA PS2 disc: the TTT stages' PS2 music and the endings' music")
+    parser.add_argument('--dr-iso',type=Path,help="Tekken: Dark Resurrection USA PSP disc (.iso): the Tekken 5 DR Content (implies --dr-content)")
+    parser.add_argument('--dr-content',action='store_true',help="Tekken 5 DR Content (experimental; for now Jin's DR moveset): without it, no DR content")
     parser.add_argument('--wait-for-parent',action='store_true')
     parser.add_argument('--text',action='store_true',help='plain progress lines (terminal setup)')
     parser.add_argument('--play',action='store_true',help='start the game once setup is complete')
@@ -1088,7 +1323,8 @@ if __name__=='__main__':
         if args.disc:prepare(args.disc.resolve(),args.ttt1.resolve(),not args.no_ttt1,
                              args.tekken3.resolve() if args.tekken3 else None,
                              args.ttt_cinematics,args.ttt_disc.resolve() if args.ttt_disc else None,
-                             android=args.android or args.android_only,pc=not args.android_only)
+                             android=args.android or args.android_only,pc=not args.android_only,
+                             dr_iso=args.dr_iso.resolve() if args.dr_iso else None,dr_content=args.dr_content)
         elif args.android:android_only()
         else:update_install()
     except Exception as error:

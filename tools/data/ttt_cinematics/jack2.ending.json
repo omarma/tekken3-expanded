@@ -1,0 +1,18 @@
+{
+ "about": "Jack-2's Tekken Tag Tournament (PS2) ending (scene 24): Jack-2 and P. Jack sit side by side facing the ocean and glance at each other, embarrassed; a screen filter (cmd 24, 2, 1200) over the whole scene. Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md). Neither ever takes his stance (seated all along): canonical basis.",
+ "scene": "jack2",
+ "arena": 13,
+ "dark": 0,
+ "trigger": "arcade-end p1=jack2",
+ "ttt_stage": {"stage": 10,
+               "why": "the PS2 script's stage 10 (scene table 0x51B388), TTT arcade's stage 10 (Eddy-B in tools/data/ttt1_stages.json; the PS2 executable names it EDDY-A), the beach, turned half round (canonical:180, as Baek's and Wang's): on the PS2 they sit facing the sea (the back shots 2-96 and 1061-1199) with the cliff and palms behind them (the front shots 264-390, 565-886); yaw 0 put the sea behind them and the cliff in front, 180 matches every shot of the PS2 sheet (2026-11-02); every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 13 above (tools/ps2/ttt_endings.json)"},
+ "actors": [
+  {"cast": "jack2", "costume": 0, "skeleton": "jack2",
+   "retarget": ["--basis", "canonical:180", "--twists", "--collars", "--contacts", "--world"],
+   "why": "TTT costume -1 (the player's): T3 costume 0"},
+  {"cast": "pjack", "costume": 0, "skeleton": "pjack",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars", "--contacts"],
+   "why": "TTT costume 0: T3 costume 0"}
+ ],
+ "ignore": []
+}

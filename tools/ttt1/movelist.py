@@ -119,8 +119,8 @@ def command(raw):
     return text.encode('ascii') + bytes(out)
 
 
-def build(key):
-    text = (SRC / f'{key}.wiki').read_text()
+def build(key, text=None):
+    text = (SRC / f'{key}.wiki').read_text() if text is None else text
     attacks, throws, skipped = [], [], []
     for section, name, raw in rows(text):
         cmd = command(raw)

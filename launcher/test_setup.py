@@ -198,11 +198,12 @@ class SetupTests(unittest.TestCase):
         sys.path.insert(0,str(backend.ROOT/'tools/android'))
         import make_apk
         events=[]
-        def fake_build(out,say,run,toolchain,env):
+        def fake_build(out,say,run,toolchain,env,defines=()):
             say('Downloading the Android tools: ndk','10% of 700 MB');return out
         with patch.object(backend,'emit',lambda event='status',**data:events.append((event,data))),\
              patch.object(backend,'log_line'),patch.object(make_apk,'build',side_effect=fake_build) as build:
-            self.assertEqual(backend.android_apk(toolchain=Path('tools')),backend.APK)
+            self.assertEqual(backend.android_apk(toolchain=Path('tools')),(backend.APK,[]))
+            self.assertEqual(build.call_args.kwargs['defines'],['TEKKEN3_ADDONS_SKIP='])
             self.assertEqual(build.call_args.kwargs['toolchain'],Path('tools'))
             self.assertIn(('status',{'message':'Downloading the Android tools: ndk','detail':'10% of 700 MB'}),events)
             kind,data=events[-1]
@@ -358,6 +359,13 @@ class UpdateTests(unittest.TestCase):
             roster=self.paths['ROSTER']
             if '--update' not in command:self.catalogue(roster,None)
             self.V.write_stamp(roster)
+        if command[1].endswith('dr_setup.py'):   # as the real one: the natives' DR movesets, then the DR stamp
+            roster=Path(command[command.index('--roster')+1])
+            if not getattr(self,'dr_leaves_out',False):
+                keys=backend.dr_tools()[0].NATIVES
+                (roster/'natives.txt').write_text(''.join(f'{i} {k} 5\n{i} {k} 5 dr\n' for i,k in enumerate(keys)))
+                for k in keys:(roster/f'{k.capitalize()}-DR-combat.jmv').write_bytes(b'moves')
+            backend.dr_tools()[0].write_stamp(roster)
         out=Path(command[command.index('--out')+1]) if '--out' in command else None
         if Path(command[1]).name=='install.py':
             if '--ttt1' in command:self.ttt_packs(out,self.A.TTT_STAGES_VERSION)
@@ -368,7 +376,7 @@ class UpdateTests(unittest.TestCase):
             if getattr(self,'laser_fails',False):raise backend.SetupError("The TTT PS2 effects could not be prepared.")
             self.laser(out,self.L.LASER_VERSION)
 
-    def fake_build(self,toolchain,env,include_ttt1):
+    def fake_build(self,toolchain,env,include_ttt1,skip_addons=()):
         self.commands.append(['build']);self.paths['EXE'].write_bytes(b'rebuilt game')
         # psxrecomp/runtime/runtime.cmake: the link empties mods/ first.
         shutil.rmtree(self.paths['BUILD']/'mods',ignore_errors=True)
@@ -407,6 +415,7 @@ class UpdateTests(unittest.TestCase):
         folder.mkdir(parents=True,exist_ok=True)
         (folder/self.L.FILE).write_bytes(b'TIM');(folder/self.L.ANGEL_FILE).write_bytes(b'TIM')
         for name in self.L.HITSPARK_FILES:(folder/name).write_bytes(b'HFX6')
+        (folder/self.L.WEAPONS_FILE).write_bytes(b'UPW1')
         (folder/'version.txt').write_text(f'{stamp}\n')
 
     def packs(self,folder,stamp):
@@ -519,7 +528,7 @@ class UpdateTests(unittest.TestCase):
     def test_android_apk_of_an_older_install_updates_it_first(self):
         self.install(0,work_files=True)
         order=[]
-        with patch.object(backend,'android_apk',side_effect=lambda *a:order.append('apk')),\
+        with patch.object(backend,'android_apk',side_effect=lambda *a:(order.append('apk'),[])),\
              patch.dict(self.V.UPDATES,{1:('hands',)}):
             backend.run.side_effect=lambda command,**k:(order.append('update'),self.fake_run(command,**k))
             backend.android_only()
@@ -928,6 +937,98 @@ class UpdateTests(unittest.TestCase):
         self.assertIn('no longer there',backend.optional_problems(True,None,self.ttt_disc,cinematics=True)[0]['reason'])
         self.assertEqual(backend.optional_problems(False,None,self.ttt_disc,cinematics=True),[])   # without the TTT content
 
+    # Jin's Dark Resurrection moveset, from the player's PSP disc (tools/dr_setup.py; experimental, F34).
+    def with_dr_iso(self,exists=True):
+        self.install(self.V.TTT1_IMPORT_VERSION)
+        self.dr_iso=self.root/'roms/Tekken DR.iso'
+        if exists:self.dr_iso.parent.mkdir(exist_ok=True);self.dr_iso.write_bytes(bytes(4096))
+        inputs=backend.load_json(self.paths['STATE']/'last-inputs.json');inputs['dr_iso']=str(self.dr_iso)
+        backend.save_json(self.paths['STATE']/'last-inputs.json',inputs)
+
+    def dr_runs(self):
+        return [c for c in self.commands if len(c)>1 and c[1].endswith('dr_setup.py')]
+
+    def test_dr_disc_adds_the_dr_movesets_once(self):
+        self.with_dr_iso()
+        with patch.object(backend.dr_tools()[1],'iso_problem',return_value=None):
+            self.assertEqual(backend.optional_problems(True,dr_iso=self.dr_iso),[])
+            backend.update_install()
+        self.assertEqual(len(self.dr_runs()),1)
+        self.assertTrue(backend.dr_current(self.paths['INSTALLED']))      # copied beside the game with the catalogue
+        self.assertTrue(backend.load_json(self.paths['STATE']/'ready.json')['dr']);self.assertTrue(backend.ready())
+        backend.update_install();self.assertEqual(len(self.dr_runs()),1)  # current: not made again
+
+    def test_unusable_dr_disc_is_said_then_skipped(self):
+        self.with_dr_iso(exists=False)
+        problems=backend.optional_problems(True,dr_iso=self.dr_iso)
+        self.assertEqual([p['key'] for p in problems],['dr_iso']);self.assertIn('no longer there',problems[0]['reason'])
+        self.assertEqual(backend.optional_problems(False,dr_iso=self.dr_iso),[])   # without the TTT content
+        backend.update_install()
+        self.assertEqual(self.dr_runs(),[]);self.assertFalse(backend.load_json(self.paths['STATE']/'ready.json')['dr'])
+        self.assertTrue(backend.ready())
+
+    def test_partial_dr_import_is_said_then_tried_again(self):
+        self.with_dr_iso();self.dr_leaves_out=True
+        with patch.object(backend.dr_tools()[1],'iso_problem',return_value=None):backend.update_install()
+        self.assertEqual(len(self.dr_runs()),1)
+        said=[c.kwargs for c in backend.emit.call_args_list if 'part of Dark Resurrection' in c.kwargs.get('message','')]
+        self.assertEqual(len(said),1);self.assertIn('Jin (DR moveset)',said[0]['detail'])
+        self.assertIn('partial, missing: Jin (DR moveset)',(self.paths['STATE']/'setup.log').read_text(encoding='utf-8'))
+        self.assertTrue(backend.ready())                                   # the stamp is current: Play
+        self.dr_leaves_out=False                                           # with the disc, made again
+        with patch.object(backend.dr_tools()[1],'iso_problem',return_value=None):backend.update_install()
+        self.assertEqual(len(self.dr_runs()),2);self.assertEqual(backend.dr_missing(self.paths['INSTALLED']),[])
+
+    def test_older_dr_import_without_disc_is_said(self):
+        V=backend.dr_tools()[0]
+        self.install(self.V.TTT1_IMPORT_VERSION)
+        self.assertEqual(backend.optional_problems(True),[])               # never imported: nothing to say
+        for folder in (self.paths['ROSTER'],self.paths['INSTALLED']):V.write_stamp(folder,V.DR_IMPORT_VERSION-1)
+        problems=backend.optional_problems(True)
+        self.assertEqual([p['key'] for p in problems],['dr_iso']);self.assertIn('older version',problems[0]['reason'])
+        self.assertEqual(problems[0]['path'],'Not given')
+        self.assertIn(f'version {V.DR_IMPORT_VERSION-1}',problems[0]['without'])
+        self.assertEqual(backend.optional_problems(False),[])               # without the TTT content
+        # A new TTT1 import starts the catalogue again: no DR left.
+        with patch.object(backend,'ttt1_plan',return_value=('import',[])):
+            self.assertIn('no TEKKEN 5 DR on his MOVESET card',backend.optional_problems(True)[0]['without'])
+        # Tekken 5 DR Content still ticked, no disc: said, then kept as it is.
+        inputs=backend.load_json(self.paths['STATE']/'last-inputs.json');inputs['dr_content']=True
+        backend.save_json(self.paths['STATE']/'last-inputs.json',inputs)
+        backend.update_install()
+        self.assertEqual(self.dr_runs(),[]);self.assertEqual(V.read_stamp(self.paths['INSTALLED']),V.DR_IMPORT_VERSION-1)
+        self.assertTrue(backend.ready())
+
+    def test_dr_content_unticked_takes_the_dr_import_out(self):
+        V=backend.dr_tools()[0]
+        self.install(self.V.TTT1_IMPORT_VERSION)
+        for folder in (self.paths['ROSTER'],self.paths['INSTALLED']):
+            V.write_stamp(folder,V.DR_IMPORT_VERSION)
+            (folder/'Jin-DR-combat.jmv').write_bytes(b'x');(folder/'Jin-TTT1-combat.jmv').write_bytes(b'x')
+            with (folder/'natives.txt').open('a') as f:f.write('9 jin 9\n9 jin 9 dr\n')
+        # Unticked (the box, saved): nothing asked about the disc, and the DR import goes.
+        self.assertEqual(backend.optional_problems(True,dr_content=False),[])
+        inputs=backend.load_json(self.paths['STATE']/'last-inputs.json');inputs['dr_content']=False;inputs['dr_iso']=''
+        backend.save_json(self.paths['STATE']/'last-inputs.json',inputs)
+        backend.update_install()
+        self.assertEqual(self.dr_runs(),[]);self.assertFalse(backend.load_json(self.paths['STATE']/'ready.json')['dr'])
+        for folder in (self.paths['ROSTER'],self.paths['INSTALLED']):
+            if not folder.is_dir():continue
+            self.assertFalse(list(folder.glob('*-DR-*')));self.assertEqual(V.read_stamp(folder),0)
+            self.assertNotIn(' dr',(folder/'natives.txt').read_text())
+            self.assertTrue((folder/'Jin-TTT1-combat.jmv').is_file())          # the TTT1 moves stay
+        self.assertTrue(backend.ready())
+        self.assertEqual(backend.load_json(self.paths['STATE']/'last-inputs.json')['dr_content'],False)   # kept unticked
+
+    def test_no_dr_disc_leaves_the_catalogue_as_before(self):
+        self.install(self.V.TTT1_IMPORT_VERSION)
+        before=sorted(f.name for f in self.paths['INSTALLED'].iterdir())
+        backend.update_install()
+        self.assertEqual(self.dr_runs(),[]);self.assertFalse(backend.load_json(self.paths['STATE']/'ready.json')['dr'])
+        self.assertEqual(sorted(f.name for f in self.paths['INSTALLED'].iterdir()),before)
+        said=[c.kwargs.get('message','') for c in backend.emit.call_args_list]
+        self.assertFalse([m for m in said if 'Dark Resurrection' in m])
+
     def test_ttt_stages_and_music_version_stamps(self):
         folder=self.root/'ttt'
         self.assertFalse(self.A.ttt_current(folder))
@@ -944,6 +1045,14 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(steps(0,current=3,updates={1:('hands',),2:('panda-tiger','hands'),3:()}),['hands','panda-tiger'])
         self.assertIsNone(steps(0,current=2,updates={1:('hands',),2:None}))
         self.assertTrue(all(s in self.V.STEPS for v in self.V.UPDATES.values() if v for s in v))
+
+    def test_version_16_converts_the_native_models(self):
+        """F32: the natives' TTT1 models come from the ROM regions, an update step, not a new import."""
+        self.assertEqual(self.V.UPDATES[16],['native-models'])
+        self.assertEqual(self.V.STEPS['native-models'][0],'workspace')
+        import ttt1_setup
+        self.assertIn('native-models',ttt1_setup.UPDATE_STEPS)
+        self.assertEqual(self.V.update_steps(15,current=16),['native-models'])
 
 def shutil_usage(free):
     import collections

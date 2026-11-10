@@ -1,10 +1,10 @@
 # Tekken 3 Expanded
 
-**Tekken 3 Expanded** puts the 18 characters Tekken Tag Tournament added to the roster into Tekken 3, playable in every mode and fought by the CPU. It runs on [Tekken3Recompiled](https://github.com/FishB0nes98/Tekken3Recompiled), the PC recompilation of Tekken 3.
+**Tekken 3 Expanded** brings Tekken Tag Tournament, and now the first of Tekken 5: Dark Resurrection, into Tekken 3: the 18 characters TTT added to the roster, playable in every mode and fought by the CPU, TTT movesets and TTT models for Tekken 3's own cast, the stages of TTT and of Tekken 3 arcade with their music, TTT endings played in the game's engine, and Jin's Tekken 5 DR moveset (experimental). It runs on [Tekken3Recompiled](https://github.com/FishB0nes98/Tekken3Recompiled), the PC recompilation of Tekken 3, on Windows, macOS, Linux and Android.
 
-VIDEO 1.4.0 : https://youtu.be/mjwkQr3cZCM
+VIDEO 1.5.0 : https://youtu.be/1BLE4kNqBgU
 
-> **No game files are included.** You provide your own Tekken 3 disc image and your own Tekken Tag Tournament and Tekken 3 arcade ROMs. The setup builds everything from them on your machine.
+> **No game files are included.** You provide your own Tekken 3 disc image and your own Tekken Tag Tournament and Tekken 3 arcade ROMs, and for the optional content your Tekken Tag Tournament PS2 disc and Tekken: Dark Resurrection PSP disc. The setup builds everything from them on your machine.
 
 ---
 
@@ -14,19 +14,27 @@ VIDEO 1.4.0 : https://youtu.be/mjwkQr3cZCM
 - **18 playable characters:** Kazuya, Jun, Kunimitsu, Michelle, Baek, Armor King, Bruce, Jack-2, P.Jack, Lee, Ganryu, Devil, Angel, Roger, Alex, Tetsujin, Wang, Unknown.
 - **Tag page on the select screen:** press **L2 / R2** to switch rosters. It works in every mode, and P1 and P2 can each pick a different guest.
 - **ALL Costumes Available** by pressing Punch, Kick or Start.
-- **From TTT:** the voices, sounds, portraits and announcer calls, and each character's own strong-hit effect, fade-out included.
+- **From TTT:** the voices, sounds, portraits and announcer calls, and each character's own strong-hit effect, fade-out included. Their tiles and portraits at the select screen are drawn in HD from the arcade's (at a resolution scale of 2 or more, OpenGL or software).
 - **Closer to the arcade:** hands that close into each character's own fist, Devil's and Angel's wings that flap (in the KO replay too), tails, hair, skirts and coat tails that swing with the arcade's own springs, faces that blink and shut their eyes when hit, metallic hit sounds for Jack-2 and P.Jack, the KO cry with Tekken 3's echo.
 - **TTT Hitspark:** every fighter's strong-hit effect, Tekken 3's cast included, at the arcade's 64 × 64 instead of the PS1's 32 × 32, with TTT's hit and guard sparks. Jin hits with his red TTT lightning. A mod on by default (*Visual Enhancements*).
 - **Unknown** works as in Tekken Tag Tournament: she fights with the TTT movesets and switches style with **L1**, from 23 styles, and goes back to Jun's style each round. Her wolf spirit follows her in every fight. As the CPU she switches style as in TTT, and in Arcade she regenerates like TTT's final boss: about 2 life points a second, up to 40% of each hit she takes.
 - **Tetsujin** draws a random moveset every round from the TTT characters added to the game, and wears gold on **Start**.
 - **Devil and Angel** fire the arcade's laser beams along their facing, Air Inferno upwards. The CPU side-steps them, and the Jacks go haywire when hit.
-- **PS2 effects:** with your Tekken Tag Tournament PS2 disc, Devil's and Angel's lasers are drawn as on the PS2 (the orb on the forehead, the textured beam), and Jin, Heihachi, Kazuya, Devil and Angel hit with their PS2 strong-hit sparks (Angel's in gold). Turn **PS2 EFFECTS** to ON in **Options → GAME OPTION** (off by default: the arcade's look).
+- **PS2 effects:** with your Tekken Tag Tournament PS2 disc, Devil's and Angel's lasers are drawn as on the PS2 (the orb on the forehead, the textured beam), Jin, Heihachi, Kazuya, Devil, Angel and Unknown hit with their PS2 strong-hit sparks (Angel's in gold), and Unknown holds her own PS2 katana in Yoshimitsu's style and her dagger in Kunimitsu's, instead of the arcade's energy blade. Turn **PS2 EFFECTS** to ON in **Options → GAME OPTION** (off by default: the arcade's look).
 - **Panda and Tiger** show their own TTT portraits.
 - **A hidden skin** is waiting to be found.
 
 ### TTT movesets for Tekken 3's cast
 After you pick one of the 18 characters below, a **MOVESET** card lets you choose **TEKKEN 3** or **TEKKEN TAG TOURNAMENT**. The command list and Combo Training follow your choice.
 Paul, Law, Lei, King, Yoshimitsu, Nina, Hwoarang, Xiaoyu, Eddy, Jin, Julia, Bryan, Heihachi, Anna, Kuma, Ogre, Gun Jack, True Ogre (with his fire).
+
+### Tekken 3's cast on their TTT models
+With the TTT1 characters imported, Tekken 3's own fighters are drawn with their Tekken Tag Tournament arcade models, in every mode, the Embu, the TTT endings and Ogre's scene; their moves, voices, sounds and effects stay Tekken 3's. At the character select, each button picks a TTT costume as on the arcade: Square, Cross, Triangle, Circle, and Start for the fighters with a fifth (Law, Xiaoyu, Eddy, Jin). **R1** gives the third Tekken 3 costume once unlocked, **L1** opens the outfit gallery. The CPU's fighters get their TTT models too: **CPU COSTUME** in **Options → GAME OPTION** draws their costume among the TTT ones (the default) or keeps the one Tekken 3 gives. Gon, Dr. B and the Tekken Force soldiers have no TTT model and keep theirs.
+
+### Tekken 5 DR Content (experimental)
+Tick **Add-on: Tekken 5 DR Content** in the setup and choose your **Tekken: Dark Resurrection** PSP disc: the setup copies Tekken 5: Dark Resurrection content from it. It will hold more of Tekken 5 DR over the coming releases; for now it holds only **Jin's traditional karate moveset**. Jin's MOVESET card gets a third choice, **TEKKEN 5 DR**: his Kazama-style moves from Dark Resurrection, with DR's own animations, throws, throw cameras, reactions, Power Stance charge and 10 hit combo (COMBO TRAINING), and DR's sounds (his DR voice, swings, impacts), on his own Tekken 3 / TTT model. It is experimental: the moves come over as they are in DR, not rebalanced for Tekken 3 yet, and Lingering Soul and the Soul Rage moves are left out. The CPU plays it only when **CPU MOVESET** in **Options → GAME OPTION** is set to TEKKEN 5 DR, never on RANDOM.
+
+Turn it off with **Tekken 5 DR Content** on the **Mods** page of the game's launcher (PC and Android), then restart the game: the card and CPU MOVESET go back to Tekken 3 and TTT. Untick the add-on in the setup to remove the content from the game. Unticked, or without the disc, nothing changes.
 
 The card also shows in Tekken Ball. The CPU draws its own moveset once per fight: set it in **Options → CPU MOVESET** (original, TTT or random).
 
@@ -79,15 +87,29 @@ Don't want the extra step? Set **STAGE SELECT** to **OFF** in **Options**, **GAM
 
 ---
 
-## Optional add-on
+## Optional add-ons
 
-The setup offers it as a checkbox. Leave it unticked and nothing changes.
+The setup offers each as a checkbox. Leave one unticked and nothing changes.
 
 | Add-on | What it does | Extra file needed |
 |---|---|---|
-| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu, Baek, Angel, Jun or Wang: their Tekken Tag Tournament ending plays in Tekken 3's engine, on its TTT stage, in place of the ending movie. Eight endings for now, more to come. | None: it plays over Tekken 3's music, or the ending's original music with your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
+| **Tekken 5 DR Content** *(experimental)* | Tekken 5: Dark Resurrection content copied from your PSP disc. For now only Jin's traditional karate moveset, a third choice on his MOVESET card ([details](#tekken-5-dr-content-experimental)). | Your **Tekken: Dark Resurrection (USA) PSP disc** (ULUS-10139), and PPSSPP installed |
+| **TTT Cinematics** | Finish Arcade with Kazuya, Armor King, Michelle, Kunimitsu, Baek, Angel, Jun, Wang, Lee, Jack-2 or P.Jack: their Tekken Tag Tournament ending plays in Tekken 3's engine, on its TTT stage, in place of the ending movie. Eleven endings for now, more to come. | None: it plays over Tekken 3's music, or the ending's original music with your **Tekken Tag Tournament (USA) PS2 disc** (SLUS-20001) |
 
 Jin's red lightning, an add-on until 1.3.0, is now part of **TTT Hitspark** (see [Features](#the-tag-tournament-roster)).
+
+## Third-party add-ons
+
+Other people's work can be built into the game: put the add-on's folder in `addons/<id>/`, then click **Update &
+play**. The setup runs the add-on's own setup step and builds the game with it; deleting the folder and updating
+again removes it. An add-on that does not work with this release is left out, and the setup says so. Add-ons are
+not part of Tekken 3 Expanded: each one comes from its own repository, under its author's responsibility.
+[addons/README.md](addons/README.md) has the details, for players and for authors. On Android, **Build Android APK**
+builds the add-ons of your PC folder into the APK too: only what an add-on puts in the game's `mods/` goes into it.
+
+| Add-on | By | What it adds |
+|---|---|---|
+| [TMST add-on](https://github.com/ttanko96/t3-expanded-addons) | TMST | Jukebox, Photo Mode, Tournament Mode, VS Mode+, Tekken 2 content (music and stages from your Tekken 2 disc) |
 
 ## Coming in a future release
 
@@ -104,7 +126,8 @@ Jin's red lightning, an add-on until 1.3.0, is now part of **TTT Hitspark** (see
 | **Tekken 3** (PlayStation) | USA, **SLUS-00402** (Redump "Tekken 3 (USA)"): a `.cue` with its `.bin` files, one `.bin` per track or a single `.bin` holding all three |
 | **Tekken Tag Tournament arcade ROM** | For the TTT characters, the [TTT stages](#ttt-stages) and their music. `tektagt.zip`: MAME set `tektagt`, *Tekken Tag Tournament (World, TEG2/VER.C1, set 1)*, or `tektagtuc1` *(US, TEG3/VER.C1)*, `tektagtub` *(US, TEG3/VER.B)*, `tektagtjc1` *(Japan, TEG1/VER.C1)*, **non-merged** (a merged zip holding one of them works too) |
 | **Tekken 3 arcade ROM** *(optional)* | `tekken3.zip`: MAME set `tekken3`, *Tekken 3 (World, TET2/VER.E1)*, for the arcade difficulty levels and the [arcade stages](#arcade-stages) |
-| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**, version 1.00 or 2.00 (Greatest Hits): a `.cue`/`.bin` or `.iso`. Adds the PS2 version of the [TTT stages](#ttt-stages)' music (BGM SELECT: REMIXED; about 60 MB copied beside the game), the PS2 effects (PS2 EFFECTS: Devil's and Angel's lasers, the Mishimas' strong-hit sparks) and the TTT Cinematics music. Without it, the TTT stages play their arcade music and the effects stay the arcade's |
+| **Tekken Tag Tournament** (PlayStation 2) *(optional)* | USA, **SLUS-20001**, version 1.00 or 2.00 (Greatest Hits): a `.cue`/`.bin` or `.iso`. Adds the PS2 version of the [TTT stages](#ttt-stages)' music (BGM SELECT: REMIXED; about 60 MB copied beside the game), the PS2 effects (PS2 EFFECTS: Devil's and Angel's lasers, the Mishimas' and Unknown's strong-hit sparks, Unknown's katana and dagger) and the TTT Cinematics music. Without it, the TTT stages play their arcade music and the effects stay the arcade's |
+| **Tekken: Dark Resurrection** (PSP) *(optional, experimental)* | USA, **ULUS-10139**, as an `.iso`. For the [Tekken 5 DR Content](#tekken-5-dr-content-experimental) add-on: for now Jin's Tekken 5 DR moveset (about a minute to convert). Needs the TTT1 characters and **PPSSPP installed** on the computer that runs the setup: its `assets/vfpu` tables compute DR's animations exactly as the PSP does (or set `PPSSPP_VFPU` to that folder). Nothing from PPSSPP is copied |
 
 The exact versions:
 
@@ -112,7 +135,7 @@ The exact versions:
 - **`tektagt.zip`**: every chip included (non-merged: the set does not borrow files from a parent). Its program ROMs are `teg2verc1.2e` (SHA-1 `9e01ae64710d85eb9899d6fa6fd0a2152aee8c11`) and `teg2verc1.2j` (SHA-1 `529a11a1bbb8655534d7ec371f1c09e9e387ed11`) for the World set, or `teg3verc1.2l` (SHA-1 `0623bb6571caf046ff7b4f83f11ee84a92c4b462`) and `teg3verc1.2p` (SHA-1 `5c56d69ba2f723d0a4fbe4902196efc6ba9d5094`) for the US C1 set, or `teg3verb.2l` (SHA-1 `c1b61df8e79348424f4bd2660ab5179ef21bdb07`) and `teg3verb.2p` (SHA-1 `af464caa03fdd12024ad482e9c853a36510bfba7`) for the US B set, or `teg1verc1.2e` (SHA-1 `e18458efb0f9b341970132b512d2e5104a942c6e`) and `teg1verc1.2j` (SHA-1 `e15f4c8cc4309ebb90d8d015b1f17f75ce5c8879`) for the Japan C1 set; all four import the same characters. Other revisions (World set 2, Japan VER.A3 and VER.B) are not supported.
 - **`tekken3.zip`**: its program ROMs are `tet2vere1.2e` (SHA-1 `3a5638c6ad40bfde6e12fdfd6d469f6ea5e9f4fb`) and `tet2vere1.2j` (SHA-1 `554d1e42886d6a6c9c5857e9cbd5d7c37d7a6e67`). A zip with only `tet1vere.2e` / `tet1vere.2j` as program ROMs is the TET1 revision: not supported.
 
-If an optional file (`tekken3.zip`, the TTT PS2 disc) is not one of these, or can no longer be found, the setup says so before it starts: what is left out without it and the version expected. You choose another file, or go on without it. A `tektagt.zip` that is not supported stops the setup.
+If an optional file (`tekken3.zip`, the TTT PS2 disc, the Dark Resurrection PSP disc) is not one of these, or can no longer be found, the setup says so before it starts: what is left out without it and the version expected. You choose another file, or go on without it. A `tektagt.zip` that is not supported stops the setup.
 
 What counts is the content of the files, not their names: sets made for older MAME versions name the same chips differently (for example `tet2vere.2e` for `tet2vere1.2e`) and work. The zip's own name does not matter either (a `tekken3ae.zip` holding the TET2 chips works).
 
@@ -186,7 +209,7 @@ The game, its memory cards and its settings all stay in the `tekken3-expanded` f
 The Steam Deck runs the Windows build through Proton: set the game up on a Windows PC, then copy it over. This hasn't been tested much yet: if you try it, please tell me how it went, working or not, in an [issue](https://github.com/omarma/tekken3-expanded/issues).
 
 1. On a Windows PC, install Tekken 3 Expanded as above (the Windows ZIP) and check that it plays. To copy less, answer Yes to **Free up disk space** at the end of the setup.
-2. Copy the whole `tekken3-expanded` folder to the Deck (USB stick, microSD card or network), for example to `/home/deck/Games/tekken3-expanded`.
+2. Copy the whole `tekken3-expanded` folder to the Deck (USB stick, microSD card or network), for example to `/home/deck/Games/tekken3-expanded`. `build-release/settings.toml` still holds the PC's paths to the disc and memory cards; since 1.5.0 the game finds them again in the copied folder. With 1.4.1 or older, the launcher opens **First-run setup** instead: delete the `[disc]` and `[memcard]` sections of `build-release/settings.toml`, then start the game again.
 3. On the Deck, in Desktop Mode, open Steam, then **Games → Add a Non-Steam Game to My Library → Browse**, and choose `tekken3-expanded/build-release/Tekken_3_Expanded.exe`. Coming from 1.1.x, where it was `Tekken_3_Recompiled.exe`: remove the old shortcut and add this one (the update deletes the old file).
 4. In Steam, right-click the game → **Properties**:
    - **Start In**: `"/home/deck/Games/tekken3-expanded/"` (your folder, in quotes)
@@ -280,7 +303,14 @@ Update the folder you already set up: no full reinstall. The setup keeps its too
    - with a ZIP (the one for your system: Windows, macOS, Linux or Android): extract it, then copy **the contents** of its `tekken3-expanded-x.y.z` folder into your existing folder, replacing every file (7-Zip: *Yes to All*).
 2. Start **Setup Tekken 3.cmd** (or **Setup Tekken 3.command**, or **Setup Tekken 3.sh**). The setup window opens with your files already filled in: click **Update & play**. Changes to the TTT1 characters are applied to your install, without a new import when the update allows it; otherwise the setup imports them again from your `tektagt.zip`. When the arcade stages change, the setup converts them again from your `tekken3.zip` (a few seconds). An install set up with `tekken3.zip` before the arcade stages existed gets them at its next update; to add them to an install set up without it, choose `tekken3.zip` in the setup window. The same goes for the TTT stages and their music with your `tektagt.zip`: an install with the TTT1 characters gets them at its next update.
 
-**From 1.4.0:**
+**From 1.4.1:**
+- **Update & play** brings the TTT1 characters up to date without a new import (four update steps), rebuilds the TTT endings (Lee's, Jack-2's and P.Jack's join them) and, if you gave the setup your Tekken Tag Tournament PS2 disc, reads Unknown's PS2 strong-hit effect from it.
+- Tekken 3's own fighters wear their [TTT models](#tekken-3s-cast-on-their-ttt-models) as soon as the update is done. The buttons at the character select pick their TTT costumes; the third Tekken 3 costume is on **R1**.
+- To add the [Tekken 5 DR content](#tekken-5-dr-content-experimental), the update is not enough: in the setup window, tick **Add-on: Tekken 5 DR Content**, choose your PSP disc, then click **Update & play**. PPSSPP must be installed on the computer.
+- With TMST's add-on: update it to its version for 1.5.0 (0.2.0 or later), which goes through the new [add-on hook](#third-party-add-ons). The setup no longer uses its old developer include: with an older version, the game is built without the add-on.
+- Save states made with 1.4.1 don't load in 1.5.0 (the recompiled code changed). Memory cards are not affected.
+
+**From 1.4.0 to 1.4.1:**
 - The TTT1 characters are brought up to date without a new import (three update steps), and the TTT endings are rebuilt (Wang's joins them).
 - The new [Stage Select](#stage-select) is on: once both fighters are chosen in VS or Practice, pick the stage or just confirm. Set **STAGE SELECT** to **OFF** in **Options**, **GAME OPTION** to fight as before.
 - Save states made with 1.4.0 don't load in 1.4.1 (the recompiled code changed). Memory cards are not affected.
@@ -372,5 +402,5 @@ To change them, open [the launcher](#the-launcher). Set a player's input source 
 **No Copyrighted Material:** This repository **does not contain any copyrighted game assets, ROMs, or ISOs**. It only provides open-source tools, scripts, and source code intended to be used with a legally owned and dumped copy of the game. Users must provide their own original game data to use this software.
 
 **Source Code License:**
-The original tools, build scripts, and modifications provided in this repository are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE), like the upstream project (see LICENSE).
-*(Note: Any third-party libraries or upstream decompilation code retain their original respective licenses).*
+The upstream project (Tekken 3 Recompiled and psxrecomp, Matthew Stan) and my own code in this fork (its changes, modules, tools and build scripts, omarma) are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, change and share, but not for commercial purposes.
+*(Exceptions: third-party libraries and adapted code keep their own licenses. Each one is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), with its license text next to it or in `licenses/`.)*

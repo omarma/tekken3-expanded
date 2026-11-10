@@ -1,0 +1,226 @@
+{
+ "_doc": [
+  "F32 E0 : modele TTT1 (borne Tag) de chaque natif de Tekken 3, par touche de selection. Touches comme dans la borne",
+  "(select_apply_costume_button, ttt-ps1/src/menus/8016AEFC.c) : LP -> variante 0, LK -> 1, RP -> 2, RK -> 3,",
+  "Start -> 4 si elle existe, sinon rien (null : Start ne choisit pas, comme la borne ; Tag retombe sur 0 mais n'existe pas sur PS1). PS1 : LP Carre, RP Triangle, LK Croix,",
+  "RK Rond, Start. Exception choisie : Mokujin (pas de Tetsujin). Valeurs = emplacements TTT1 (table 0x8001110C),",
+  "planches : tools/ttt1/model/native_sheet.py. Gon, Dr. B et les soldats Force n'ont pas de modele TTT1."
+ ],
+ "version": 1,
+ "natives": {
+  "paul": {
+   "t3_id": 0,
+   "ttt1_index": 0,
+   "buttons": {
+    "LP": 70,
+    "RP": 0,
+    "LK": 71,
+    "RK": 1,
+    "Start": null
+   }
+  },
+  "law": {
+   "t3_id": 1,
+   "ttt1_index": 1,
+   "buttons": {
+    "LP": 72,
+    "RP": 2,
+    "LK": 73,
+    "RK": 3,
+    "Start": 41
+   }
+  },
+  "lei": {
+   "t3_id": 2,
+   "ttt1_index": 2,
+   "buttons": {
+    "LP": 74,
+    "RP": 4,
+    "LK": 75,
+    "RK": 5,
+    "Start": null
+   }
+  },
+  "king": {
+   "t3_id": 3,
+   "ttt1_index": 3,
+   "buttons": {
+    "LP": 76,
+    "RP": 6,
+    "LK": 77,
+    "RK": 7,
+    "Start": null
+   }
+  },
+  "yoshimitsu": {
+   "t3_id": 4,
+   "ttt1_index": 4,
+   "buttons": {
+    "LP": 78,
+    "RP": 8,
+    "LK": 79,
+    "RK": 9,
+    "Start": null
+   }
+  },
+  "nina": {
+   "t3_id": 5,
+   "ttt1_index": 5,
+   "buttons": {
+    "LP": 80,
+    "RP": 10,
+    "LK": 81,
+    "RK": 11,
+    "Start": null
+   }
+  },
+  "hwoarang": {
+   "t3_id": 6,
+   "ttt1_index": 6,
+   "buttons": {
+    "LP": 82,
+    "RP": 12,
+    "LK": 83,
+    "RK": 13,
+    "Start": null
+   }
+  },
+  "xiaoyu": {
+   "t3_id": 7,
+   "ttt1_index": 7,
+   "buttons": {
+    "LP": 84,
+    "RP": 14,
+    "LK": 108,
+    "RK": 15,
+    "Start": 39
+   },
+   "random_select": {
+    "slot": 85,
+    "chance": "1/6",
+    "doc": "la borne le donne une fois sur six quand Xiaoyu sort de la case aleatoire"
+   }
+  },
+  "eddy": {
+   "t3_id": 8,
+   "ttt1_index": 8,
+   "buttons": {
+    "LP": 86,
+    "RP": 16,
+    "LK": 87,
+    "RK": 17,
+    "Start": 38
+   }
+  },
+  "jin": {
+   "t3_id": 9,
+   "ttt1_index": 9,
+   "buttons": {
+    "LP": 88,
+    "RP": 18,
+    "LK": 89,
+    "RK": 19,
+    "Start": 40
+   }
+  },
+  "julia": {
+   "t3_id": 10,
+   "ttt1_index": 10,
+   "buttons": {
+    "LP": 90,
+    "RP": 20,
+    "LK": 91,
+    "RK": 21,
+    "Start": null
+   }
+  },
+  "kuma": {
+   "t3_id": 11,
+   "ttt1_index": 11,
+   "buttons": {
+    "LP": 92,
+    "RP": 22,
+    "LK": 93,
+    "RK": 23,
+    "Start": null
+   }
+  },
+  "bryan": {
+   "t3_id": 12,
+   "ttt1_index": 12,
+   "buttons": {
+    "LP": 94,
+    "RP": 24,
+    "LK": 95,
+    "RK": 25,
+    "Start": null
+   }
+  },
+  "heihachi": {
+   "t3_id": 13,
+   "ttt1_index": 13,
+   "buttons": {
+    "LP": 96,
+    "RP": 26,
+    "LK": 97,
+    "RK": 27,
+    "Start": null
+   }
+  },
+  "ogre": {
+   "t3_id": 14,
+   "ttt1_index": 14,
+   "buttons": {
+    "LP": 98,
+    "RP": 28,
+    "LK": 99,
+    "RK": 29,
+    "Start": null
+   }
+  },
+  "mokujin": {
+   "t3_id": 15,
+   "ttt1_index": 15,
+   "buttons": {
+    "LP": 30,
+    "RP": 101,
+    "LK": 31,
+    "RK": 31,
+    "Start": 101
+   }
+  },
+  "gunjack": {
+   "t3_id": 16,
+   "ttt1_index": 16,
+   "buttons": {
+    "LP": 104,
+    "RP": 34,
+    "LK": 105,
+    "RK": 35,
+    "Start": null
+   }
+  },
+  "anna": {
+   "t3_id": 18,
+   "ttt1_index": 18,
+   "buttons": {
+    "LP": 36,
+    "RP": 106,
+    "LK": 37,
+    "RK": 111,
+    "Start": null
+   }
+  },
+  "trueogre": {
+   "t3_id": 20,
+   "ttt1_index": 20,
+   "buttons": {
+    "LP": 102,
+    "RP": 32,
+    "LK": 103,
+    "RK": 33,
+    "Start": null
+   }
+  }
+ }
+}

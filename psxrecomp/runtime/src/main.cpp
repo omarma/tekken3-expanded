@@ -1955,6 +1955,55 @@ static std::filesystem::path sidecar_cfg_path(const char* argv0, const char* fil
     return exe_dir_from_argv(argv0) / filename;
 }
 
+// settings.toml, disc.cfg and bios.cfg remember absolute paths. Once the game
+// folder is moved or copied (another drive, another PC, a Steam Deck under
+// Proton) they point into the old folder, which no longer exists. Re-anchor
+// such a path on the exe dir or one of its parents: the longest tail of the old
+// path that exists there wins (".../old/disc/game.cue" -> "<root>/disc/game.cue").
+// Empty when the path exists as is or no tail matches.
+static std::filesystem::path relocate_moved_path(const std::filesystem::path& old,
+                                                 const char* argv0) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (old.empty() || fs::exists(old, ec)) return {};
+    std::vector<fs::path> parts;
+    for (const auto& c : old.relative_path()) {
+        if (!c.empty() && c != ".") parts.push_back(c);
+    }
+    const fs::path exe_dir = fs::absolute(exe_dir_from_argv(argv0), ec);
+    // An absolute path keeps at least its first directory out of the tail.
+    for (size_t first = old.has_root_path() ? 1 : 0; first < parts.size(); ++first) {
+        fs::path tail;
+        for (size_t i = first; i < parts.size(); ++i) tail /= parts[i];
+        for (fs::path dir = exe_dir; !dir.empty(); dir = dir.parent_path()) {
+            const fs::path cand = dir / tail;
+            if (fs::exists(cand, ec)) return cand.lexically_normal();
+            if (!dir.has_parent_path() || dir.parent_path() == dir) break;
+        }
+    }
+    return {};
+}
+
+// A remembered path as this launch should use it: as is when it exists (or,
+// with may_be_new, when its folder exists: a memory card not created yet), else
+// relocated into the moved game folder, else empty (fall back to the default).
+static std::filesystem::path settle_remembered_path(const char* what,
+                                                    const std::filesystem::path& p,
+                                                    bool may_be_new,
+                                                    const char* argv0) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (p.empty() || fs::exists(p, ec)) return p;
+    if (may_be_new && p.has_parent_path() && fs::is_directory(p.parent_path(), ec))
+        return p;
+    const fs::path moved = relocate_moved_path(p, argv0);
+    std::fprintf(stdout, "psxrecomp: %s %s not found; %s%s\n", what,
+                 p.string().c_str(),
+                 moved.empty() ? "using the default" : "using ",
+                 moved.string().c_str());
+    return moved;
+}
+
 static std::filesystem::path read_cached_path(const char* argv0, const char* filename) {
     std::ifstream f(sidecar_cfg_path(argv0, filename));
     if (!f.is_open()) return {};
@@ -1963,7 +2012,11 @@ static std::filesystem::path read_cached_path(const char* argv0, const char* fil
     while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
         line.pop_back();
     }
-    return line.empty() ? std::filesystem::path{} : std::filesystem::path(line);
+    if (line.empty()) return {};
+    // A stale path is kept when nothing matches: callers test it and fall back.
+    const std::filesystem::path cached(line);
+    const std::filesystem::path moved = relocate_moved_path(cached, argv0);
+    return moved.empty() ? cached : moved;
 }
 
 static void write_cached_path(const char* argv0, const char* filename,
@@ -10743,16 +10796,30 @@ int main(int argc, char** argv) {
         }
         if (us.has_spu_hq)         g_audio_spu_hq    = us.spu_hq;
         if (us.has_master_volume)  host_volume_set(us.master_volume);
-        if (us.has_bios_path && !bios_from_cli && !us.bios_path.empty()) {
-            settings_bios_storage = us.bios_path.string();
+        /* Paths are remembered absolute: settle each one, so a moved or
+         * copied game folder still finds its disc and cards (GH#189). */
+        const std::filesystem::path us_bios = (us.has_bios_path && !bios_from_cli)
+            ? settle_remembered_path("settings.toml [bios] path", us.bios_path, false, argv[0])
+            : std::filesystem::path{};
+        if (!us_bios.empty()) {
+            settings_bios_storage = us_bios.string();
             bios_path = settings_bios_storage.c_str();
             bios_explicit = true;
         }
-        if (us.has_disc_path && !disc_override_path)
-            resolved_disc = normalize_disc_path_for_launch(us.disc_path);
-        if (us.has_memcard_dir)                      memcard_dir   = us.memcard_dir;
-        if (us.has_memcard1_path)    memcard1_path    = us.memcard1_path;
-        if (us.has_memcard2_path)    memcard2_path    = us.memcard2_path;
+        if (us.has_disc_path && !disc_override_path) {
+            const std::filesystem::path d =
+                settle_remembered_path("settings.toml [disc] path", us.disc_path, false, argv[0]);
+            if (!d.empty()) resolved_disc = normalize_disc_path_for_launch(d);
+        }
+        if (us.has_memcard_dir) {
+            const std::filesystem::path d =
+                settle_remembered_path("settings.toml [memcard] dir", us.memcard_dir, true, argv[0]);
+            if (!d.empty()) memcard_dir = d;
+        }
+        if (us.has_memcard1_path)
+            memcard1_path = settle_remembered_path("settings.toml [memcard] card1", us.memcard1_path, true, argv[0]);
+        if (us.has_memcard2_path)
+            memcard2_path = settle_remembered_path("settings.toml [memcard] card2", us.memcard2_path, true, argv[0]);
         if (us.has_memcard1_enabled) memcard1_enabled = us.memcard1_enabled;
         if (us.has_memcard2_enabled) memcard2_enabled = us.memcard2_enabled;
         if (us.has_multitap_enabled) multitap_enabled = us.multitap_enabled;

@@ -1,0 +1,42 @@
+{
+ "about": "P. Jack's Tekken Tag Tournament (PS2) ending (scene 31): Gun Jack and P. Jack stand side by side, raise their hands and fly off together on their jetpacks, a trail of white smoke puffs left behind P. Jack's feet (cmd 18 at nodes 87 / 96 every 5 frames, 610-830). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "pjack",
+ "arena": 0,
+ "dark": 0,
+ "trigger": "arcade-end p1=pjack",
+ "ttt_stage": {
+  "stage": 0,
+  "why": "the PS2 script's stage 0 (scene table 0x51B388), TTT arcade's stage 0, Paul's (the rail bridge seen on the PS2 at 650-730): every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, the T3 arena 0 above (tools/ps2/ttt_endings.json)"
+ },
+ "sprite_colour": "202020",
+ "sprite_why": "the jetpacks' puffs are TTT's kind 3 soft disc (white, as Kunimitsu's snow), clearly visible light grey smoke against the sky on the PS2 (pictures at 669-789)",
+ "actors": [
+  {
+   "cast": "pjack",
+   "costume": 0,
+   "skeleton": "pjack",
+   "retarget": [
+    "--basis",
+    "canonical",
+    "--twists",
+    "--collars",
+    "--world"
+   ],
+   "why": "TTT costume -1 (the player's): T3 costume 0"
+  },
+  {
+   "cast": "gunjack",
+   "costume": 0,
+   "skeleton": "jack2",
+   "idle": "roster/Gunjack-TTT1-idle.poses",
+   "retarget": [
+    "--calib",
+    "{actor0}",
+    "--twists",
+    "--collars"
+   ],
+   "why": "the Tekken 3 native on Jack-2's TTT1 skeleton (no TTT1 model of his own in the import), his TTT1 stance; TTT costume 2: T3 costume 0"
+  }
+ ],
+ "ignore": []
+}

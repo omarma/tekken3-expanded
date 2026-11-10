@@ -87,7 +87,9 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.tekken3=tk.StringVar(value=saved.get('tekken3',''))
             self.cinematics=tk.BooleanVar(value=saved.get('ttt_cinematics',False))
             self.ttt_disc=tk.StringVar(value=saved.get('ttt_disc',''))
-            self.controls=[];self.ttt1_controls=[]
+            self.dr_iso=tk.StringVar(value=saved.get('dr_iso',''))
+            self.dr_content=tk.BooleanVar(value=saved.get('dr_content',bool(saved.get('dr_iso'))))
+            self.controls=[];self.ttt1_controls=[];self.dr_controls=[]
             if android_only:self.android_page(root)
             else:self.setup_page(root)
             # An earlier setup: up to date (Setup Tekken 3 opened it), or an update needs it.
@@ -123,6 +125,14 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             # Optional: the TTT stages' PS2 music (BGM SELECT: REMIXED) and the endings' music.
             self.file_row(root,'Tekken Tag Tournament · USA PS2 disc (optional: PS2 music of the TTT stages and TTT Cinematics)',
                           self.ttt_disc,[('Disc image','*.cue *.bin *.iso')],ttt1=True)
+            # Tekken 5 DR Content (experimental, F34): ticked, the Dark Resurrection content is copied
+            # from the player's PSP disc; for now Jin's DR moveset. Unticked, none of it.
+            self.dr_check=ttk.Checkbutton(root,text="Add-on: Tekken 5 DR Content (experimental: it will hold Tekken 5 Dark Resurrection's content;"
+                                          " for now only Jin's traditional karate moveset)",variable=self.dr_content,command=self.update_ttt1)
+            self.dr_check.pack(anchor='w',pady=(6,6));self.controls.append(self.dr_check);self.ttt1_controls.append(self.dr_check)
+            self.file_row(root,"Tekken: Dark Resurrection · USA PSP disc, copied by Tekken 5 DR Content (needs PPSSPP installed)",
+                              self.dr_iso,[('Disc image','*.iso')],ttt1=True)
+            self.dr_controls.extend(w for w in self.ttt1_controls[-2:])
             self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",variable=self.cinematics)
             self.cinematics_check.pack(anchor='w',pady=(6,6));self.controls.append(self.cinematics_check);self.ttt1_controls.append(self.cinematics_check)
             ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+
@@ -155,6 +165,9 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                 if not self.tekken3.get() and (folder/'tekken3.zip').is_file():self.tekken3.set(str(folder/'tekken3.zip'))
         def update_ttt1(self):
             for widget in self.ttt1_controls:widget.configure(state='normal' if self.ttt1.get() and not self.busy else 'disabled')
+            # The DR disc's field only with Tekken 5 DR Content ticked.
+            for widget in self.dr_controls:
+                widget.configure(state='normal' if self.ttt1.get() and self.dr_content.get() and not self.busy else 'disabled')
         def set_busy(self,value):
             self.busy=value
             for widget in self.controls:widget.configure(state='disabled' if value else 'normal')
@@ -188,6 +201,9 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                 if self.tekken3.get():command+=['--tekken3',self.tekken3.get()]
                 if self.cinematics.get():command.append('--ttt-cinematics')
                 if self.ttt_disc.get():command+=['--ttt-disc',self.ttt_disc.get()]
+                if self.dr_content.get():
+                    command.append('--dr-content')
+                    if self.dr_iso.get():command+=['--dr-iso',self.dr_iso.get()]
             else:command+=['--disc',self.disc.get(),'--no-ttt1']
             try:
                 self.job=ProcessJob()
@@ -205,7 +221,8 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             ttt1=self.ttt1.get()
             self.status.set('Checking your optional files');self.detail.set('');self.window.update_idletasks()
             problems=backend.optional_problems(ttt1,(ttt1 and self.tekken3.get()) or None,(ttt1 and self.ttt_disc.get()) or None,
-                                               self.cinematics.get(),pc)
+                                               self.cinematics.get(),pc,(ttt1 and self.dr_content.get() and self.dr_iso.get()) or None,
+                                               ttt1 and self.dr_content.get())
             if not problems or self.ask_optional(problems):return True
             names=' and '.join(p['file'] for p in problems)
             self.status.set('Choose another '+names+('' if not self.android_only else ' in Setup Tekken 3'))

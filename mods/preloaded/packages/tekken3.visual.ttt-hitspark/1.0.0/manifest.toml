@@ -14,7 +14,7 @@ exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
 [[feature]]
 id = "ttt-hitspark"
 name = "TTT Hitspark (64x64)"
-description = "Strong hits show each character's TTT1 effect in 64x64, the same size on screen, finer. Does nothing until the TTT1 characters are imported. Restart after changing."
+description = "Strong hits show each character's TTT1 effect in 64x64, the same size on screen, finer, and always to its end (the arcade lets a move's own sparks cut it short: Gun Jack's Piston Gun Assault). Does nothing until the TTT1 characters are imported. Restart after changing."
 group = "Visual Enhancements"
 default_enabled = true
 

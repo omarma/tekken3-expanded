@@ -14,7 +14,7 @@ exe_sha256 = "fbda8b68e5799dbef4af39a161783bc670c15b0aa0e87dce65e210717da19b8c"
 [[feature]]
 id = "ttt1-characters"
 name = "TTT1 Characters"
-description = "Adds the imported TTT1 characters as characters of their own. At the character selector, R2 / L2 switch between the Tekken 3 grid and the Tag page of guests; player 1 and player 2 can fight with two different guests. Team Battle offers one guest cell. Tag mechanics are excluded. With the TTT PS2 disc given to the setup, the PS2 EFFECTS row of GAME OPTION (ON by default) draws Devil's and Angel's lasers as Tekken Tag Tournament on the PS2 does; OFF keeps the arcade's."
+description = "Adds the imported TTT1 characters as characters of their own. At the character selector, R2 / L2 switch between the Tekken 3 grid and the Tag page of guests; player 1 and player 2 can fight with two different guests. Team Battle offers one guest cell. Tag mechanics are excluded. With the TTT PS2 disc given to the setup, the PS2 EFFECTS row of GAME OPTION (OFF by default) draws Devil's and Angel's lasers as Tekken Tag Tournament on the PS2 does, and gives Unknown her own PS2 katana and dagger in Yoshimitsu's and Kunimitsu's styles; OFF keeps the arcade's."
 group = "Characters"
 default_enabled = true
 
@@ -25,6 +25,10 @@ id = "tekken3.ttt1-characters"
 [[plugin]]
 feature = "ttt1-characters"
 id = "tekken3.ttt1-ps2-laser"
+
+[[plugin]]
+feature = "ttt1-characters"
+id = "tekken3.ttt1-ps2-weapons"
 
 [[feature]]
 id = "ttt-stages"

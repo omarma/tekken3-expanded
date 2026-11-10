@@ -84,9 +84,28 @@ def parse(command):
     return steps
 
 
+# Movesets DR (tools/dr_setup.py) : cle 'dr-<perso>' (dr-jin, dr-paul, dr-deviljin), page du
+# wiki tools/data/wiki/dr-<perso>.wiki, paquet <Radical>-DR-* du catalogue TEKKEN3_DR_ROSTER (le
+# catalogue de l'import, sinon). Un natif (Jin, Paul) joue ses coups DR (TEKKEN3_NATIVE_MOVES=dr),
+# Devil Jin prend la place de Jin (TEKKEN3_FORCE_FIGHTERS).
+def dr_key(key): return key.startswith('dr-')
+
+
+def dr_roster():
+    import os
+    return Path(os.environ.get('TEKKEN3_DR_ROSTER') or WORK / 'roster')
+
+
+def dr_radical(key):
+    sys.path[:0] = [str(ROOT / 'tools/psp'), str(ROOT / 'tools/t5')]
+    import dr_convert
+    return dr_convert.fighter(key[3:])[2]
+
+
 def pack_prefix(key):
     """(dossier guest, prefixe) d'une cle : 'kazuya' -> Kazuya-TTT1, 'unknown@paul'
-    -> Unknown@Paul-TTT1 (le moveset d'un donneur, Tetsujin / Unknown)."""
+    -> Unknown@Paul-TTT1 (le moveset d'un donneur, Tetsujin / Unknown), 'dr-jin' -> Jin-DR."""
+    if dr_key(key): return dr_roster(), f'{dr_radical(key)}-DR'
     if key in NATIVES: return WORK / 'natives' / key, f'{key.capitalize()}-TTT1'
     guest, _, donor = key.partition('@')
     name = guest.capitalize() + ('@' + donor.capitalize() if donor else '')
@@ -298,6 +317,17 @@ def held(*bits):
     return m
 
 
+def saves_fixture():
+    """Sauvegarde 8 (selecteur Practice) : celle des bancs TTT1, sinon celle de move_measure (DR)."""
+    for d in (ROOT / 'workspace/fixtures/ps1-saves', ROOT / 'workspace/dr-a1/measure/saves'):
+        if list(d.glob('*/state_*_slot08.pst')): return d
+    raise SystemExit('pas de sauvegarde 8 : python tools/t5/move_measure.py la prepare')
+
+
+# Natifs DR (cle -> numero T3, case de la grille Practice).
+DR_NATIVE = {'jin': 9, 'paul': 0}
+
+
 class Game:
     def __init__(self, exe, guest, work, port=None, player=0):
         import os, shutil, socket, subprocess
@@ -306,14 +336,17 @@ class Game:
         self.client, self.work, self.p = debug_client, work, None
         if port: self.port = port; return
         work.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(ROOT / 'workspace/fixtures/ps1-saves', work / 'saves', dirs_exist_ok=True)
+        shutil.copytree(saves_fixture(), work / 'saves', dirs_exist_ok=True)
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0)); self.port = s.getsockname()[1]
         env = dict(os.environ, SDL_AUDIO_DRIVER='dummy', TEKKEN3_TTT1_ROSTER='1',
                    TEKKEN3_GUEST_NATIVE='1', TEKKEN3_GUEST_UNVERIFIED='1',
                    TEKKEN3_NATIVE_MOVES='0')            # Jin picked without the MOVESET card
         for k in ('TEKKEN3_TTT1_ASSETS', 'TEKKEN3_JUN_ASSETS', 'TEKKEN3_GUEST', 'TEKKEN3_GUEST_P2'): env.pop(k, None)
-        if guest:
+        if guest and dr_key(guest):
+            env['TEKKEN3_NATIVE_MOVES'], env['TEKKEN3_TTT1_ASSETS'] = 'dr', str(dr_roster().resolve())
+            if guest[3:] not in DR_NATIVE: env['TEKKEN3_FORCE_FIGHTERS'] = f'{guest[3:]},-'
+        elif guest:
             env['TEKKEN3_GUEST'], _, donor = guest.partition('@')
             if player: env['TEKKEN3_GUEST_P2'] = env['TEKKEN3_GUEST']
             if donor: env['TEKKEN3_TETSUJIN_MOVESET'] = donor   # Tetsujin au round, Unknown au combat
@@ -360,16 +393,23 @@ def start(exe, guest, work, combo=False, choice=None, player=0):
             if time.monotonic() > end: raise RuntimeError('selecteur Practice non atteint')
             time.sleep(.3)
         g.wait_frames(30)
+        # Un natif DR (Paul) est choisi a la grille, sur sa case : son numero ecrit apres coup ne
+        # chargeait pas le combat.
+        native = DR_NATIVE.get(guest[3:], JIN) if guest and dr_key(guest) else JIN
         for p in (0, 1):
+            target = native if p == player else JIN
             for move in [held(L)] + [held(R)] * 11 + [held(D)] + [held(R)] * 11:
-                if g.u8(CURSOR + p) == JIN: break
+                if g.u8(CURSOR + p) == target: break
                 g.tap(move); g.wait_frames(6)
             g.tap(held(PAD[3])); g.wait_frames(30)
-        if guest or choice is not None:
-            for a in CHOICE[player]: g.w8(a, GUEST_ID if choice is None else choice)
-        end = time.monotonic() + 240
+        if guest and not dr_key(guest) and choice is None: choice = GUEST_ID
+        if choice is not None:
+            for a in CHOICE[player]: g.w8(a, choice)
+        end, nudge = time.monotonic() + 240, time.monotonic() + 10
         while not (g.u32(STATE) == 8 and g.u16(ACTOR[1] + 0x3f6) > 0):
-            if time.monotonic() > end: raise RuntimeError('combat non charge')
+            if time.monotonic() > end: g.shot('non-charge.png'); raise RuntimeError('combat non charge')
+            # STAGE SELECT (Expanded) attend parfois une confirmation au selecteur.
+            if g.u32(STATE) == 9 and time.monotonic() > nudge: g.tap(held(PAD[3])); nudge = time.monotonic() + 3
             time.sleep(.5)
         g.wait_frames(120)
         g.q(dict(cmd='turbo', enabled=0))
@@ -637,7 +677,7 @@ def probe(key, port=None, only=None, exe=ROOT / 'build-opt-dbg/Tekken_3_Expanded
         result = json.loads(saved.read_text())       # --only / --dropped : on remplace ces combos-la
         if dropped: keep = {c['command'] for c in result['combos'] if c['moves']}
         result['combos'] = [c for c in result['combos'] if (only and only not in c['name']) or c['command'] in keep]
-    guest = None if native else f'unknown@{key}' if key in NATIVES else key
+    guest = None if native else f'unknown@{key}' if key in NATIVES else key   # dr-<perso> : Game le sait
     if key in NATIVES and not port: stage_native(exe, key)
     work = RUN / (tag or key.replace(':', '-'))
     g = Game(None, guest, work, port) if port else start(exe, guest, work)
@@ -749,6 +789,9 @@ def chosen(key):
         # Machine Gun Kick et Laser Edge Kick Combo) : un seul combo.
         if c['moves'] and len(c['moves']) >= 2 and tuple(c['moves']) not in seen:
             seen.add(tuple(c['moves'])); ok.append(c)
+    # Un perso DR : ses 10 hit combos seulement, pas les chaines (l'utilisateur, 2026-11-08 :
+    # « garde que les 10 hit combo »).
+    if dr_key(key): ok = [c for c in ok if c['ten']]
     tens = [c for c in ok if c['ten']]
     short = sorted((c for c in ok if not c['ten']), key=lambda c: len(c['moves']))
     return (short[:max(2, MAX_COMBOS - len(tens))] + tens)[:MAX_COMBOS]
@@ -854,7 +897,8 @@ def main():
             g.close()
     elif cmd == 'check':
         only = next(([int(x) for x in k[7:].split(',')] for k in keys if k.startswith('--only=')), None)
-        for key in [k for k in keys if not k.startswith('--')]: check(key, only=only, p2='--p2' in keys)
+        exe = next((Path(k[6:]) for k in keys if k.startswith('--exe=')), ROOT / 'build-opt-dbg/Tekken_3_Expanded')
+        for key in [k for k in keys if not k.startswith('--')]: check(key, exe, only=only, p2='--p2' in keys)
     elif cmd == 'build':
         everything = not keys
         for key in keys or sorted(p.stem for p in OUT.glob('*.json') if p.stem != 'wiki'):

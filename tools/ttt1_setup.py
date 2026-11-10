@@ -22,13 +22,17 @@ is imported, and with them everything built from those imports:
    TTT1_IMPORT_VERSION changes) lists again;
 3. Devil Jin (Jin confirmed with both punches): his model and his moves,
    once Jun, Devil and Unknown are imported;
-4. the TTT Hitspark mod's strong-hit effects of Tekken 3's own cast, read
+4. Tekken 3's own fighters on their TTT1 arcade models (F32,
+   tools/data/ttt1_native_models.json, tools/ttt1_native_model.py), one
+   process per native, from the ROM regions and a select RAM of step 1;
+5. the TTT Hitspark mod's strong-hit effects of Tekken 3's own cast, read
    from the ROM (tools/ttt1_hitspark.py), Jin's red lightning included;
-5. with --tekken3, the arcade difficulty levels (tools/difficulty/import.py,
+6. with --tekken3, the arcade difficulty levels (tools/difficulty/import.py,
    read from both program ROMs, no MAME either);
-6. the Practice move lists from the Tekken wiki (a warning only without a
-   network), the COMBO TRAINING packs from tools/data/combos, the catalogue
-   the TTT1 Characters mod reads (tools/ttt1_stage_roster.py), and a rebuild
+7. the Practice move lists from the Tekken wiki pages kept in tools/data/wiki
+   (the guests', and Kuma's, Ogre's, Gun Jack's and True Ogre's own), the
+   COMBO TRAINING packs from tools/data/combos, the catalogue the TTT1
+   Characters mod reads (tools/ttt1_stage_roster.py), and a rebuild
    so it all ships beside the executable.
 
 A full import stamps the catalogue with TTT1_IMPORT_VERSION
@@ -47,7 +51,10 @@ import ttt1_import_version as V
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'workspace/ttt1-import'
 LOGS = WORK / 'logs'
-TABLE = json.loads((ROOT / 'tools/data/ttt1_characters.json').read_text())['characters']
+CHARACTERS = json.loads((ROOT / 'tools/data/ttt1_characters.json').read_text())
+TABLE = CHARACTERS['characters']
+# Kuma, Ogre, Gun Jack and True Ogre: their TTT1 moves have their own import (natives()).
+NATIVES = list(CHARACTERS['natives'])
 
 
 def run(args, **kwargs):
@@ -160,6 +167,25 @@ def devil_jin():
     logged([sys.executable, ROOT / 'tools/ttt1_devil_jin_moves.py'], LOGS / 'devil-jin-moves.log')
 
 
+def native_models(jobs=None):
+    """Tekken 3's own fighters on their TTT1 arcade models (F32): the slot of
+    each selection button in tools/data/ttt1_native_models.json, converted
+    as the guests' (tools/ttt1_native_model.py), one process per native. A
+    slot that does not convert leaves that button on the PS1 model."""
+    table = json.loads((ROOT / 'tools/data/ttt1_native_models.json').read_text(encoding='utf-8'))['natives']
+    out = WORK / 'native-models'
+    jobs = jobs or min(os.cpu_count() or 4, 12)
+    print(f'Native models: {len(table)} fighters, {jobs} at a time...', flush=True)
+    parallel(jobs, [(k, [sys.executable, ROOT / 'tools/ttt1_native_model.py', k, '--work', WORK, '--out', out],
+                     LOGS / f'native-model-{k}.log') for k in table])
+    done, failed = 0, []
+    for k in table:
+        report = json.loads((out / f'{k}-report.json').read_text(encoding='utf-8'))
+        done += sum('error' not in r for r in report.values())
+        failed += [f'{k} {b} ({r["slot"]})' for b, r in report.items() if 'error' in r]
+    print(f'  {done} models' + (f'; kept on the PS1 model: {", ".join(failed)}' if failed else ''), flush=True)
+
+
 def jin_omen(moves=False):
     """Jin's Omen: the Devil mark painted on his Tekken 3 face (from Jun's
     capture, like Devil Jin's face). moves: convert Unknown's Jin moveset
@@ -256,6 +282,17 @@ def hitspark():
     ttt1_hitspark.write()
 
 
+def ui_hd():
+    """The guests' interface packs made again as a new import makes them
+    (ttt1_import.ui_ttt1, from the ROM regions: new palettes, HD tile and
+    portrait, F28), then Panda's and Tiger's."""
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1')]
+    import ttt1_import as I
+    for key in [k for k in characters() if imported(k)]:
+        I.ui_ttt1(key, TABLE[key], WORK / key / 'guest', key.capitalize(), WORK / key)
+    panda_tiger()
+
+
 def has_work_files():
     """The import's work files are there: the ROM regions and the captures
     (gone once the setup's "free up disk space" deleted workspace/)."""
@@ -310,7 +347,7 @@ def accessories_step(roster, work):
             model = WORK / key / ('ttt1.3dm' if c == 1 else f'costume{c}/ttt1.3dm')
             out = WORK / key / 'guest' / f'{key.capitalize()}-TTT1-arcade-P{c}.acc'
             if slot is None or not model.is_file() or not out.with_suffix('.3dm').is_file(): continue
-            convert.convert(load(model))
+            convert.convert(load(model), keep=accessories.keep_rows(ram, slot))
             springs = accessories.write(out, ram, slot, {s: t for s, t in convert.S2T.items() if s > 20})
             if not springs['swinging']: out.unlink()
             print(f'  {key} costume {c}: springs on bones {", ".join(springs["swinging"]) or "none"}', flush=True)
@@ -328,6 +365,23 @@ def native_limbs_step(roster, work):
     N.main([WORK if work else roster])     # WORK: the natives' own folders and the roster
 
 
+def native_movelists_step(roster, work):
+    """Kuma's, Ogre's, Gun Jack's and True Ogre's Practice move lists for their TTT1
+    moves (tools/ttt1/movelist.py, from tools/data/wiki): into their own folders,
+    staged again after the steps; without the work files, straight into the roster,
+    for the natives its natives.txt lists."""
+    if work:
+        run([sys.executable, ROOT / 'tools/ttt1/movelist.py', *NATIVES], cwd=ROOT)
+        return
+    sys.path.insert(0, str(ROOT / 'tools/ttt1'))
+    import movelist as M
+    listed = roster / 'natives.txt'
+    staged = {l.split()[1] for l in listed.read_text(encoding='utf-8').splitlines()
+              if len(l.split()) > 1} if listed.is_file() else set()
+    for key in [k for k in NATIVES if k in staged]:
+        (roster / f'{key.capitalize()}-TTT1-movelist.bin').write_bytes(M.build(key)[0])
+
+
 UPDATE_STEPS = {'hands': hands_step,
                 'devil-jin': lambda roster, work: devil_jin(),
                 'panda-tiger': lambda roster, work: panda_tiger(),
@@ -342,7 +396,11 @@ UPDATE_STEPS = {'hands': hands_step,
                 'hit-effect-64': lambda roster, work: hit_effect_64(),
                 'native-limbs': native_limbs_step,
                 'unknown-hilt': unknown_hilt_step,
-                'hit-effect-64-more': lambda roster, work: hitspark()}
+                'hit-effect-64-more': lambda roster, work: hitspark(),
+                'exact-welds': half_welds_step,
+                'ui-hd': lambda roster, work: ui_hd(),
+                'native-models': lambda roster, work: native_models(),
+                'native-movelists': native_movelists_step}
 
 
 def update(roster):
@@ -426,6 +484,7 @@ def main():
     devil_jin()
     jin_omen()
     panda_tiger()
+    if not args.character: native_models(args.jobs)
     print("TTT Hitspark: the natives' strong-hit effects...", flush=True)
     command = [sys.executable, ROOT / 'tools/ttt1_hitspark.py']
     if args.ttt1: command += ['--ttt1', args.ttt1]
@@ -437,7 +496,9 @@ def main():
         logged(command, LOGS / 'difficulty.log')
     # Practice's COMMAND LIST comes from the Tekken wiki pages kept in the
     # repository (tools/data/wiki): no network needed, the same lists for everyone.
-    run([sys.executable, ROOT / 'tools/ttt1/movelist.py', *wanted], cwd=ROOT)
+    # A full import also gives Kuma, Ogre, Gun Jack and True Ogre theirs, for
+    # their own TTT1 moves (natives/<key>).
+    run([sys.executable, ROOT / 'tools/ttt1/movelist.py', *wanted, *([] if args.character else NATIVES)], cwd=ROOT)
     # COMBO TRAINING: the measured combos (tools/data/combos) become each guest's pack.
     run([sys.executable, ROOT / 'tools/ttt1/combos.py', 'build'], cwd=ROOT)
     # A full import stamps the catalogue with this import version; importing

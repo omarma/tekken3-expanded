@@ -1,5 +1,8 @@
 # Third-party notices
 
+The upstream project and this fork's own code are under PolyForm Noncommercial
+1.0.0 (`LICENSE`). The components below keep their own licenses.
+
 The modified sources of psxrecomp are based on commit
 `5ab24616f18b8005d80c1b971f95ab3c3bdd650d`.
 Copyright 2026 Matthew Stan; PolyForm Noncommercial 1.0.0.

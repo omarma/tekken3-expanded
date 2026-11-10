@@ -2,7 +2,7 @@
 """Third costume at the selectors: triangle and Start, natives and guests (B39, GH#92, GH#90).
 
     python tools/test_third_costume.py [--modes arcade,vs,ball] [--build build-rel-lite]
-                                       [--memcard-dir saves] [--measure]
+                                       [--memcard-dir saves] [--measure] [--native-models DIR]
 
 Boots a private copy of the build (software renderer, headless, x1) on a copy
 of the memory card, the MOVESET card off (TEKKEN3_NATIVE_MOVES=0: B14 / B40),
@@ -21,6 +21,12 @@ guest with a third TTT1 costume (Jun) must do what Law does; one without
 (Wang, Unknown, Devil) what a locked native does: never costume 3, which
 would be its first costume again (GH#90). Before the fix: Jun on triangle
 took costume 1 (GH#92). --measure prints the table without asserting.
+
+R1 (F32): nothing anywhere, as in the game, unless --native-models DIR (a TTT1
+catalogue with the natives' models, TEKKEN3_TTT1_NATIVE_MODELS=all): a native
+drawn by its TTT1 model with its third costume unlocked then takes its punch
+costume on triangle (its RP model) and costume 3 on R1 and Start
+(src/tekken3_native_moves.c); the others and the guests as before.
 """
 import argparse, os, shutil, socket, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -32,9 +38,10 @@ import debug_client
 SCREEN, PHASE, MODE, LINE, UNLOCKS = 0x800ae204, 0x800ae224, 0x800afa88, 0x80097f40, 0x80097ef4
 P1_CELL, P1_STATE, P1_FIGHTER, P1_COSTUME = 0x80118650, 0x8011864c, 0x80118668, 0x8011866c
 BLOCK = 0x800b8d70
-START, START_SELECT, CROSS, SQUARE, TRIANGLE, R2 = 0xfff7, 0xfff6, 0xbfff, 0x7fff, 0xefff, 0xfdff
+START, START_SELECT, CROSS, SQUARE, TRIANGLE, R2, R1 = 0xfff7, 0xfff6, 0xbfff, 0x7fff, 0xefff, 0xfdff, 0xf7ff
 UP, DOWN, LEFT, RIGHT = 0xffef, 0xffbf, 0xff7f, 0xffdf
-BUTTONS = {'triangle': TRIANGLE, 'start': START}
+BUTTONS = {'triangle': TRIANGLE, 'start': START, 'r1': R1}
+NATIVE_MODELS = False                       # --native-models
 MODES = {'vs': 1, 'ball': 7}
 GUEST_ID, SAVESTATE, BALL_LINE = 23, 9, 6
 EXE = 'Tekken_3_Expanded.exe' if os.name == 'nt' else 'Tekken_3_Expanded'
@@ -211,9 +218,13 @@ def grid_taken(g, who, fighter, press):
 
 def expected(g, who, button, unlocks):
     """What a native does in the same place: costume 3 when it has it (its
-    bit in 0x80097EF4), else punch on triangle and nothing on Start."""
+    bit in 0x80097EF4), else punch on triangle and nothing on Start. R1:
+    nothing, but for a native on its TTT1 model with its third costume, whose
+    triangle is then its punch costume (F32)."""
     if who in NATIVES: third = bool(unlocks >> NATIVES[who] & 1)
     else: third = (Path(g.dir / 'run/mods/ttt1') / f'{who.capitalize()}-TTT1-arcade-P3.3dm').is_file()
+    if NATIVE_MODELS and who in NATIVES and third: return 1 if button == 'triangle' else 3
+    if button == 'r1': return None
     return 3 if third else (1 if button == 'triangle' else None)
 
 
@@ -223,8 +234,15 @@ def main():
     ap.add_argument('--build', default=str(ROOT / 'build-rel-lite'))
     ap.add_argument('--memcard-dir', default=str(ROOT / 'saves'))
     ap.add_argument('--measure', action='store_true')
+    ap.add_argument('--native-models', metavar='DIR', help='the natives on their TTT1 models, from this catalogue')
     a = ap.parse_args()
-    g = Game(Path(a.build), Path(a.memcard_dir), {'TEKKEN3_NATIVE_MOVES': '0'})
+    # F32 E6: the natives' TTT1 models are the default with the import; without the option, off.
+    env = {'TEKKEN3_NATIVE_MOVES': '0', 'TEKKEN3_TTT1_NATIVE_MODELS': '0'}
+    if a.native_models:
+        global NATIVE_MODELS
+        NATIVE_MODELS = True
+        env.update(TEKKEN3_TTT1_NATIVE_MODELS='all', TEKKEN3_TTT1_ASSETS=str(Path(a.native_models).resolve()))
+    g = Game(Path(a.build), Path(a.memcard_dir), env)
     bad = []
     try:
         to_arcade(g)

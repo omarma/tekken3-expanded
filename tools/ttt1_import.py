@@ -143,13 +143,20 @@ EXTRA = {109: (227, 250), 110: (230, 253), 115: (236, 259), 116: (237, 260),
          # Unknown (index 33, force_index) : modeles retrouves au survol (0x354108),
          # releve du 2026-09-25 ; 114 (variante 7) est le loup, pas un costume :
          # 26/012 + 27/012 (indice 12 de 0x8019E3B4), monte par 0x801694A8 (F08).
-         112: (233, 256), 113: (234, 257), 114: (235, 258)}
+         112: (233, 256), 113: (234, 257), 114: (235, 258),
+         # Natifs (F32 E2) : la borne prend aussi dans 26/k + 27/k les emplacements de la
+         # table 0x8019E3B4 sous 109 (char_model_entry_load, ttt-ps1 src/fin/80163554.c :
+         # True Ogre 32, 33, 102, 103 ; Anna 36, 37 ; King 76) et Anna 111. Le repertoire
+         # 24 garde sous ces numeros d'autres fichiers (24/036 ne se convertit pas).
+         32: (223, 246), 33: (224, 247), 102: (225, 248), 103: (226, 249),
+         36: (228, 251), 37: (229, 252), 76: (231, 254), 111: (232, 255)}
 
 
 def entries(slot):
     """Entrees (texture, modele) du repertoire 0x302238 pour un emplacement.
     Emplacements 0..108 : textures 0..108, modeles 109..217. Au-dela : table
-    EXTRA."""
+    EXTRA, qui passe avant (emplacements de la table 0x8019E3B4)."""
+    if slot in EXTRA: return EXTRA[slot]
     if slot < 109: return slot, 109 + slot
     if slot not in EXTRA: raise SystemExit(f'emplacement {slot} : costume supplementaire non releve en combat (EXTRA)')
     return EXTRA[slot]
@@ -196,15 +203,18 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     src, tex = load(work / 'ttt1.3dm'), bank[to:to + tn]
     face = faces(d, slot)
     shown, sources, (blink, flag_a, flag_b) = face or ((), [], (0, 0, 0))
-    import hilt
-    extra = hilt.prims(d, slot)                  # poignee de la lame d'Unknown, dessinee hors du modele
+    import hilt, stick
+    # poignee de la lame d'Unknown, baton de Mokujin (F32 E5) : dessines hors du modele
+    extra = hilt.prims(d, slot) + stick.prims(d, slot)
     try:
         report = texpack.plan(tex, src, [shown] + [(x, y) + shown[2:] for x, y in sources] if face else (), extra)
     except ValueError as e:
         if not str(e).startswith('visage'): raise
         print(f'ATTENTION : {e} ; costume sans expressions du visage')
         face = None; report = texpack.plan(tex, src, (), extra)
-    ps1, relocs = convert.convert(src)
+    import accessories
+    # Os balances avec borne ou collision par la borne : gardes sur leur propre partie (F32, Heihachi).
+    ps1, relocs = convert.convert(src, keep=accessories.keep_rows(d, slot))
     base = out / f'{name}-{stem or f"TTT1-arcade-P{costume}"}'
     base.with_suffix('.3dm').write_bytes(ps1)
     base.with_suffix('.relocs').write_bytes(struct.pack(f'<{len(relocs)}I', *relocs))
@@ -225,10 +235,10 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     layout = {s: t for s, t in convert.S2T.items() if s > 20}
     # Ressorts des os d'accessoires (queues, cheveux, pans...), de la table de l'arcade
     # 0x8019D674 pour cet emplacement, sur les os PS1 de ce placement.
-    import accessories
     springs = accessories.write(base.with_suffix('.acc'), d, slot, layout)
     if not springs['swinging']: base.with_suffix('.acc').unlink()
     if hilt.write(base.with_suffix('.hilt'), d, slot, convert.ps1_uv): print('poignee de la lame : 14 quads')
+    if stick.write(base.with_suffix('.stick'), d, slot, convert.ps1_uv): print('baton de Mokujin : 18 quads')
     print(f'modele : {len(ps1)} o, {len(relocs)} relocalisations, lignes 21..26 <- {layout}, '
           f'seconds maillages {convert.SECOND}')
     lost = convert.unplaced(src)
@@ -311,7 +321,7 @@ def costumes(ram, keys, entry, records, limbs, out, name, work):
     null dans la liste : pas de costume a ce rang (Tetsujin au Pied)."""
     slots = entry.get('costumes', [keys['slot']])
     for c in (2, 3):
-        for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
+        for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt', 'stick'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
         for f in (f'{name}-TTT1-combat-P{c}.jmv', f'{name}-TTT1-tables-P{c}.jst'): (out / f).unlink(missing_ok=True)
     report = {'1': dict(slot=slots[0])}
     for c, slot in enumerate(slots[1:], 2):
@@ -321,7 +331,7 @@ def costumes(ram, keys, entry, records, limbs, out, name, work):
             m = model(ram, slot, out, name, work / f'costume{c}', c)
         except ValueError as e:
             print(f'ATTENTION : costume {c} non converti, ecarte : {str(e).splitlines()[-1]}')
-            for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
+            for e in ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt', 'stick'): (out / f'{name}-TTT1-arcade-P{c}.{e}').unlink(missing_ok=True)
             report[str(c)] = dict(slot=slot, error=str(e))
             continue
         mv = moves(ram, keys, records, m['limbs'], out, name, f'-P{c}') if m['limbs'] != limbs else dict(shared=True)
@@ -438,6 +448,9 @@ def ui_ttt1(key, entry, out, name, work):
         (out / f'{name}-T3-{iname}.tim').write_bytes(tim)
     (out / f'{name}-T3-ui.jui').write_bytes(pack)
     print(f'interface : {len(pack)} o, portrait et cases depuis la ROM TTT1')
+    # F28 : case de grille HD (64 x 116, meme cadrage) et grand portrait HD (168 x 252, 15 bits),
+    # dessines par le jeu au-dela de x1 ; pas de case HD si la case vient de la vignette agrandie.
+    U.write_hd(images, ui_art.hd_tile(portrait, thumb, entry.get('tile_box'))[0], out, name)
     return dict(source='ttt1', bytes=len(pack), thumbnail=entry.get('thumbnail'))
 
 

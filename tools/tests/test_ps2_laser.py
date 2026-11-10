@@ -1,5 +1,5 @@
-"""Devil's and Angel's PS2 laser (tools/ps2/ttt_laser_install.py) and the Mishima's PS2
-strong-hit effects (tools/ps2/ttt_hitspark_ps2.py).
+"""Devil's and Angel's PS2 laser (tools/ps2/ttt_laser_install.py) and the Mishima's and
+Unknown's PS2 strong-hit effects (tools/ps2/ttt_hitspark_ps2.py).
 
     python -m unittest tools.tests.test_ps2_laser
 
@@ -176,6 +176,7 @@ HITSPARK_SHA256 = {
     'Kazuya': '11fa764109b560ba373e19f868477740327d056aac8fc01e856710d01d173514',
     'Devil': 'a0197ef832e7a338ac3deb932b1fc76b02bdc03d023f4f7ae047c01eb6a2acf8',
     'Angel': '8841aef775088799254ee27c8bfb49d225053f6329b466580982b274fe767aea',
+    'Unknown': '4096989debfa280cc6208d2d76ff6bded0488ad3d3bfcd2707ede4ad1af89eb4',
 }
 
 
@@ -225,12 +226,24 @@ class HitsparksFromTheDisc(unittest.TestCase):
         for name, want in HITSPARK_SHA256.items():
             data = self.files[f'{name}-PS2-hiteffect64.hfx']
             n, palettes, flags, cluts, _ = read_hfx(data)
-            self.assertEqual(n, min(hitspark.MOST, len(self.sets['Devil' if name == 'Angel' else name])), name)
+            self.assertEqual(n, min(hitspark.LONG.get(name, hitspark.MOST),
+                                    len(self.sets['Devil' if name == 'Angel' else name])), name)
             self.assertEqual((palettes, flags), (n, 1), name)
             for clut in cluts:
                 for v in clut: self.assertEqual(bool(v & 0x8000), v != 0, name)
             self.assertEqual(hashlib.sha256(data).hexdigest(), want,
                              f'{name}: the pack changed: increase laser_version.LASER_VERSION, then this')
+
+    def test_unknown_same_in_both_costumes(self):
+        # F33: her costume 2 file holds the same set (pixels and palettes).
+        with hitspark.ttt_disc.Disc(DISC) as d:
+            tekken = hitspark.ttt_disc.TekkenBin(d)
+            entry, offset, count, want = hitspark.SETS['Unknown']
+            hitspark.SETS['Unknown c2'] = (entry + 3, offset + 0x3b000, count, want)
+            try:
+                self.assertEqual(hitspark.digest(hitspark.read_set(d, tekken, 'Unknown c2')), want)
+            finally:
+                del hitspark.SETS['Unknown c2']
 
     def test_angel_is_devil_in_gold(self):
         devil = read_hfx(self.files['Devil-PS2-hiteffect64.hfx'])

@@ -1,0 +1,5 @@
+{
+  "_doc": "Turn (degrees, Tekken 3's channels) a DR throw's victim makes lying on the floor, from his landing to the side's end: Tekken 3's get-up turns him to the line to his attacker (rot = angle_opp + 0x8000) at once, and DR's animation leaves him across it (u/f+1+2, ending face down on 89: rot 12216 against 17071 wanted without it, measured with workspace/dr-a4/probe_facing_jin.py). dr_pack.py turns the side's lying frames by it, little by little; end_turns() then follows.",
+  "Jz_front_y": 27,
+  "Jz_front2_y": 27
+}

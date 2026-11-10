@@ -124,7 +124,7 @@ def portrait_tile(portrait, box, w, h):
     big = Image.new('RGBA', (portrait.width + 2 * PAD, portrait.height + 2 * PAD), (0, 0, 0, 0))
     big.alpha_composite(portrait, (PAD, PAD))
     face = big.resize((w, h), Image.LANCZOS, box=(PAD + cx - bw / 2, PAD + cy - bh / 2, PAD + cx + bw / 2, PAD + cy + bh / 2))
-    out = tile_background(h, character_color(portrait)).convert('RGBA'); out.alpha_composite(face)
+    out = tile_background(h, character_color(portrait), w).convert('RGBA'); out.alpha_composite(face)
     return out
 
 
@@ -138,18 +138,48 @@ def character_color(portrait):
     return tuple(round(v * 255) for v in colorsys.hsv_to_rgb(hue, 0.64, 0.81))
 
 
-def tile_background(rows, top):
+def tile_background(rows, top, cols=44):
     """Fond des cases : la couleur du personnage sur toute la hauteur, assombrie
     vers le bas, comme sur les cases de T3 (Jin, King, Paul : couleur visible
     sur les cotes jusqu'en bas ; les cheveux couvrent souvent le haut)."""
-    bg = Image.new('RGB', (44, rows)); px = bg.load()
+    bg = Image.new('RGB', (cols, rows)); px = bg.load()
     for y in range(rows):
         k = 1 - 0.55 * y / max(1, rows - 1)
-        for x in range(44): px[x, y] = tuple(round(c * k) for c in top)
+        for x in range(cols): px[x, y] = tuple(round(c * k) for c in top)
     return bg
 
 
 THUMB_MATCH = 0.6     # en dessous, le portrait n'est pas le rendu de la vignette
+
+
+def tile_maker(portrait, thumb=None, box=None):
+    """(tile(w, h), comment, fine) : comment faire les cases de grille (voir
+    t3_images). fine : la case vient du grand portrait, donc existe aussi plus
+    fine que 44 x 58 (hd_tile) ; pas quand c'est la vignette TTT1 agrandie."""
+    if box is not None:
+        return (lambda w, h: portrait_tile(portrait, box, w, h)), f'cadrage declare {tuple(box)}', True
+    if thumb is not None:
+        score, _, box = thumb_box(portrait, thumb)
+        if score >= THUMB_MATCH:
+            return ((lambda w, h: portrait_tile(portrait, box, w, h)),
+                    f'cadrage de la vignette TTT1 dans le portrait (correlation {score:.2f})', True)
+        return (lambda w, h: thumb_tile(thumb, w, h)), f'vignette TTT1 agrandie (portrait different, correlation {score:.2f})', False
+    return (lambda w, h: head_crop(portrait, w, h)), 'tete recadree sur le portrait', True
+
+
+HD_TILE = (64, 116)   # texels de la case HD (src/tekken3_ttt1_roster.c, hd_file_load)
+
+
+def hd_tile(portrait, thumb=None, box=None):
+    """La case de grille 'selector' avec deux fois plus de texels dans chaque
+    sens : 64 x 116, dessinee sur la meme case 32 x 58 a l'ecran. Meme cadrage
+    que la case 44 x 58 (88 x 116 a pixels carres, resserre en 64 de large
+    comme ui.ps1_tim resserre 44 en 32). None si la case n'a pas de source
+    plus fine que la vignette TTT1."""
+    tile, how, fine = tile_maker(portrait, thumb, box)
+    if not fine: return None, how
+    w, h = HD_TILE
+    return tile(w * 44 // 32, h).resize((w, h), Image.LANCZOS), how
 
 
 def t3_images(portrait, thumb=None, box=None):
@@ -161,15 +191,7 @@ def t3_images(portrait, thumb=None, box=None):
     big = Image.new('RGBA', (168, 252), (0, 0, 0, 0))
     scaled = portrait.resize((round(portrait.width * 252 / portrait.height), 252), Image.LANCZOS)
     big.alpha_composite(scaled, ((168 - scaled.width) // 2, 0))
-    tile, how = (lambda w, h: head_crop(portrait, w, h)), 'tete recadree sur le portrait'
-    if box is not None:
-        tile, how = (lambda w, h: portrait_tile(portrait, box, w, h)), f'cadrage declare {tuple(box)}'
-    elif thumb is not None:
-        score, _, box = thumb_box(portrait, thumb)
-        if score >= THUMB_MATCH:
-            tile, how = (lambda w, h: portrait_tile(portrait, box, w, h)), f'cadrage de la vignette TTT1 dans le portrait (correlation {score:.2f})'
-        else:
-            tile, how = (lambda w, h: thumb_tile(thumb, w, h)), f'vignette TTT1 agrandie (portrait different, correlation {score:.2f})'
+    tile, how, _ = tile_maker(portrait, thumb, box)
     images = {'portrait': big, 'selector-tall': tile(44, 68), 'selector': tile(44, 58)}
     # chargement : memes cases, pixels deux fois moins hauts (comme le jeu d'origine)
     images['loading-tall'] = images['selector-tall'].resize((44, 34), Image.LANCZOS)

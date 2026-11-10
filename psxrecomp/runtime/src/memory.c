@@ -708,6 +708,40 @@ void dirty_ram_text_vcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *aud
     if (audit_fails) *audit_fails = g_text_vcache_audit_fails;
 }
 
+/* 1 iff the live words from phys up to the first unconditional jump (j, jr,
+ * beq $0,$0, with its delay slot), at most max_bytes, equal the EXE image.
+ * A compiled entry validates only its own CFG ranges, but a piece split off a
+ * larger region by a seed then calls the next piece directly (fallthrough),
+ * unvalidated. In an overlay laid over EXE padding, a one-word piece of
+ * zeros at 0x800B1290 matched the overlay's load-delay nop, so the
+ * interpreter handed Tekken Ball's ball_move to the stale zero pieces that
+ * follow it, which ran into an unknown address (B148). The stretch the
+ * compiled code will execute straight on must match too. Outside the image:
+ * nothing to compare, 1. */
+int dirty_ram_text_flow_matches(uint32_t phys, uint32_t max_bytes) {
+    phys &= 0x1FFFFFFFu;
+    if (!text_ref_image || (phys & 3u) || phys < text_ref_lo || phys >= text_ref_hi)
+        return 1;
+    uint32_t end = (max_bytes > text_ref_hi - phys) ? text_ref_hi : phys + max_bytes;
+    for (uint32_t at = phys; at + 4u <= end; at += 4u) {
+        uint32_t live, ref;
+        memcpy(&live, ram + at, 4);
+        memcpy(&ref, text_ref_image + (at - text_ref_lo), 4);
+        if (live != ref) return 0;
+        uint32_t op = ref >> 26;
+        if (op == 0x02u || (op == 0x00u && (ref & 0x3Fu) == 0x08u) ||
+            (op == 0x04u && ((ref >> 16) & 0x3FFu) == 0u)) {
+            if (at + 8u <= end) {
+                memcpy(&live, ram + at + 4u, 4);
+                memcpy(&ref, text_ref_image + (at + 4u - text_ref_lo), 4);
+                return live == ref;
+            }
+            return 1;
+        }
+    }
+    return 1;
+}
+
 /* Preserve the generated-code ABI used by existing game projects. */
 int dirty_ram_text_native_ok_ranges(const uint32_t *lo_len_pairs,
                                     uint32_t count) {

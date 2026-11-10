@@ -24,6 +24,18 @@
  * is put back. Ordinary stores above 0x10000 do not mark code pages dirty, so
  * none of this disturbs the recompiled code.
  *
+ * Practice. VS CPU has a CPU DIFFICULTY of its own (EASY / MEDIUM / HARD,
+ * practice block +0x7E), handed to 0x80061488 as is when its menu closes.
+ * While the practice overlay is resident its cycle is widened to the extra
+ * levels and its label list moved to one with their short names; the row is
+ * named DIFFICULTY (the end of "CPU DIFFICULTY") while one is shown. In
+ * Practice the table follows that choice instead of GAME OPTION's: an extra
+ * level is written over the three rows, MEDIUM and HARD get the game's table
+ * back. EASY is passed as 0, which 0x80061488 reads as "the game's copy", so
+ * it keeps playing GAME OPTION's level, extra ones included, as the original
+ * game does. The table is written on the frame the choice changes, before
+ * the menu can close.
+ *
  * TEKKEN3_DIFFICULTY=<key> forces a level whatever the menu says (scripts).
  * Research and usage: DIFFICULTY.md.
  */
@@ -42,6 +54,16 @@ enum { MENU_VALUE = 0x80097F06, GAME_VALUE = 0x800AE208,
        ROW_NAME = 0x800B91D8,         /* "DIFFICULTY LEVEL" */
        ROW_SHORT = 0x800B91E3,        /* "LEVEL" */
        LABELS = 0x800EACC8 };         /* the game's EASY, MEDIUM, HARD list */
+/* Practice overlay: its block, VS CPU's CPU DIFFICULTY and the code that
+ * cycles (0x800B4E14 slti 3, 0x800B4E28 li 2) and draws it (0x800B5A20 /
+ * 0x800B5A24 the row name, 0x800B5A38 / 0x800B5A40 the label list). */
+enum { MODE = 0x800AFA88, PRACTICE = 5,
+       PRACTICE_PTR = 0x800B8A2C, PRACTICE_BLOCK = 0x800B8B60, PRACTICE_CHOICE = PRACTICE_BLOCK + 0x7E,
+       CYCLE_MAX = 0x800B4E14, CYCLE_WRAP = 0x800B4E28,
+       NAME_HI = 0x800B5A20, NAME_LO = 0x800B5A24, LIST_HI = 0x800B5A38, LIST_LO = 0x800B5A40,
+       PRACTICE_NAME = 0x800B085C,    /* "CPU DIFFICULTY" */
+       PRACTICE_SHORT = 0x800B0860,   /* "DIFFICULTY" */
+       PRACTICE_LABELS = 0x800B8A84 };/* the game's EASY, MEDIUM, HARD list */
 
 static unsigned char *levels;          /* levels.bin, validated */
 static const unsigned char *reference[ROWS];   /* ps1-easy, ps1-medium, ps1-hard blocks */
@@ -49,6 +71,7 @@ static const unsigned char *extra[MAX_EXTRA];  /* levels beyond the PS1 HARD, ea
 static unsigned extras;
 static const unsigned char *forced;    /* TEKKEN3_DIFFICULTY */
 static uint32_t label_list;            /* guest copy of the menu's label list */
+static uint32_t practice_list;         /* the practice menu's list, short names */
 static int loaded, verified, refused, written;
 
 static unsigned read_u32(const unsigned char *p) {
@@ -168,8 +191,65 @@ static void menu(unsigned value) {
     if (psx_mod_read_word(ROW + 4) != name) psx_mod_write_word(ROW + 4, name);
 }
 
+/* The practice menu's list: the game's three labels (the overlay's own
+ * strings, read only while it is resident), then each extra level's label
+ * up to " (", "EX SUPER HARD (TTT1 ARCADE)" giving "EX SUPER HARD": right
+ * aligned on column 25, it has to leave room for DIFFICULTY. */
+static uint32_t build_practice_labels(void) {
+    char label[MAX_EXTRA][LABEL + 1];
+    uint32_t size = (3 + extras) * 4;
+    for (unsigned i = 0; i < extras; i++) {
+        memcpy(label[i], extra[i] + KEY, LABEL); label[i][LABEL] = 0;
+        char *cut = strstr(label[i], " (");
+        if (cut) *cut = 0;
+        size += (uint32_t)strlen(label[i]) + 1;
+    }
+    uint32_t list = psx_mod_alloc_guest_memory(size, 4);
+    if (!list) return 0;
+    uint32_t text = list + (3 + extras) * 4;
+    for (unsigned i = 0; i < 3; i++) psx_mod_write_word(list + i * 4, psx_mod_read_word(PRACTICE_LABELS + i * 4));
+    for (unsigned i = 0; i < extras; i++) {
+        psx_mod_write_word(list + (3 + i) * 4, text);
+        write_string(text, label[i]);
+        text += (uint32_t)strlen(label[i]) + 1;
+    }
+    return list;
+}
+
+static void patch(uint32_t a, uint32_t word) {
+    if (psx_mod_read_word(a) != word) psx_mod_write_code_word(a, word);
+}
+
+/* lui reg, %hi(target) / addiu reg, reg, %lo(target) at hi / lo. */
+static void patch_address(uint32_t hi, uint32_t lo, uint32_t target) {
+    patch(hi, (psx_mod_read_word(hi) & 0xFFFF0000u) | ((target + 0x8000) >> 16));
+    patch(lo, (psx_mod_read_word(lo) & 0xFFFF0000u) | (target & 0xFFFF));
+}
+
+/* In Practice with its overlay resident (the cycle code as the game or this
+ * plugin left it): widens VS CPU's CPU DIFFICULTY and returns its value,
+ * else -1. */
+static int practice(void) {
+    if (psx_mod_read_word(MODE) != PRACTICE || psx_mod_read_word(PRACTICE_PTR) != PRACTICE_BLOCK) return -1;
+    uint32_t max = psx_mod_read_word(CYCLE_MAX), wrap = psx_mod_read_word(CYCLE_WRAP);
+    if ((max & 0xFFFF0000u) != 0x28420000u || (wrap & 0xFFFF0000u) != 0x24030000u) return -1;
+    if (((max & 0xFFFF) != 3 || (wrap & 0xFFFF) != 2) &&
+        ((max & 0xFFFF) != 3 + extras || (wrap & 0xFFFF) != 2 + extras)) return -1;
+    if (!practice_list && !(practice_list = build_practice_labels())) return -1;
+    if (max != 0x28420000u + 3 + extras)
+        fprintf(stderr, "Difficulty: Practice VS CPU offers %u levels\n", 3 + extras);
+    patch(CYCLE_MAX, 0x28420000u + 3 + extras);       /* slti v0, v0, 3 + extras */
+    patch(CYCLE_WRAP, 0x24030000u + 2 + extras);      /* li v1, 2 + extras */
+    patch_address(LIST_HI, LIST_LO, practice_list);
+    int choice = (int8_t)psx_mod_read_byte(PRACTICE_CHOICE);
+    if (choice < 0 || choice >= 3 + (int)extras) choice = 1;
+    patch_address(NAME_HI, NAME_LO, choice >= 3 ? PRACTICE_SHORT : PRACTICE_NAME);
+    return choice;
+}
+
 static void tekken3_difficulty(void) {
     static unsigned tick;
+    static const unsigned char *last;
     if (!psx_mod_game_started()) return;
     if (!loaded) load();
     if (!levels || refused) return;
@@ -178,7 +258,11 @@ static void tekken3_difficulty(void) {
     menu(value);
     const unsigned char *level = forced ? forced : value >= 3 ? extra[value - 3] : NULL;
     if (level && psx_mod_read_half(GAME_VALUE) > 2) psx_mod_write_half(GAME_VALUE, 2);
-    if (tick++ % 30) return;
+    int choice = practice();
+    if (choice > 0 && !forced) level = choice >= 3 ? extra[choice - 3] : NULL;
+    int changed = level != last;
+    last = level;
+    if (tick++ % 30 && !(changed && verified)) return;
     if (!verified) {
         if (!table_is(reference)) {
             refused = 1;

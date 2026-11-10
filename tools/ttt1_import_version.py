@@ -14,7 +14,7 @@ Kept free of other imports: launcher/setup_backend.py reads it at every start.
 """
 from pathlib import Path
 
-TTT1_IMPORT_VERSION = 13
+TTT1_IMPORT_VERSION = 19
 STAMP = 'import-version.txt'
 
 # Update steps (implemented in tools/ttt1_setup.py, update_step): name ->
@@ -38,6 +38,10 @@ STEPS = {
     'native-limbs': ('roster', "Ogre's and True Ogre's left-arm and horn hits (ws2, WS f+2 sparks)"),
     'unknown-hilt': ('workspace', "The hilt of Unknown's blade (Yoshimitsu's and Kunimitsu's moves)"),
     'hit-effect-64-more': ('workspace', "Throw spark, knockdown smoke and poison mist in 64 x 64 (TTT Hitspark)"),
+    'exact-welds': ('workspace', "Guests' knees and other joints (exact welds)"),
+    'ui-hd': ('workspace', "Guests' portraits and grid tiles: truer colours, the portrait's fade, and HD above x1"),
+    'native-models': ('workspace', "Tekken 3's own fighters on their TTT1 arcade models"),
+    'native-movelists': ('roster', "Kuma's, Ogre's, Gun Jack's and True Ogre's TTT1 move lists in Practice"),
 }
 
 # What brings a roster from version n - 1 to n: its update steps, in order, or
@@ -99,6 +103,41 @@ UPDATES = {
     # 13: TTT1's throw spark, knockdown smoke and poison mist in 64 x 64 for the
     # TTT Hitspark mod (Throw-, Smoke-, Mist-TTT1-hiteffect64.hfx, F22).
     13: ['hit-effect-64-more'],
+    # 14: a TTT1 weld with free weights (14/2, 12/4...) became the PS1's 8/8: Devil's
+    # calves were pulled into his thighs (B145). Both vertices are now scaled about
+    # the joint, which makes the 8/8 weld exact in any pose (convert.exact_welds).
+    14: ['exact-welds'],
+    # 15: the guests', Panda's and Tiger's interface packs again: palettes by
+    # k-means in Lab (the median cut turned small coloured parts such as Angel's
+    # and Ganryu's eyes to skin), the portrait's colours with the semi-transparency
+    # bit (the selector's fade, as the stock portraits), and beside them the grid tile in 64 x 116 and
+    # the portrait in 168 x 252 15-bit colour (<Name>-T3-tile-hd.bin,
+    # -portrait-hd.bin), drawn from the upper VRAM half above native resolution (F28).
+    15: ['ui-hd'],
+    # 16: Tekken 3's own fighters on their TTT1 arcade models (F32): each
+    # selection button's slot of tools/data/ttt1_native_models.json converted
+    # from the ROM regions (tools/ttt1_native_model.py), as
+    # <Name>-Native-TTT1-arcade-P<1..5>; the guests' files are unchanged.
+    16: ['native-models'],
+    # 17: the arcade's accessory bound of mode 1 (accessory_bound_target): a
+    # swinging bone does not turn past the direction of a point of another bone.
+    # The .acc carries the bound's sign weights (table 0x8019E22C) in its spare
+    # halfword, and the converter keeps those bones on a swinging part of their
+    # own (convert.convert(keep=...)): Heihachi's right coat panel (LK, RK) was
+    # baked onto the left one and went into his right thigh on Tekken 3's kicks.
+    # Only natives use mode 1 (Heihachi P2 / P4, Eddy P1, Xiaoyu P5): the
+    # guests' files are unchanged.
+    17: ['native-models'],
+    # 18: Mokujin's wooden sword on Yoshimitsu's moves (F32 E5): TTT1 draws it
+    # by code from 20 points and 18 quads of its own atlas (tools/ttt1/stick.py);
+    # the packer keeps that image, and a .stick goes beside each Mokujin model
+    # (Mokujin-Native-TTT1-arcade-P1 / P2 / P3 / P4 / P5). Nothing else changes.
+    18: ['native-models'],
+    # 19: Practice's COMMAND LIST for Kuma, Ogre, Gun Jack and True Ogre on their
+    # own TTT1 moves (Kuma-, Ogre-, Gunjack-, Trueogre-TTT1-movelist.bin, from
+    # tools/data/wiki): tools/ttt1/movelist.py was only given the guests, so they
+    # showed Tekken 3's list. Nothing else changes.
+    19: ['native-movelists'],
 }
 
 

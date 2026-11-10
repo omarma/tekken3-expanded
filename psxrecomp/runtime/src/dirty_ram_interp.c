@@ -1267,6 +1267,10 @@ static int interp_enter_compiled(CPUState *cpu, uint32_t target) {
      * Returning 0 lets the JAL/JALR handler fall through to local-flow interp
      * of the live RAM bytes instead of running stale compiled code. */
     if (!psx_game_text_native_ok(target)) return 0;
+    /* The entry's own ranges can match by chance (a one-word nop piece) while
+     * the compiled code falls straight on into pieces it never validates:
+     * the bytes it will run next must be the live ones too (B148). */
+    if (!dirty_ram_text_flow_matches(target, 256u)) return 0;
     if (psx_mixed_owner_enabled()
         && interp_host_stack_used() > psx_mixed_stack_watermark()) {
         cpu->pc = target;

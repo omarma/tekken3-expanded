@@ -47,6 +47,23 @@ def host_definition(text: str, sym: str) -> bool:
     return _defines(text, sym)
 
 
+def other_definition(text: str, sym: str) -> bool:
+    """A definition the add-ons wrap (addons/README.md): in src/, or a C++
+    source of the runtime, where `extern "C"` may open it and its parameters
+    may run over several lines: the `(` at column 0's line is followed, past
+    its matching `)`, by a `{`."""
+    head = rf'^(?:extern\s+"C"\s+)?(?!extern\b)[A-Za-z_][A-Za-z0-9_ \t\*]*\b{re.escape(sym)}\s*\('
+    for match in re.finditer(head, text, re.M):
+        depth, i = 1, match.end()
+        while i < len(text) and depth:
+            depth += {"(": 1, ")": -1}.get(text[i], 0)
+            i += 1
+        rest = text[i:].lstrip()
+        if rest.startswith("{"):
+            return True
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, required=True)
@@ -70,9 +87,17 @@ def main() -> int:
 
     failures: list[str] = []
     records: list[str] = []
+    other_text = None
     for sym in symbols:
         defs = [f for f, t in shard_text.items() if guest_definition(t, sym)]
         defs += [f for f, t in host_text.items() if host_definition(t, sym)]
+        if not defs:
+            # Only then (the game's own wraps resolve as before): the add-ons'
+            # wraps of the game's functions in src/ and of the runtime's C++.
+            if other_text is None:
+                others = sorted((root / "psxrecomp/runtime/src").glob("*.cpp")) + wrappers
+                other_text = {f: f.read_text(encoding="utf-8", errors="replace") for f in others}
+            defs = [f for f, t in other_text.items() if other_definition(t, sym)]
         if len(defs) != 1:
             found = ", ".join(str(f.relative_to(root)) for f in defs) or "nothing"
             failures.append(f"{sym}: expected exactly one definition, found {found}")

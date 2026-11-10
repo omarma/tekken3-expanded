@@ -4678,6 +4678,8 @@ static void t3_ball_draw_reveal(uint32_t source, uint32_t color24, int semi, int
     }
 }
 
+static int sprite_hd_draw(int x, int y, int dw, int h, int w, uint32_t uv);
+
 /* Execute textured rectangle (GP0 0x64-0x67) */
 static void gp0_exec_textured_rect(void) {
     uint32_t color24 = gp0_cmd_buf[0] & 0xFFFFFFu;
@@ -4728,6 +4730,8 @@ static void gp0_exec_textured_rect(void) {
             return;
     }
     setup_textured_draw(color24, semi_trans, raw_texture);
+    if (sprite_hd_draw(x0, y0, (ws_w && ws_w != w) ? ws_w : w, h, w, gp0_cmd_buf[2]))
+        return;
     if (ws_w && ws_w != w)
         gr_draw_textured_rect_scaled(x0, y0, ws_w, h, u0, v0, u0 + w, v0 + h,
                                      clut_x, clut_y, current_texpage());
@@ -5969,6 +5973,150 @@ static void hivram_execute_command(uint8_t opcode) {
     gr_set_high_vram(s_hivram, 0, 0);
 }
 
+/* Sprite HD substitutes (mod_plugins.h, psx_mod_gpu_sprite_hd_set): the
+ * game's sprite keeps its packet, place and blending; above native
+ * resolution its texels come from a finer copy in the upper half. */
+#define SPRITE_HD_SLOTS 32
+typedef struct {
+    uint32_t uv;
+    uint16_t page, w, h, hx, hy, hw, hh;
+    uint8_t on;
+} SpriteHd;
+static SpriteHd s_sprite_hd[SPRITE_HD_SLOTS];
+static unsigned s_sprite_hd_on;
+
+int psx_mod_gpu_sprite_hd_set(unsigned slot, unsigned page, uint32_t uv,
+                              unsigned w, unsigned h, unsigned hx, unsigned hy,
+                              unsigned hw, unsigned hh) {
+    /* The copy lies inside one 15-bit texture page of the upper half (256 x
+     * 256 texels from a 64-halfword column). */
+    if (!s_hivram || slot >= SPRITE_HD_SLOTS || !w || !h || !hw || !hh ||
+        hy < 512 || hx % 64u + hw > 256u || (hy - 512u) % 256u + hh > 256u ||
+        hx + hw > 1024u || hy + hh > 1024u)
+        return 0;
+    if (!s_sprite_hd[slot].on) s_sprite_hd_on++;
+    s_sprite_hd[slot].uv = uv;
+    s_sprite_hd[slot].page = (uint16_t)(page & 0x19Fu);
+    s_sprite_hd[slot].w = (uint16_t)w;  s_sprite_hd[slot].h = (uint16_t)h;
+    s_sprite_hd[slot].hx = (uint16_t)hx; s_sprite_hd[slot].hy = (uint16_t)hy;
+    s_sprite_hd[slot].hw = (uint16_t)hw; s_sprite_hd[slot].hh = (uint16_t)hh;
+    s_sprite_hd[slot].on = 1;
+    return 1;
+}
+
+void psx_mod_gpu_sprite_hd_clear(unsigned slot) {
+    if (slot >= SPRITE_HD_SLOTS || !s_sprite_hd[slot].on) return;
+    s_sprite_hd[slot].on = 0;
+    s_sprite_hd_on--;
+}
+
+/* Draws the sprite (dw x h at x, y; w texels wide, word 2 = uv) from its
+ * substitute and returns 1, or returns 0 to draw it as it is. */
+static int sprite_hd_draw(int x, int y, int dw, int h, int w, uint32_t uv) {
+    if (!s_sprite_hd_on || !s_hivram || gr_scale() <= 1) return 0;
+    unsigned page = texpage_x | texpage_y << 4 | texpage_colors << 7;
+    for (unsigned i = 0; i < SPRITE_HD_SLOTS; i++) {
+        const SpriteHd *s = &s_sprite_hd[i];
+        if (!s->on || s->uv != uv || s->page != page || s->w != (unsigned)w || s->h != (unsigned)h)
+            continue;
+        unsigned row = s->hy - 512u;
+        uint16_t tpage = (uint16_t)(s->hx / 64u | (row >= 256u) << 4 |
+                                    semi_transparency << 5 | 2u << 7);
+        int u0 = s->hx % 64u, v0 = (int)(row % 256u);
+        if (gr_set_high_vram(s_hivram, 1, 0)) {
+            gr_draw_textured_rect_scaled(x, y, dw, h, u0, v0, u0 + s->hw, v0 + s->hh, 0, 0, tpage);
+            s_hivram_prims++;
+            gr_set_high_vram(s_hivram, 0, 0);
+            return 1;
+        }
+        gr_set_high_vram(s_hivram, 0, 0);
+        return 0;
+    }
+    return 0;
+}
+
+/* Texture HD substitutes (mod_plugins.h, psx_mod_gpu_texture_hd_set): a
+ * textured polygon reading a registered region (page, CLUT row and columns,
+ * every UV inside it) is drawn from the region's finer 15-bit copy in the
+ * upper half, its UVs scaled; colours, shading and blending stay the
+ * game's. Above native resolution only, as the sprite substitutes. */
+#define TEXTURE_HD_SLOTS 8
+typedef struct {
+    uint16_t page, clut_y, clut_x0, clut_x1, u0, v0, w, h, hx, hy, hw, hh;
+    uint8_t on;
+} TextureHd;
+static TextureHd s_texture_hd[TEXTURE_HD_SLOTS];
+static unsigned s_texture_hd_on;
+
+int psx_mod_gpu_texture_hd_set(unsigned slot, unsigned page, unsigned clut_y,
+                               unsigned clut_x0, unsigned clut_x1,
+                               unsigned u0, unsigned v0, unsigned w, unsigned h,
+                               unsigned hx, unsigned hy, unsigned hw, unsigned hh) {
+    if (!s_hivram || slot >= TEXTURE_HD_SLOTS || !w || !h || !hw || !hh ||
+        u0 + w > 256u || v0 + h > 256u || clut_x0 >= clut_x1 ||
+        hy < 512 || hx % 64u + hw > 256u || (hy - 512u) % 256u + hh > 256u ||
+        hx + hw > 1024u || hy + hh > 1024u)
+        return 0;
+    TextureHd *t = &s_texture_hd[slot];
+    if (!t->on) s_texture_hd_on++;
+    *t = (TextureHd){ (uint16_t)(page & 0x19Fu), (uint16_t)clut_y, (uint16_t)clut_x0, (uint16_t)clut_x1,
+                      (uint16_t)u0, (uint16_t)v0, (uint16_t)w, (uint16_t)h,
+                      (uint16_t)hx, (uint16_t)hy, (uint16_t)hw, (uint16_t)hh, 1 };
+    return 1;
+}
+
+void psx_mod_gpu_texture_hd_clear(unsigned slot) {
+    if (slot >= TEXTURE_HD_SLOTS || !s_texture_hd[slot].on) return;
+    s_texture_hd[slot].on = 0;
+    s_texture_hd_on--;
+}
+
+/* Draws the textured polygon in gp0_cmd_buf from its substitute and returns
+ * 1, or returns 0 to draw it as it is. */
+static int texture_hd_poly(uint8_t opcode) {
+    if (!s_hivram || gr_scale() <= 1) return 0;
+    unsigned n = (opcode & 8u) ? 4u : 3u, step = (opcode & 0x10u) ? 3u : 2u;
+    uint16_t tpage_word = (uint16_t)(gp0_cmd_buf[2u + step] >> 16), clut = (uint16_t)(gp0_cmd_buf[2] >> 16);
+    unsigned clut_y = (clut >> 6) & 0x1FFu, clut_x = (clut & 0x3Fu) * 16u;
+    for (unsigned i = 0; i < TEXTURE_HD_SLOTS; i++) {
+        const TextureHd *t = &s_texture_hd[i];
+        if (!t->on || (tpage_word & 0x19Fu) != t->page || clut_y != t->clut_y ||
+            clut_x < t->clut_x0 || clut_x >= t->clut_x1)
+            continue;
+        int inside = 1;
+        for (unsigned k = 0; k < n && inside; k++) {
+            uint32_t uv = gp0_cmd_buf[2u + step * k];
+            unsigned u = uv & 255u, v = (uv >> 8) & 255u;
+            inside = u >= t->u0 && u <= t->u0 + t->w && v >= t->v0 && v <= t->v0 + t->h;
+        }
+        if (!inside) continue;
+        uint32_t saved[12];
+        memcpy(saved, gp0_cmd_buf, sizeof saved);
+        unsigned row = t->hy - 512u, bu = t->hx % 64u, bv = row % 256u;
+        for (unsigned k = 0; k < n; k++) {
+            uint32_t *uv = &gp0_cmd_buf[2u + step * k];
+            unsigned u = *uv & 255u, v = (*uv >> 8) & 255u;
+            unsigned hu = bu + ((u - t->u0) * t->hw + t->w / 2u) / t->w;
+            unsigned hv = bv + ((v - t->v0) * t->hh + t->h / 2u) / t->h;
+            if (hu > 255u) hu = 255u;
+            if (hv > 255u) hv = 255u;
+            *uv = (*uv & 0xFFFF0000u) | hv << 8 | hu;
+        }
+        uint16_t hd_page = (uint16_t)(t->hx / 64u | (row >= 256u) << 4 | (tpage_word & 0x60u) | 2u << 7);
+        gp0_cmd_buf[2u + step] = (gp0_cmd_buf[2u + step] & 0xFFFFu) | (uint32_t)hd_page << 16;
+        int drawn = gr_set_high_vram(s_hivram, 1, 0);
+        if (drawn) {
+            gp0_execute_command_now();
+            s_hivram_prims++;
+        }
+        gr_set_high_vram(s_hivram, 0, 0);
+        memcpy(gp0_cmd_buf, saved, sizeof saved);
+        set_tpage_from_poly(tpage_word);   /* later sprites read the game's page */
+        return drawn;
+    }
+    return 0;
+}
+
 /* Execute a fully-collected GP0 command */
 static void gp0_execute_command(void) {
     uint8_t opcode = (gp0_cmd_buf[0] >> 24) & 0xFF;
@@ -5976,6 +6124,9 @@ static void gp0_execute_command(void) {
         hivram_execute_command(opcode);
         return;
     }
+    if (s_texture_hd_on && opcode >= 0x20u && opcode < 0x40u && (opcode & 4u) &&
+        texture_hd_poly(opcode))
+        return;
     if (!tex_alias.on || opcode < 0x20u || opcode >= 0x80u || !(opcode & 4u)) {
         gp0_execute_command_now();
         return;

@@ -1,0 +1,411 @@
+This is a list of all of the moves that [[Jin Kazama]] can perform in ''[[Tekken 5: Dark Resurrection]]''.
+
+==Movelist==
+===Throws===
+{| class="wikitable sortable" id="throws" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Throw Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Type
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Escape
+|-
+![[Double Face Kick]]
+!1+3 (or f+1+3)
+!Front
+!35
+!1
+|-
+![[Over the Shoulder Reverse]]
+!2+4 (or f+2+4)
+!Front
+!35
+!2
+|-
+![[Shoulder Flip]]
+!1+3 (or 2+4)
+!Left
+!43
+!1
+|-
+![[Over the Limit]]
+!1+3 (or 2+4)
+!Right
+!40
+!2
+|-
+![[Pivoting Hip Throw]]
+!1+3 (or 2+4)
+!Back
+!50
+!
+|-
+![[Tidal Wave]]
+!u/f+1+2
+!Front
+!40
+!1+2
+|-
+![[Complicated Wire]]
+!d, d/b, b+1+3
+!Front
+!35
+!1
+|-
+![[Parry (Jin)|Parry]]
+!Synchro with the opponent's attack, b+1+3 (or b+2+4)
+!Parry
+!-
+!
+|}
+
+===Attacks===
+{| class="wikitable sortable" id="moves" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Move Name
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[Left Right Combo]]
+!1, 2
+!7, 12
+!High, high
+|-
+![[Left Right Axe Kick]]
+!1, 2, 3
+!7, 11, 25
+!High, high, mid
+|-
+![[Left Right to Spinning Hook Kick]]
+!1, 2, 4
+!7, 12, 22
+!High, high, high
+|-
+![[Kazama Style 5 Hit Combo]]
+!1, 3, 2, 1, 4
+!6, 10, 10, 10, 10
+!High, high, mid, mid, low
+|-
+![[Feint Kick Combo]]
+!1, [3~3], d/f+3
+!6, 22, 13
+!High, mid, mid
+|-
+![[Left Jab to Left Low Kick]]
+!1, d+3
+!7, 7
+!High, low
+|-
+![[Double Thrust Roundhouse]]
+!2, 1, 4
+!9, 10, 18
+!High, mid, mid
+|-
+![[Double Thrust Low Trick Kick]]
+!2, 1, [4~4]
+!9, 10, 15
+!High, mid, low
+|-
+![[Switch Blade]]
+!2, 4
+!9, 16
+!High, high
+|-
+![[High Right Roundhouse]]
+!4
+!21
+!High
+|-
+![[Spinning Flare Kick]]
+![4~3]
+!28
+!Mid
+|-
+![[Median Line Destruction]]
+!1+2
+!5, 5, 5, 7
+!Mid, mid, mid, mid
+|-
+![[Supercharger|Ki Charge]]
+!1+2+3+4
+!-
+!-
+|-
+![[Right Elbow]]
+!f+2
+!12
+!High
+|-
+![[Left Roundhouse]]
+!f+3
+!16
+!Mid
+|-
+![[Stinger]]
+!f+[3~3]
+!22
+!Mid
+|-
+![[Heat Seeker]]
+!f+[3~3], d/f+3
+!22, 13
+!Mid, mid
+|-
+![[Front Thrust Kick]]
+!f+4
+!21
+!Mid
+|-
+![[Double Chamber Punch]]
+!f+1+2
+!10, 21
+!High, high
+|-
+![[Thrust to Roundhouse]]
+!d/f+1, 4
+!12, 18
+!Mid, mid
+|-
+![[Thrust to Low Trick Kick]]
+!d/f+1, [4~4]
+!12, 15
+!Mid, low
+|-
+![[Uppercut (Jin)|Uppercut]]
+!d/f+2
+!15
+!Mid
+|-
+![[Left Sidekick]]
+!d/f+3
+!10
+!Mid
+|-
+![[Blade Kick]]
+!d/f+4
+!33
+!Mid
+|-
+![[Corpse Thrust]]
+!d+1
+!24
+!Mid
+|-
+![[Knee Popper to Sidekick]]
+!d+3, 3
+!7, 10
+!Low, mid
+|-
+![[Right Sweep]]
+!d+4
+!15
+!Low
+|-
+![[Double Lift Kick (Kazama)|Double Lift Kick]]
+!d+3+4
+!5, 15
+!Mid, high
+|-
+![[Savage Sword]]
+!d/b+2 ,2, 3
+!12, 15, 21
+!Mid, high, mid
+|-
+![[Left Spinning Back Kick 2]]
+!d/b+3
+!28
+!High
+|-
+![[Right Low Roundhouse]]
+!d/b+4
+!15
+!Low
+|-
+![[Mental Alertness (2)|Mental Alertness 2]]
+!b+1
+!-
+!-
+|-
+![[Left Drill Punch]]
+!During Mental Alertness 2, 1
+!18
+!Mid
+|-
+![[Spine Cracker]]
+!During Mental Alertness 2, 1, 2
+!18,21
+!Mid, mid
+|-
+![[Suigetsu Strike]]
+!During Mental Alertness 2 , 2
+!24
+!Mid
+|-
+![[Leaping Side Kick]]
+!During Mental Alertness 2, 3
+!25
+!High
+|-
+![[Right Sweep (2)|Right Sweep 2]]
+!During Mental Alertness 2, 4
+!15
+!Low
+|-
+![[Right Backfist to Left Roundhouse]]
+!b+2, 3
+!12, 21
+!High, mid
+|-
+![[Left Crescent to Low Roundhouse]]
+!b+3, 4
+!15, 15
+!High, low
+|-
+![[Spinning Sidekick]]
+!b+4
+!18
+!Mid
+|-
+![[Power Stance]]
+!b+1+2
+!-
+!Mid
+|-
+![[Lingering Soul Omen]]
+!b+1+2, d, u, b, f
+!-
+!-
+|-
+![[Soul Rage Right Roundhouse Punch|Soul Rage Wind Hook Fist]]
+!During Soul Omen, f, N, d, d/f+2
+!25
+!High
+|-
+![[Soul Rage Lunging Low Roundhouse Kick|Soul Rage Lunging Low Roundhouse]]
+!During Soul Omen, f, N, d, D/F+4
+!26
+!Low
+|-
+![[Soul Rage 8 Hit Combo]]
+!During Soul Omen, 1, 2, 3, 1, 3, 2, 1, 4
+!7, 11, 25, 13, 13, 13, 13
+!High, high, mid, high, high, mid, mid
+|-
+![[Avenger]]
+!u/b+1+2 (b, b to cancel)
+!100
+!!
+|-
+![[Evading Middle Strike]]
+!u/f+2
+!18
+!Mid
+|-
+![[Spinning High Kick]]
+!u/f (or u or u/b)+3
+!30
+!High
+|-
+![[Front Jump Kick]]
+!u/f (or u)+4
+!15
+!Mid
+|-
+![[Demon's Paw]]
+!f, f+2
+!24
+!Mid
+|-
+![[Left Axe Kick]]
+!f, f+3
+!25
+!Mid
+|-
+![[Kazama Style 6 Hit Combo]]
+!f, f+3, 1, 3, 2, 1, 4
+!25, 10, 13, 13, 13, 13
+!Mid, high, high, mid, mid, low
+|-
+![[Right Axe Kick]]
+!f, f+4
+!19
+!High
+|-
+![[Evil Intent]]
+!b, f+2, 1, 2
+!18, 10, 24
+!Mid, high, mid
+|-
+![[Thrusting Uppercut (Jin Kazama)|Thrusting Uppercut]]
+!f, N, d, d/f+1
+!22
+!Mid
+|-
+![[Thrusting Uppercut (Jin Kazama)|Thrusting Uppercut]]
+!f, N, d, d/f+1 (press at the same time)
+!22
+!Mid
+|-
+![[Electric Wind Hook Fist|Right Roundhouse Punch]]
+!f, N, d, d/f+2
+!25
+!High
+|-
+![[Electric Wind Hook Fist]]
+!f, N, d, d/f+2 (press at the same time)
+!25
+!High
+|-
+![[Low Trick Kick|Lunging Low Roundhouse Kick (L.L.R.K)]]
+!f, N, d, d/f+4
+!18
+!Low
+|-
+![[L.L.R.K to Spinning Flare Kick]]
+!f, N, d, d/f+4, 3+4
+!32
+!Low, mid
+|-
+![[Leaping Side Kick]]
+!f, f, f+3
+!25
+!Mid
+|-
+![[Twin Lancer]]
+!WS+1, 2
+!10, 16
+!Mid, mid
+|-
+![[Crouching Uppercut (Jin)|Crouching Uppercut]]
+!WS+2
+!15
+!Mid
+|-
+![[Left Spinning Back Kick]]
+!WS+3
+!28
+!High
+|-
+![[Black Out]]
+!(With opponent down) d+2
+!22
+!Low
+|-
+![[Mental Alertness|Mental Alertness 1]]
+!1+3+4
+!-
+!-
+|}
+
+==10 hit combo==
+{| class="wikitable sortable" id="String Hits" style="text-align:center" width="83%" border="1"
+! style="background-color:#AC0A0A" |Command
+! style="background-color:#AC0A0A" |Damage
+! style="background-color:#AC0A0A" |Hit Range
+|-
+![[10 Hit Combo (Jin)|f+2, 3, 3, 3, 2, 1, 2, 3, 4, 2]]
+!113
+!hlmhmmmhlh
+|}
+[[Category:Moves Lists]]
+[[Category:Jin Kazama 2 Moves]]
+[[Category:Tekken 5: DR Moves Lists]]

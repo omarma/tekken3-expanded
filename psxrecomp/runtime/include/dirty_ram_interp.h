@@ -147,6 +147,9 @@ int      dirty_ram_text_native_ok_ranges_from(const uint32_t *lo_len_pairs,
 int      dirty_ram_text_native_ok_ranges(const uint32_t *lo_len_pairs,
                                         uint32_t count);
 int      dirty_ram_text_image_registered(void);
+/* Live words from phys to the first unconditional jump (+ delay slot), at most
+ * max_bytes, equal the EXE image (1 outside it). */
+int      dirty_ram_text_flow_matches(uint32_t phys, uint32_t max_bytes);
 /* Bless an intentional runtime data patch (e.g. text_xlate string/glyph tables)
  * into the text reference image so it is not mistaken for self-modifying code. */
 void     dirty_ram_text_bless(uint32_t phys, const uint8_t *bytes, uint32_t len);

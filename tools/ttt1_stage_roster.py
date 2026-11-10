@@ -30,6 +30,8 @@ OPTIONAL = ('TTT1-voices.juv',           # Tetsujin ne parle pas
             'TTT1-movelist.bin',           # tools/ttt1/movelist.py
             'TTT1-combos.bin',             # tools/ttt1/combos.py (COMBO TRAINING)
             'TTT1-hiteffect64.hfx',        # effet de coup fort 64 x 64 (F12), repli sur le .tim 32 x 32
+            'T3-tile-hd.bin',              # case de grille 64 x 116 (F28), repli sur celle du .jui
+            'T3-portrait-hd.bin',          # grand portrait 168 x 252 en 15 bits (F28), repli sur celui du .jui
             # costumes 2 (Pied) et 3 (Start)
             *(f'TTT1-arcade-P{c}.{e}' for c in (2, 3) for e in ('3dm', 'relocs', 'tim')),
             # le loup d'Unknown et sa lueur (tools/ttt1_import.py spirit())
@@ -122,7 +124,7 @@ def main(stamp=False):
     if omen: print("Jin's Omen: Devil mark staged")
     # Panda and Tiger (tools/ttt1_panda_tiger.py): Kuma's and Eddy's faces
     # once those costumes are confirmed.
-    faces = sorted((WORK / 'panda-tiger/guest').glob('*-T3-ui.jui'))
+    faces = sorted(p for p in (WORK / 'panda-tiger/guest').glob('*-T3-*') if p.name.endswith(('-ui.jui', '-hd.bin')))
     for p in faces: shutil.copyfile(p, OUT / p.name)
     if faces: print('Panda and Tiger: portraits staged')
     # TTT Hitspark (tools/ttt1_hitspark.py): the natives' TTT1 strong-hit effects in 64 x 64,
@@ -130,6 +132,11 @@ def main(stamp=False):
     sparks = sorted((WORK / 'hitspark').glob('*-TTT1-hiteffect64.hfx'))
     for p in sparks: shutil.copyfile(p, OUT / p.name)
     if sparks: print(f'TTT Hitspark: {len(sparks)} packs staged (natives and common sparks)')
+    # F32 : les natifs sur leur modele TTT1 (tools/ttt1_native_model.py), un
+    # fichier par touche de selection, <Name>-Native-TTT1-arcade-P<variante + 1>.
+    natives = sorted((WORK / 'native-models').glob('*-Native-TTT1-arcade-P*.*'))
+    for p in natives: shutil.copyfile(p, OUT / p.name)
+    if natives: print(f'Natifs sur modele TTT1 : {len({p.stem for p in natives})} modeles')
     print(f'{len(staged)} invites : {", ".join(staged)}')
     if missing: print(f'non importes : {", ".join(missing)}')
     stage_natives(table)

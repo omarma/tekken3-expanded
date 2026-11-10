@@ -1,0 +1,259 @@
+{
+ "_": "Personnages de Dark Resurrection dans TKPDATA1.BIN : premier fichier de chaque groupe de 16 (un groupe par costume ; +8 moveset, +9 animations, +11 modele). tools/psp/dr_iso.py scan --write.",
+ "Paul": {
+  "moveset_name": "[ポール]",
+  "groups": [
+   1259,
+   1275
+  ]
+ },
+ "Law": {
+  "moveset_name": "[ ロウ ]",
+  "groups": [
+   1291,
+   1307,
+   1323
+  ]
+ },
+ "Lei": {
+  "moveset_name": "[ 雷 武龍 ]",
+  "groups": [
+   1339,
+   1355
+  ]
+ },
+ "King": {
+  "moveset_name": "[キング]",
+  "groups": [
+   1371,
+   1387
+  ]
+ },
+ "Yoshimitsu": {
+  "moveset_name": "吉光",
+  "groups": [
+   1403,
+   1419,
+   1435
+  ]
+ },
+ "Nina": {
+  "moveset_name": "[ニーナ]",
+  "groups": [
+   1451,
+   1467
+  ]
+ },
+ "Hwoarang": {
+  "moveset_name": "[花郎]",
+  "groups": [
+   1483,
+   1499
+  ]
+ },
+ "Xiaoyu": {
+  "moveset_name": "凌 暁雨",
+  "groups": [
+   1515,
+   1531,
+   1547,
+   1563,
+   1579
+  ]
+ },
+ "Christie": {
+  "moveset_name": "[クリスティ]",
+  "groups": [
+   1595,
+   1611
+  ]
+ },
+ "Eddy": {
+  "moveset_name": "[エディ・ゴルドー]",
+  "groups": [
+   1627,
+   1643
+  ]
+ },
+ "Jin": {
+  "moveset_name": "風間 仁",
+  "groups": [
+   1659,
+   1675,
+   1691
+  ]
+ },
+ "Julia": {
+  "moveset_name": "[ ジュリア ]",
+  "groups": [
+   1707,
+   1723
+  ]
+ },
+ "Kuma": {
+  "moveset_name": "[クマ]",
+  "groups": [
+   1739,
+   1755
+  ]
+ },
+ "Bryan": {
+  "moveset_name": "ブライアン",
+  "groups": [
+   1771,
+   1787
+  ]
+ },
+ "Heihachi": {
+  "moveset_name": "三島 平八",
+  "groups": [
+   1803,
+   1819
+  ]
+ },
+ "Kazuya": {
+  "moveset_name": "[ 三島 一八 ]",
+  "groups": [
+   1835,
+   1851,
+   1979,
+   1995,
+   2619
+  ]
+ },
+ "Lee": {
+  "moveset_name": "[ 李 超狼 ]",
+  "groups": [
+   1867,
+   1883,
+   1899
+  ]
+ },
+ "Steve": {
+  "moveset_name": "ボクサー",
+  "groups": [
+   1915,
+   1931
+  ]
+ },
+ "Marduk": {
+  "moveset_name": "[ VALE-TUDO ]",
+  "groups": [
+   1947,
+   1963
+  ]
+ },
+ "Jack-5": {
+  "moveset_name": "[ジャック５]",
+  "groups": [
+   2011,
+   2027
+  ]
+ },
+ "Roger Jr.": {
+  "moveset_name": "[ロジャー]",
+  "groups": [
+   2043,
+   2059
+  ]
+ },
+ "Anna": {
+  "moveset_name": "[ANNA]",
+  "groups": [
+   2075,
+   2091,
+   2107
+  ]
+ },
+ "Wang": {
+  "moveset_name": "[ 王 椋雷 ]",
+  "groups": [
+   2123,
+   2139
+  ]
+ },
+ "Ganryu": {
+  "moveset_name": "[厳竜]",
+  "groups": [
+   2155,
+   2171,
+   2187
+  ]
+ },
+ "Asuka": {
+  "moveset_name": "[ 飛鳥 ]",
+  "groups": [
+   2203,
+   2219,
+   2235,
+   2251
+  ]
+ },
+ "Bruce": {
+  "moveset_name": "ブルース",
+  "groups": [
+   2267,
+   2283,
+   2299
+  ]
+ },
+ "Baek": {
+  "moveset_name": "BAEK DOO SAN",
+  "groups": [
+   2315,
+   2331
+  ]
+ },
+ "Devil Jin": {
+  "moveset_name": "[DEVIL JIN]",
+  "groups": [
+   2347,
+   2363
+  ]
+ },
+ "Raven": {
+  "moveset_name": "[黒人忍者]",
+  "groups": [
+   2379,
+   2395,
+   2411
+  ]
+ },
+ "Feng": {
+  "moveset_name": "[太極拳]",
+  "groups": [
+   2427,
+   2443
+  ]
+ },
+ "Armor King": {
+  "moveset_name": "[アマキン]",
+  "groups": [
+   2459,
+   2475
+  ]
+ },
+ "Lili": {
+  "moveset_name": "[EMILIE]",
+  "groups": [
+   2491,
+   2507
+  ]
+ },
+ "Dragunov": {
+  "moveset_name": "[新キャラ(大佐)]",
+  "groups": [
+   2523,
+   2539
+  ]
+ },
+ "Jinpachi": {
+  "moveset_name": "[鉄拳5ボス]",
+  "groups": [
+   2555,
+   2571,
+   2587,
+   2603
+  ]
+ }
+}

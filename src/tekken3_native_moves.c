@@ -1,8 +1,10 @@
 /* A native fighter may fight on its TTT1 moveset (Paul's Turn Thruster...)
- * with its own Tekken 3 model, cries and name. At the character selector of
- * Arcade, VS, Time Attack, Survival, Practice, Tekken Ball and Tekken Force, R1 switches the native
- * under a player's cursor between its Tekken 3 and Tekken Tag Tournament
- * moves, shown on the MOVESET card under the selector's clock; the choice
+ * with its own Tekken 3 cries and name; its model is its TTT1 one when imported
+ * (F32 E6, either moves: tekken3_ttt1_mod.c), else its PS1 one. At the character selector of
+ * Arcade, VS, Time Attack, Survival, Practice, Tekken Ball and Tekken Force, the
+ * MOVESET card under the selector's clock opens on the pick of a native and
+ * left / right switch it between its Tekken 3 and Tekken Tag Tournament
+ * moves (R1 is the third costume's, F32: turn_keys); the choice
  * holds from the confirmation to the fight. Guests and natives without TTT1
  * moves have no card.
  *
@@ -24,7 +26,7 @@
 #include <string.h>
 #include <time.h>
 
-extern int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset);
+extern int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset,const char *source);
 extern unsigned tekken3_native_moves_id(unsigned player);
 extern int tekken3_devil_jin_requested(unsigned player);
 
@@ -33,13 +35,17 @@ enum { SCREEN=0x800ae204, PHASE=0x800ae224, MODE=0x800afa88, TEAM_BATTLE=2,
        CHOOSING_CPU=3, NATIVES=21 };
 /* Pad bits, active low. */
 enum { PAD_SELECT=0x0001, PAD_START=0x0008, PAD_RIGHT=0x0020, PAD_LEFT=0x0080,
-       PAD_TRIANGLE=0x1000, PAD_CIRCLE=0x2000, PAD_CROSS=0x4000, PAD_SQUARE=0x8000,
+       PAD_L1=0x0400, PAD_R1=0x0800, PAD_TRIANGLE=0x1000, PAD_CIRCLE=0x2000, PAD_CROSS=0x4000, PAD_SQUARE=0x8000,
        PICK=PAD_START|PAD_TRIANGLE|PAD_CIRCLE|PAD_CROSS|PAD_SQUARE,
        CARD_KEYS=PICK|PAD_SELECT|PAD_LEFT|PAD_RIGHT, INJECT_POLLS=3 };
 
 /* A native's other movesets, one per line of natives.txt: its source (the
  * optional fourth column, "ttt1" without) is a value of the Options menu's
- * CPU MOVESET row and a share of the CPU's draw. */
+ * CPU MOVESET row and a share of the CPU's draw. Source "dr": Jin's Tekken 5
+ * Dark Resurrection moves (tools/dr_setup.py, PSP-DR.md A4), experimental in
+ * 1.5.0 (F34; said by the setup, the mods menu and the release notes, not in
+ * the game): read only with the Tekken 5 DR Content mod on; on the card as
+ * TEKKEN 5 DR, never in the CPU's RANDOM draw, only when CPU MOVESET names it. */
 enum { MAX_ALT=4, MAX_SOURCES=4 };
 static char sources[MAX_SOURCES][24];
 static unsigned source_count;
@@ -50,6 +56,8 @@ static int source_of(const char *name) {
     snprintf(sources[source_count],sizeof sources[0],"%s",name);
     return (int)source_count++;
 }
+extern int tekken3_dr_content_enabled(void);
+static int experimental(int source){return source>=0 && (unsigned)source<source_count && !strcmp(sources[source],"dr");}
 static void read_natives(void) {
     static int read;
     if(read)return;read=1;
@@ -62,6 +70,8 @@ static void read_natives(void) {
         unsigned id,moveset;char key[32],source[24]="ttt1";
         int fields=sscanf(line,"%u %31s %u %23s",&id,key,&moveset,source);
         if(fields<3 || id>=NATIVES || natives[id].count>=MAX_ALT)continue;
+        /* The DR moves only with the Tekken 5 DR Content mod on (src/tekken3_dr_content.c). */
+        if(!strcmp(source,"dr") && !tekken3_dr_content_enabled())continue;
         /* The combat file must be there: a line without it is left out. */
         char name[32],tag[24];snprintf(name,sizeof name,"%s",key);snprintf(tag,sizeof tag,"%s",source);
         if(name[0]>='a' && name[0]<='z')name[0]=(char)(name[0]-'a'+'A');
@@ -99,18 +109,32 @@ static int active(void) {
 }
 /* Test benches pick natives at the grid without a card:
  * TEKKEN3_NATIVE_MOVES=0 keeps them on T3 moves, =1 puts every native in
- * the fight on its TTT1 moves (the CPU's too). Unset, the card asks. */
+ * the fight on its TTT1 moves (the CPU's too), =<source> ("dr") those
+ * with moves of that source on them, the others on T3 moves. Unset, the
+ * card asks. */
+static char bench_source[24];
 static int bench(void) {
     static int value=-2;
     if(value==-2) {
         const char *e=getenv("TEKKEN3_NATIVE_MOVES");
         value=e && *e?(*e!='0'):-1;
+        if(e && *e && (*e<'0' || *e>'9'))snprintf(bench_source,sizeof bench_source,"%s",e);
     }
     return value;
 }
-/* Each slot's choice, kept from one pick to the next of the same session. */
+static int bench_alternative(unsigned id) {
+    if(id>=NATIVES || !natives[id].count)return -1;
+    for(unsigned k=0;bench_source[0] && k<natives[id].count;k++)
+        if(!strcmp(sources[natives[id].alt[k].source],bench_source))return (int)k;
+    return bench_source[0]?-1:0;
+}
+/* Each slot's choice, kept from one pick to the next of the same session:
+ * 0 Tekken 3's moves, k the native's alternative k - 1 (natives.txt). */
 static int want[2];
 static int wants(unsigned p){return want[p];}
+static const char *moves_name(unsigned id,int k) {
+    return k>0 && id<NATIVES && k<=(int)natives[id].count?sources[natives[id].alt[k-1].source]:"T3";
+}
 /* card[slot]: the button that picked the native while its card is open, 0
  * when closed. inject/injecting: that button, handed to the game for a few
  * polls once the card is taken. hold[pad]: the card's buttons stay away from
@@ -121,7 +145,18 @@ static int wants(unsigned p){return want[p];}
 static uint16_t card[2],injecting[2],hold[2];
 static int inject[2];
 static signed char picked[2][NATIVES];
-static void forget_picks(void){memset(picked,-1,sizeof picked);}
+/* F32: pick_key[slot][fighter], the button that picked that native (0 square
+ * LP, 1 cross LK, 2 triangle RP, 3 circle RK, 4 Start: the cabinet's
+ * variants), -1 none. The game keeps the costume only (0 punch, 1 kick, 2
+ * third): the TTT1 model of a native tells square from triangle and cross
+ * from circle (tools/data/ttt1_native_models.json). */
+static signed char pick_key[2][NATIVES];
+/* F32 E6: cpu_variant[slot][fighter], the model the CPU COSTUME row drew for that native, plus
+ * one (0: none yet), kept for the fight (a Team Battle team's member for the match). */
+static unsigned char cpu_variant[2][NATIVES];
+static void forget_picks(void) {
+    memset(picked,-1,sizeof picked);memset(pick_key,-1,sizeof pick_key);memset(cpu_variant,0,sizeof cpu_variant);
+}
 
 /* The Arcade grid (Arcade, Time Attack, Survival, Practice, Tekken Force): screen 9,
  * player blocks at 0x8011864C + 0x7C * player (state, cursor's fighter). */
@@ -133,19 +168,23 @@ static int arcade_grid(void) {
  * 172 * player: +0 state (3 choosing, 4 chosen, 12 handicap taken), +8
  * column, +12 row, +56 fighter * 4 + costume once chosen. The fighter
  * under the cursor is the grid table's (cell y * 7 + x). */
-enum { VS_BLOCKS=0x800b8d70, VS_STRIDE=172, VS_CHOOSING=3, TEAM_SIZE=1, TEAM_MEMBERS=2 };
+enum { VS_BLOCKS=0x800b8d70, VS_STRIDE=172, VS_CHOOSING=3, QUICK_CPU=7, TEAM_SIZE=1, TEAM_MEMBERS=2 };
 extern unsigned tekken3_ttt1_grid_character(unsigned cell);
             /* Hwoarang Dr.B Bryan Gon Gun-Jack Anna Eddy */
 /* TEKKEN BALL SELECT has the same layout: a human player chooses in state
  * 3, then the ball in 15; the CPU's block stays at 8. With QUICK SELECT
  * (GAME OPTION, 0x80097F10), the modes of the Arcade grid choose on this
  * grid too, mode unchanged: the player who joined in state 3, the other
- * block at 8. Square used to pick there with no card (B58, GH#7). */
+ * block at 8. Square used to pick there with no card (B58, GH#7). The
+ * Practice's dummy (mode 5) waits in state 7 once the player has chosen
+ * (11), picked with the player's pad (grid_side_update, t3-ps1
+ * src/chargement/800529C4.c): its card as on the Arcade grid (B128). */
 static int vs_grid_open(void) {
     unsigned s=psx_mod_read_word(VS_BLOCKS),mode=psx_mod_read_word(MODE);
     if(psx_mod_read_word(SCREEN)!=10)return 0;
     unsigned s2=psx_mod_read_word(VS_BLOCKS+VS_STRIDE);
     if(mode==TEKKEN_BALL)return s==3 || s==15 || s2==3 || s2==15;
+    if(mode==PRACTICE && (s==QUICK_CPU || s2==QUICK_CPU))return 1;
     if(mode!=1 && mode!=TEAM_BATTLE)return s==3 || s==4 || s2==3 || s2==4;
     return mode==1 && (s==3 || s==4 || s==12);
 }
@@ -171,11 +210,18 @@ static unsigned cursor_character(unsigned p) {
  * 2's block, whose state is then 3 (src/tekken3_ttt1_roster.c). */
 static unsigned state(unsigned p){return psx_mod_read_word(0x8011864c+p*0x7c);}
 static int confirmed(unsigned p) {
-    if(vs_grid_open())return psx_mod_read_word(VS_BLOCKS+p*VS_STRIDE)!=VS_CHOOSING;
+    if(vs_grid_open()) {
+        unsigned s=psx_mod_read_word(VS_BLOCKS+p*VS_STRIDE);
+        return s!=VS_CHOOSING && s!=QUICK_CPU;
+    }
     if(team_grid_open())return psx_mod_read_word(VS_BLOCKS+p*VS_STRIDE)!=2;
     return state(p)!=CHOOSING && state(p)!=CHOOSING_CPU;
 }
+/* QUICK SELECT's Practice: the player's pad picks the dummy in the other
+ * block, state 7. */
 static unsigned driven_by(unsigned pad) {
+    if(vs_grid_open() && psx_mod_read_word(MODE)==PRACTICE &&
+       psx_mod_read_word(VS_BLOCKS+(pad^1)*VS_STRIDE)==QUICK_CPU)return pad^1;
     return !grid10_open() && pad==0 && confirmed(0) && state(1)==CHOOSING_CPU?1:pad;
 }
 
@@ -187,10 +233,104 @@ static int card_state(unsigned p) {
 }
 
 static void close_cards(void){card[0]=card[1]=0;inject[0]=inject[1]=0;}
+/* The button of a pick on the grid, before any card takes the pad (the
+ * card hands the same button to the game). Start with Select held leaves
+ * the mode; both punches are Devil Jin's request; in Team Battle Start is
+ * never a pick. Benches that skip the cards are recorded too. Practice's
+ * STAGE band (tekken3_stage_select.c) holds the dummy's pick until a cross
+ * or Start takes it: that key is not the pick (F32: the dummy picked with
+ * triangle had its cross model). */
+static void record_key(unsigned p,uint16_t buttons,uint16_t edges) {
+    if(!active() || !selector_open() || tekken3_stage_select_open())return;
+    unsigned slot=driven_by(p);
+    if(card[slot] || inject[slot]>0 || confirmed(slot))return;
+    uint16_t picks=edges&PICK;
+    if(team_grid_open() || !(buttons&PAD_SELECT))picks&=(uint16_t)~PAD_START;
+    if(!picks || ((uint16_t)~buttons&PAD_SQUARE && (uint16_t)~buttons&PAD_TRIANGLE))return;
+    unsigned under=cursor_character(slot);
+    if(under>=NATIVES)return;
+    uint16_t pick=picks&-picks;
+    pick_key[slot][under]=(signed char)(pick==PAD_SQUARE?0:pick==PAD_CROSS?1:pick==PAD_TRIANGLE?2:pick==PAD_CIRCLE?3:4);
+}
+/* F32, triangle and R1. A native whose third costume is unlocked (its bit
+ * in 0x80097EF4) takes that costume on Start or triangle (0x810 at the
+ * cabinet selector, 0x8010DAF4, and on the grids, 0x80052DE4): its
+ * triangle model (RP) was out of reach. Drawn by its TTT1 model
+ * (tekken3_ttt1_native_rp_model), triangle is its RP model (the game gets
+ * square, the punch costume) and R1 its third costume (the game gets
+ * triangle, as before: in Team Battle, where Start draws a team, the only
+ * way to it). A key is taken on its press, under the cursor, and stays
+ * taken until it is let go: moving to another fighter with it held changes
+ * nothing. Not while the outfit gallery (tekken3_outfits.c), a card or
+ * Practice's STAGE band is open, nor once the slot has chosen; square and
+ * triangle together are Devil Jin's request, left alone. */
+enum { THIRD_COSTUME_KEYS=PAD_R1 };
+extern int tekken3_ttt1_native_rp_model(unsigned id);
+extern int tekken3_outfits_menu_player(void);
+static uint16_t taken[2];                   /* the raw keys being turned, per pad */
+static uint16_t turn_keys(unsigned p,uint16_t buttons,uint16_t edges) {
+    uint16_t pressed=(uint16_t)~buttons;
+    taken[p]&=pressed;
+    uint16_t press=edges&(PAD_TRIANGLE|THIRD_COSTUME_KEYS)&(uint16_t)~taken[p];
+    if(press && active() && selector_open() && !tekken3_stage_select_open() && tekken3_outfits_menu_player()!=(int)p) {
+        unsigned slot=driven_by(p),under=cursor_character(slot);
+        if(!card[slot] && inject[slot]<=0 && !confirmed(slot) && under<NATIVES &&
+           (psx_mod_read_word(0x80097ef4)>>under&1) && tekken3_ttt1_native_rp_model(under)) {
+            if(pressed&PAD_SQUARE)press&=(uint16_t)~PAD_TRIANGLE;
+            if(press&THIRD_COSTUME_KEYS) {
+                pick_key[slot][under]=4;
+                fprintf(stderr,"Native models: P%u R1, the third costume\n",slot+1);
+            } else if(press&PAD_TRIANGLE)
+                fprintf(stderr,"Native models: P%u triangle, the RP model\n",slot+1);
+            taken[p]|=press;
+        }
+    }
+    if(!taken[p])return buttons;
+    uint16_t out=(uint16_t)(buttons|taken[p]);
+    if(taken[p]&PAD_TRIANGLE)out&=(uint16_t)~PAD_SQUARE;
+    if(taken[p]&THIRD_COSTUME_KEYS)out&=(uint16_t)~PAD_TRIANGLE;
+    return out;
+}
+/* The cabinet's variant for a native of that slot and costume: costume 0
+ * square (0) or triangle (2), 1 cross (1) or circle (3), 2 Start (4; R1
+ * too, and triangle without a TTT1 model). The CPU's picks, the game's
+ * draws: 0, 1, 4. */
+static int key_variant(int k,unsigned costume) {
+    costume&=3;
+    return costume>=2?4:costume==0?(k==2?2:0):(k==3?3:1);
+}
+/* The same fighter in the same costume on both sides: the game gives the
+ * second the other one (costume ^ 1, sel_costume_clash_fix, t3-ps1
+ * textes_jeu/8004E8B4.c), Jin square against Jin triangle a kick costume.
+ * The model follows the key that picked it, unless the other side has that
+ * very model: then the game's costume tells them apart. */
+static int cpu_drawn_variant(unsigned slot,unsigned id);
+/* The model the other side shows for native id, when known without a draw: its key's, or
+ * the CPU's draw already made; -1 when its native is another. */
+static int known_variant(unsigned slot,unsigned id) {
+    if(slot>1 || id>=NATIVES || psx_mod_read_half(0x800add5c+slot*2)!=id)return -1;
+    if(pick_key[slot][id]<0 && cpu_variant[slot][id])return cpu_variant[slot][id]-1;
+    return key_variant(pick_key[slot][id],psx_mod_read_half(0x800add98+slot*2));
+}
+int tekken3_native_model_variant(unsigned slot,unsigned id,unsigned costume) {
+    int k=slot<2 && id<NATIVES?pick_key[slot][id]:-1;
+    if(k<0) {                                    /* F32 E6: the CPU's TTT draw */
+        int d=cpu_drawn_variant(slot,id);
+        if(d>=0)return d;
+    }
+    int v=key_variant(k,costume);
+    costume&=3;
+    if(k<0 || k==4 || costume>=2 || (unsigned)(k==1 || k==3)==costume)return v;
+    int o=known_variant(slot^1,id);
+    return o<0 || o==k?v:k;
+}
 uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
-    static uint16_t previous[2]={0xffff,0xffff};
+    static uint16_t previous[2]={0xffff,0xffff},raw_previous[2]={0xffff,0xffff};
     if(player<0 || player>1)return buttons;
     unsigned p=(unsigned)player;
+    uint16_t raw_edges=raw_previous[p]&(uint16_t)~buttons;raw_previous[p]=buttons;
+    record_key(p,buttons,raw_edges);
+    buttons=turn_keys(p,buttons,raw_edges);
     uint16_t edges=previous[p]&(uint16_t)~buttons;previous[p]=buttons;
     if(bench()>=0 || !active() || !selector_open()){close_cards();hold[p]=0;return buttons;}
     unsigned slot=driven_by(p);
@@ -199,8 +339,8 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
         return (uint16_t)~injecting[slot];
     }
     if(card[slot] && confirmed(slot)) {            /* the clock picked for it */
-        fprintf(stderr,"Native moves: P%u picked by the clock, %s moves\n",slot+1,wants(slot)?"TTT1":"T3");
         unsigned id=cursor_character(slot);
+        fprintf(stderr,"Native moves: P%u picked by the clock, %s moves\n",slot+1,moves_name(id,wants(slot)));
         if(id<NATIVES)picked[slot][id]=(signed char)wants(slot);
         card[slot]=0;
     }
@@ -214,15 +354,16 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
         return 0xffff;
     }
     if(card[slot]) {
+        unsigned id=cursor_character(slot);
         if(edges&(PAD_LEFT|PAD_RIGHT)) {
-            want[slot]=!wants(slot);
-            fprintf(stderr,"Native moves: P%u highlights %s moves\n",slot+1,want[slot]?"TTT1":"T3");
+            unsigned n=id<NATIVES?natives[id].count+1:2;
+            want[slot]=(int)(((unsigned)wants(slot)+(edges&PAD_RIGHT?1:n-1))%n);
+            fprintf(stderr,"Native moves: P%u highlights %s moves\n",slot+1,moves_name(id,want[slot]));
         }
         if(edges&(PAD_CROSS|PAD_START)) {
-            unsigned id=cursor_character(slot);
             if(id<NATIVES)picked[slot][id]=(signed char)wants(slot);
             injecting[slot]=card[slot];inject[slot]=INJECT_POLLS;card[slot]=0;hold[p]=CARD_KEYS;
-            fprintf(stderr,"Native moves: P%u takes %s moves\n",slot+1,wants(slot)?"TTT1":"T3");
+            fprintf(stderr,"Native moves: P%u takes %s moves\n",slot+1,moves_name(id,wants(slot)));
         } else if(edges&(PAD_CIRCLE|PAD_SELECT)) {
             card[slot]=0;hold[p]=CARD_KEYS;
             fprintf(stderr,"Native moves: P%u back to the grid\n",slot+1);
@@ -230,6 +371,9 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
         return 0xffff;                             /* the grid stays still */
     }
     hold[p]&=(uint16_t)~buttons;                   /* held keys, still down */
+    /* The STAGE band (tekken3_stage_select.c, after the cards) opened on
+     * the card's take: its presses are not a new pick (B128). */
+    if(tekken3_stage_select_open())return buttons|hold[p];
     /* Start with Select held leaves the mode: the game's, not a pick. */
     int leaving=!(buttons&PAD_SELECT) && (edges&PAD_START);
     if((uint16_t)~buttons&PAD_SQUARE && (uint16_t)~buttons&PAD_TRIANGLE)leaving=1;   /* Devil Jin */
@@ -245,6 +389,7 @@ uint16_t tekken3_native_moves_input(int player,uint16_t buttons) {
     if(!confirmed(slot) && picks && !leaving && tekken3_native_moves_available(under)) {
         uint16_t pick=picks;
         card[slot]=(uint16_t)(pick&-pick);         /* one button: its costume */
+        if(want[slot]>(int)natives[under].count)want[slot]=(int)natives[under].count;
         hold[p]=CARD_KEYS;
         fprintf(stderr,"Native moves: P%u opens the MOVESET card\n",slot+1);
         return 0xffff;
@@ -334,7 +479,13 @@ static int draw_alternative(unsigned id) {
         for(unsigned k=0;k<n;k++)if(natives[id].alt[k].source==setting)return (int)k;
         return -1;
     }
-    return (int)tekken3_moveset_draw(n+1,&draw_state)-1;
+    /* RANDOM: Tekken 3's and the alternatives that are not experimental (F34). */
+    unsigned shares=1;
+    for(unsigned k=0;k<n;k++)shares+=!experimental(natives[id].alt[k].source);
+    unsigned d=(unsigned)tekken3_moveset_draw(shares,&draw_state);
+    if(!d)return -1;
+    for(unsigned k=0;k<n;k++)if(!experimental(natives[id].alt[k].source) && !--d)return (int)k;
+    return -1;
 }
 /* The demo's two sides are the CPU's whatever 0x800AE1F8 holds (the menus
  * leave player 2's at 1 there). */
@@ -356,6 +507,7 @@ static void options_row(void) {
         snprintf(label[n++],sizeof label[0],"ORIGINAL");
         for(unsigned i=0;i<source_count;i++) {
             if(!strcmp(sources[i],"ttt1"))snprintf(label[n],sizeof label[0],"TEKKEN TAG TOURNAMENT");
+            else if(!strcmp(sources[i],"dr"))snprintf(label[n],sizeof label[0],"TEKKEN 5 DR");
             else {
                 snprintf(label[n],sizeof label[0],"%s",sources[i]);
                 for(char *c=label[n];*c;c++){if(*c>='a' && *c<='z')*c=(char)(*c-'a'+'A');if(*c=='_')*c=' ';}
@@ -374,6 +526,94 @@ static void options_row(void) {
     if(shown!=cpu_setting && !getenv("TEKKEN3_CPU_MOVESET")){cpu_setting=shown;saved_setting(1,&cpu_setting);}
 }
 
+/* F32 E6, the CPU COSTUME row of GAME OPTION: which model a CPU native is drawn by, for a
+ * native on its TTT1 model. TEKKEN 3: its costume's (0 LP, 1 LK, 2 Start), the game's draw
+ * (Arcade and Time Attack: every opponent in the player's punch or kick costume, Survival one
+ * of the two). TEKKEN TAG TOURNAMENT (the default): one of its imported models, LP, LK, RP,
+ * RK, Start, each with the same chance, as the cabinet's CPU (vs_teams_randomize, ttt-ps1
+ * src/menus/8016AEFC.c: ai_rand_range(5) a member); only what is drawn changes, the game keeps
+ * its costume. Not the one the other side shows of the same native, when known. Drawn once a
+ * fight (a Continue keeps it, a Team Battle member keeps it for the match), in the modes where
+ * the CPU has no card. TEKKEN3_CPU_COSTUME (tekken3 or ttt) overrides the menu (benches), the
+ * draw follows TEKKEN3_CPU_MOVESET_SEED. The player's choice is kept beside the memory card. */
+extern int tekken3_ttt1_native_variant_file(unsigned id,unsigned v);
+enum { CPU_COSTUME_T3=0, CPU_COSTUME_TTT=1 };
+static int costume_setting=-1,costume_row=-1;
+static uint64_t costume_state;
+/* A new fight's loading screen (not a Continue's: the same fight again) forgets the draws, but
+ * in Team Battle, where they hold for the match (forget_picks at the grid). Whichever comes
+ * first on that screen does it, the tick or a draw. */
+static int continuing,costume_fight_seen;
+static void costume_new_fight(void) {
+    if(!costume_fight_seen || psx_mod_read_word(SCREEN)!=LOADING)return;
+    costume_fight_seen=0;
+    if(!continuing && psx_mod_read_word(MODE)!=TEAM_BATTLE)memset(cpu_variant,0,sizeof cpu_variant);
+}
+static void costume_path(char *out,size_t size) {
+    char moves[4096];setting_path(moves,sizeof moves);out[0]=0;
+    char *slash=strrchr(moves,'/');
+    if(slash)snprintf(out,size,"%.*s/ttt1-cpu-costume.txt",(int)(slash-moves),moves);
+}
+static int cpu_costume_setting(void) {
+    if(costume_setting<0) {
+        costume_setting=CPU_COSTUME_TTT;
+        const char *e=getenv("TEKKEN3_CPU_COSTUME");
+        if(e && *e)costume_setting=strcmp(e,"tekken3")?CPU_COSTUME_TTT:CPU_COSTUME_T3;
+        else {
+            char path[4096],word[32]="";costume_path(path,sizeof path);
+            FILE *f=path[0]?fopen(path,"rb"):NULL;
+            if(f){if(fscanf(f,"%31s",word)==1 && !strcmp(word,"tekken3"))costume_setting=CPU_COSTUME_T3;fclose(f);}
+        }
+        const char *seed=getenv("TEKKEN3_CPU_MOVESET_SEED");
+        tekken3_moveset_seed(&costume_state,seed && *seed?strtoull(seed,NULL,0)^0x434f5354u:
+                             (uint64_t)time(NULL)*2654435761u+(uint64_t)clock()+(uint64_t)(uintptr_t)&costume_state);
+    }
+    return costume_setting;
+}
+static int cpu_drawn_variant(unsigned slot,unsigned id) {
+    /* Only for a fight, from its loading screen on: the menus forget the picks every frame, a
+     * selector reads the CPU's loading choice before it is the fight's, and the end of a fight
+     * the next opponent's (drawn at its loading screen; a Team Battle member in the fight, once
+     * its actor is that fighter). */
+    unsigned screen=psx_mod_read_word(SCREEN);
+    if(slot>1 || id>=NATIVES || (screen!=LOADING && screen!=FIGHT) || !active() || !cpu_slot(slot) ||
+       cpu_costume_setting()!=CPU_COSTUME_TTT)return -1;
+    costume_new_fight();
+    if(cpu_variant[slot][id])return cpu_variant[slot][id]-1;
+    if(screen==FIGHT && psx_mod_read_half(0x800a9240+slot*0x188c)!=id)return -1;
+    unsigned have[5],n=0;
+    int avoid=known_variant(slot^1,id);
+    for(unsigned v=0;v<5;v++)if((int)v!=avoid && tekken3_ttt1_native_variant_file(id,v))have[n++]=v;
+    if(!n && avoid>=0 && tekken3_ttt1_native_variant_file(id,(unsigned)avoid))have[n++]=(unsigned)avoid;
+    if(!n)return -1;                             /* no TTT1 model: the game's costume */
+    unsigned v=have[tekken3_moveset_draw(n,&costume_state)];
+    cpu_variant[slot][id]=(unsigned char)(v+1);
+    static const char *const keys[5]={"LP","LK","RP","RK","Start"};
+    fprintf(stderr,"Native models: CPU P%u fighter %u draws its %s model among %u (CPU COSTUME)\n",slot+1,id,keys[v],n);
+    return (int)v;
+}
+static void costume_options_row(void) {
+    if(costume_row<0) {
+        static int tried;
+        if(tried)return;
+        tried=1;
+        int any=0;
+        for(unsigned id=0;id<NATIVES && !any;id++)
+            for(unsigned v=0;v<5 && !any;v++)any=tekken3_ttt1_native_variant_file(id,v);
+        if(!any)return;                          /* no TTT1 model: no row */
+        static const char *const labels[2]={"TEKKEN 3","TEKKEN TAG TOURNAMENT"};
+        costume_row=tekken3_game_options_add("CPU COSTUME",labels,2,(unsigned)cpu_costume_setting(),CPU_COSTUME_TTT,CPU_MODES);
+        if(costume_row<0)return;
+    }
+    int shown=tekken3_game_options_value(costume_row);
+    if(shown>=0 && shown!=costume_setting && !getenv("TEKKEN3_CPU_COSTUME")) {
+        costume_setting=shown;
+        char path[4096];costume_path(path,sizeof path);
+        FILE *f=path[0]?fopen(path,"wb"):NULL;
+        if(f){fprintf(f,"%s\n",shown==CPU_COSTUME_T3?"tekken3":"ttt");fclose(f);}
+    }
+}
+
 /* The moves a player fights on, chosen for character `id`: a slot whose
  * card was taken for this fighter fights on the moves it chose, a CPU slot
  * on the moves it drew (once per fighter it loads; a Team Battle member on
@@ -384,7 +624,7 @@ static int drawn_id[2]={-1,-1},drawn_alt[2],chosen_id[2]={-1,-1};
 static void choose(unsigned p,unsigned id) {
     read_natives();                         /* before any card opened: the CPU's draw, a bench */
     int alt=-1;
-    if(bench()>=0)alt=bench() && id<NATIVES && natives[id].count?0:-1;
+    if(bench()>=0)alt=bench()?bench_alternative(id):-1;
     else if(id<NATIVES && cpu_slot(p) && psx_mod_read_word(MODE)==TEAM_BATTLE &&
             picked[p][id]>=0 && picked[p][id]<=(int)natives[id].count)alt=picked[p][id]-1;
     else if(id<NATIVES && cpu_slot(p)) {
@@ -398,8 +638,8 @@ static void choose(unsigned p,unsigned id) {
     } else if(id<NATIVES && picked[p][id]>=1 && picked[p][id]<=(int)natives[id].count)alt=picked[p][id]-1;
     if(tekken3_devil_jin_requested(p))alt=-1;      /* his own moves */
     if(active() && alt>=0)
-        tekken3_native_moves_set(p,id,natives[id].alt[alt].key,natives[id].alt[alt].moveset);
-    else tekken3_native_moves_set(p,0,NULL,0);
+        tekken3_native_moves_set(p,id,natives[id].alt[alt].key,natives[id].alt[alt].moveset,sources[natives[id].alt[alt].source]);
+    else tekken3_native_moves_set(p,0,NULL,0,NULL);
     chosen_id[p]=(int)id;
 }
 /* A fighter reloaded in the fight, without a loading screen (0x8002A40C:
@@ -412,7 +652,7 @@ int tekken3_native_moves_force(unsigned p,unsigned id) {
     read_natives();
     if(p>1 || !tekken3_native_moves_available(id))return 0;
     chosen_id[p]=(int)id;                   /* the reload's choice, not made again */
-    return tekken3_native_moves_set(p,id,natives[id].alt[0].key,natives[id].alt[0].moveset);
+    return tekken3_native_moves_set(p,id,natives[id].alt[0].key,natives[id].alt[0].moveset,sources[natives[id].alt[0].source]);
 }
 void tekken3_native_moves_reload(unsigned p,unsigned id) {
     if(p>1 || (int)id==chosen_id[p])return;
@@ -451,9 +691,11 @@ void tekken3_native_moves_tick(void) {
      * screen 1 and the selector (YES), and the CPU keeps the moves it drew
      * for that opponent. Any other screen (Game Over's ranking, the intro,
      * the menu) ends the match. */
-    static int continuing,loading_seen;
+    static int loading_seen;
     static uint16_t was_human[2];
     if(screen!=FIGHT && screen!=LOADING && screen!=SELECT && screen!=1){continuing=0;was_human[0]=was_human[1]=0;}
+    if(screen==FIGHT)costume_fight_seen=1;
+    costume_new_fight();
     if(screen==FIGHT)
         for(unsigned p=0;p<2;p++) {
             uint16_t human=psx_mod_read_half(0x800ae1f8+p*2);
@@ -465,9 +707,9 @@ void tekken3_native_moves_tick(void) {
         continuing=0;
     }
     loading_seen=screen==LOADING;
-    if(screen==OPTIONS)options_row();
+    if(screen==OPTIONS){options_row();costume_options_row();}
     if(screen==MENU) {
-        for(unsigned p=0;p<2;p++){want[p]=0;tekken3_native_moves_set(p,0,NULL,0);chosen_id[p]=-1;}
+        for(unsigned p=0;p<2;p++){want[p]=0;tekken3_native_moves_set(p,0,NULL,0,NULL);chosen_id[p]=-1;}
         forget_picks();
         close_cards();
         return;
@@ -477,7 +719,7 @@ void tekken3_native_moves_tick(void) {
      * stayed that player's identity there, its name and files in place of
      * the cast guest's (B75). */
     if(screen==EMBU)
-        for(unsigned p=0;p<2;p++){tekken3_native_moves_set(p,0,NULL,0);chosen_id[p]=-1;}
+        for(unsigned p=0;p<2;p++){tekken3_native_moves_set(p,0,NULL,0,NULL);chosen_id[p]=-1;}
     if(screen!=LOADING)return;
     for(unsigned p=0;p<2;p++)choose(p,psx_mod_read_half(0x800add5c+p*2));
 }
@@ -573,7 +815,8 @@ static void arrow(Packet *k,int x,int y,int dir,uint32_t colour) {
     triangle(k,OUTLINE,x-2*dir,y,x+10*dir,y-9,x+10*dir,y+9);
     triangle(k,colour,x,y,x+8*dir,y-6,x+8*dir,y+6);
 }
-static void card_packet(Packet *k,unsigned p,int ttt1,unsigned frame) {
+static void card_packet(Packet *k,unsigned p,int choice,unsigned frame) {
+    const char *source=moves_name(cursor_character(p),choice);
     const Colours *c=&colours[p && !grid10_open() && state(1)==CHOOSING_CPU?2:p];
     /* VS: under the small portrait (y 325..385). */
     int cx=portrait_x(p),top=vs_grid_open()?VS_CARD_TOP:team_grid_open()?TEAM_CARD_TOP:CARD_TOP;
@@ -584,8 +827,14 @@ static void card_packet(Packet *k,unsigned p,int ttt1,unsigned frame) {
     arrow(k,cx-CARD_W/2+4-sway,top+36,1,c->arrow);
     arrow(k,cx+CARD_W/2-4+sway,top+36,-1,c->arrow);
     text(k,"MOVESET",cx,top+4,1,2,c->tint);
-    if(ttt1){text(k,"TEKKEN TAG",cx,top+18,3,4,c->tint);text(k,"TOURNAMENT",cx,top+36,3,4,c->tint);}
-    else text(k,"TEKKEN 3",cx,top+27,3,4,c->tint);
+    if(!strcmp(source,"ttt1")){text(k,"TEKKEN TAG",cx,top+18,3,4,c->tint);text(k,"TOURNAMENT",cx,top+36,3,4,c->tint);}
+    else if(!strcmp(source,"dr"))text(k,"TEKKEN 5 DR",cx,top+27,3,4,c->tint);   /* the user's name for it: one line */
+    else if(!strcmp(source,"T3"))text(k,"TEKKEN 3",cx,top+27,3,4,c->tint);
+    else {
+        char label[24];snprintf(label,sizeof label,"%s",source);
+        for(char *s=label;*s;s++)if(*s>='a' && *s<='z')*s=(char)(*s-'a'+'A');
+        text(k,label,cx,top+27,3,4,c->tint);
+    }
 }
 
 /* The CHARACTER SELECT card: the page on screen, TEKKEN 3 or TEKKEN TAG

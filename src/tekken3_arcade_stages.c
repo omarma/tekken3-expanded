@@ -150,6 +150,7 @@ typedef struct {
     /* far background */
     int16_t fcols, frows, fring, fyoff, fdegrees, fpitch;
     const uint8_t *fcolours;            /* cell rgb, top rgb, top on, bottom rgb, bottom on */
+    uint8_t fsky[3]; int fsky_on;       /* TTT: the mean colour of the top row's sky cells (a cinematic's sky below the rows) */
     const uint16_t *fdesc, *fcluts;
     const uint8_t *fkinds;
     /* floor */
@@ -706,6 +707,42 @@ static int tanm_overlap(int x, int y, int w, int h) {
     return overlap(x, y, w, h, d[0], d[1], 16, 1);
 }
 unsigned tekken3_stage_high_vram_generation(void) { return s_pack_generation; }
+/* Another mod wrote over the loaded pack's rectangles while no stage drew
+ * (the selector's HD tiles, F28): they go back before the stage draws again
+ * (pack_vram_restore, from active()). */
+static int s_vram_disturbed;
+void tekken3_stage_high_vram_disturbed(void) { if (s_pack.file) s_vram_disturbed = 1; }
+static void pack_vram_restore(void) {
+    const uint8_t *o = s_pack.file ? section(s_pack.file, "VRAM") : NULL;
+    s_vram_disturbed = 0;
+    if (!o) return;
+    uint32_t n; memcpy(&n, o, 4); o += 4;
+    for (uint32_t i = 0; i < n; i++) {
+        uint16_t r[4]; memcpy(r, o, 8); o += 8;
+        psx_mod_gpu_high_vram_upload(r[0], r[1], r[2], r[3], (const uint16_t *)o);
+        o += 2u * r[2] * r[3];
+    }
+}
+/* A savestate puts the whole upper half back as it was saved (boot_state.c,
+ * BS_SEC_VRAM_HI), while the pack stays loaded here: a state saved on the
+ * grid before the fight, loaded after it, and the same stage next (not
+ * loaded again) drew with the grid's upper half, black with OpenGL (B149,
+ * TIPS.md section 235). After a load the pack's rectangles go back before
+ * it draws again, as after F28's tiles. */
+extern uint32_t savestate_load_generation(uint64_t *frame);
+static void after_savestate_load(void) {
+    static uint32_t seen;
+    uint32_t loads = savestate_load_generation(NULL);
+    if (loads == seen) return;
+    seen = loads;
+    if (!s_pack.file) return;
+    s_vram_disturbed = 1;
+    if (log_on()) {
+        fprintf(stdout, "arcade stages: savestate loaded, %s stage %d's upper VRAM put back\n",
+                s_pack.source == TEKKEN3_STAGE_TTT ? "TTT" : "arcade", s_pack.stage);
+        fflush(stdout);
+    }
+}
 int tekken3_stage_high_vram_used(int x, int y, int w, int h) {
     const Pack *p = &s_pack;
     const uint8_t *o = p->file ? section(p->file, "VRAM") : NULL;
@@ -723,6 +760,8 @@ int tekken3_stage_high_vram_used(int x, int y, int w, int h) {
 static void anim_reset(void);
 static void storm_reset(void);
 static void ttt_anim_reset(void);
+static void t3_wind_tick(void);
+static void tanm_prime(void);
 static uint32_t ttt_floor_light(int row, int col, uint32_t clut);
 
 /* E5a: the 13 arcade stages, fixed (their objects and animations: E5b);
@@ -756,6 +795,53 @@ static uint8_t *pack_read(int source, int stage, long *out_size, char *path, siz
     return b;
 }
 
+/* A halfword of the pack's VRAM rectangles (0 where none holds it). */
+static uint16_t pack_vram(const uint8_t *b, int x, int y) {
+    const uint8_t *o = section(b, "VRAM");
+    if (!o) return 0;
+    uint32_t n; memcpy(&n, o, 4); o += 4;
+    for (uint32_t i = 0; i < n; i++) {
+        uint16_t r[4], v; memcpy(r, o, 8); o += 8;
+        if (x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]) {
+            memcpy(&v, o + 2u * ((unsigned)(y - r[1]) * r[2] + (unsigned)(x - r[0])), 2);
+            return v;
+        }
+        o += 2u * r[2] * r[3];
+    }
+    return 0;
+}
+
+/* The mean colour of the top row's textured far background cells (their
+ * words as ttt_far_texture reads them, opaque texels only): a cinematic's
+ * camera looks higher than TTT's ever do (P. Jack's ending flies 11 000 up
+ * on stage 0, whose 5 rows then ended at mid-screen over black); there,
+ * below the rows, this plain colour, as the PS2's plain sky. */
+static void pack_sky_colour(Pack *p) {
+    double sum[3] = {0, 0, 0}; long count = 0;
+    for (int c = 0; c < p->fring; c++) {
+        if (p->fkinds[c] != 0x31) continue;
+        uint16_t d = p->fdesc[c % p->fcols];
+        uint32_t clut = p->fcluts[c % p->fcols];
+        uint32_t tp = (uint32_t)(((d >> 4) & 0x100) >> 4 | ((d >> 8) & 0xF) | ((d >> 4) & 0x200) << 2);
+        int px = 64 * (int)(tp & 0xF), py = 256 * (int)((tp >> 4) & 1) + 512 * (int)((tp >> 11) & 1), depth = (int)((tp >> 7) & 3);
+        int cx = 16 * (int)(clut & 0x3F), cy = (int)((clut >> 6) & 0x3FF);
+        int u0 = (d * 32) & 0xFF, v0 = ((d & 0x38) * 4) & 0xFF;
+        for (int j = 0; j < 64; j += 2)
+            for (int i = 0; i < 64; i += 2) {
+                int u = (u0 + i) & 0xFF, v = (v0 + j) & 0xFF;
+                uint16_t t;
+                if (depth == 0) t = pack_vram(p->file, cx + ((pack_vram(p->file, px + u / 4, py + v) >> (4 * (u & 3))) & 0xF), cy);
+                else if (depth == 1) t = pack_vram(p->file, cx + ((pack_vram(p->file, px + u / 2, py + v) >> (8 * (u & 1))) & 0xFF), cy);
+                else t = pack_vram(p->file, px + u, py + v);
+                if (!t) continue;                           /* transparent */
+                sum[0] += (t & 31) << 3; sum[1] += ((t >> 5) & 31) << 3; sum[2] += ((t >> 10) & 31) << 3;
+                count++;
+            }
+    }
+    p->fsky_on = count > 0;
+    for (int k = 0; k < 3; k++) p->fsky[k] = count ? (uint8_t)(sum[k] / count + 0.5) : 0;
+}
+
 /* TTT's sections (format 4): far background rules, floor, sine, storm,
  * thunder, axis and OT ranks. */
 static int pack_ttt(Pack *p) {
@@ -780,6 +866,7 @@ static int pack_ttt(Pack *p) {
     p->fcluts = (const uint16_t *)o; o += 2 * p->fcols * p->frows;
     p->fkinds = o;
     if (p->fcols <= 0 || p->frows < 0 || p->fring <= 0 || p->fdegrees <= 0) return 0;
+    pack_sky_colour(p);
     /* FLR2 */
     o = section(b, "FLR2");
     if (o) {
@@ -865,6 +952,7 @@ static int pack_load_from(int source, int stage) {
         if (!p->hivram) p->tanm = NULL;
     }
     /* VRAM: rectangles in the upper half */
+    s_vram_disturbed = 0;
     o = section(b, "VRAM");
     uint32_t n; memcpy(&n, o, 4); o += 4;
     for (uint32_t i = 0; i < n; i++) {
@@ -931,8 +1019,10 @@ static int pack_load_from(int source, int stage) {
                 p->storm ? "yes" : "no", p->nthunder, p->nlayout, p->tanm ? "yes" : "no", p->lite ? "yes" : "no",
                 p->part ? "yes" : "no", p->glow ? "yes" : "no");
         fflush(stdout);
+        if (s_probe) fprintf(s_probe, "pack ttt %d\n", stage);
         storm_reset();
         ttt_anim_reset();
+        tanm_prime();
         return 1;
     }
     /* far background */
@@ -992,6 +1082,7 @@ static int ttt_night(void) {
 /* The arcade stage draws this frame. */
 static int active(void) {
     if (!s_on || !psx_mod_gpu_high_vram_ready() || !psx_mod_game_started()) return 0;
+    after_savestate_load();
     if (psx_mod_read_byte(NO_STAGE)) return 0;
     uint32_t mode = psx_mod_read_word(MODE);
     if (mode == 7 || mode == 8) return 0;
@@ -1006,6 +1097,7 @@ static int active(void) {
             if (!pack_load_from(TEKKEN3_STAGE_TTT, ttt)) return 0;
             s_tried = -1;
         }
+        if (s_vram_disturbed) pack_vram_restore();
         trig_ps1();
         return 1;
     }
@@ -1017,6 +1109,7 @@ static int active(void) {
         s_tried = arena;
         if (!stage_supported(arena) || !pack_load(arena)) return 0;
     }
+    if (s_vram_disturbed) pack_vram_restore();
     trig_ps1();
     return 1;
 }
@@ -1289,6 +1382,19 @@ static void far_background(const Screen *s, int yaw, int pitch) {
     if (y < H && bottom_on) band(ot, s, y < 0 ? 0 : y, H * 75 / 100, bottom_rgb);
 }
 
+/* A rectangle of colour c blended half over what is under it (B/2 + F/2). */
+static void tile_half(uint32_t ot, int x, int y, int w, int h, const uint8_t c[3]) {
+    if (w <= 0 || h <= 0) return;
+    uint32_t p = alloc_words(5);
+    if (!p) return;
+    psx_mod_write_word(p + 4, 0xE1000000u | 1u << 9 | 1u << 10);      /* semi-transparency 0: half and half */
+    psx_mod_write_word(p + 8, 0x62000000u | rgbw(c));
+    psx_mod_write_word(p + 12, xy(x, y));
+    psx_mod_write_word(p + 16, (uint32_t)h << 16 | (uint32_t)w);
+    add_prim(ot, p, 4);
+    s_stat_far++;
+}
+
 /* B77: the bottom colour on from TTT's lowest band (75 % of its screen) to
  * the PS1 screen's bottom, under everything (TTT_OT_FILL).
  * TTT's horizon never comes lower; under the PS1's cameras looking up, the
@@ -1355,6 +1461,10 @@ static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16
         below_band(s, H * 75 / 100, bottom_rgb);
         return;
     }
+    /* A cinematic's camera looking higher than TTT's ever do (the rows held
+     * at the top: P. Jack's ending, stage 0): the sky's plain colour in the
+     * empty cells and below the rows, the clouds above it fading into it. */
+    int up_look = s_force >= 0 && p->fsky_on && p->fclamp && y > 0;
     if (p->fclamp && y > 0) y = 0;
     if (p->fhas_min && y < p->fmin_y) y = p->fmin_y;
     if (y > 0 && top_on) band(ot, s, 0, y, top_rgb);
@@ -1370,6 +1480,13 @@ static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16
                 int xa = map_x(s, x), xb = map_x(s, x + 0x40), ya = map_y(s, y), yb = map_y(s, y + step);
                 if (kind == 0x31) {
                     ttt_far_texture(ot, r, desc[r * p->fcols + k], cluts[r * p->fcols + k], xa, ya, xb, yb);
+                    if (up_look && (r + 1 >= p->frows || p->fkinds[(r + 1) * p->fring + pmod(kind0 + c, p->fring)] != 0x31))
+                        for (int j = 0; j < 4; j++)         /* its lower half into the plain colour: 1/2, 3/4, 7/8, 15/16 */
+                            for (int l = 0; l <= j; l++)
+                                tile_half(ttt_slot(TTT_OT_WIDE), xa, map_y(s, y + 16 + 4 * j), xb - xa,
+                                          map_y(s, y + 20 + 4 * j) - map_y(s, y + 16 + 4 * j), p->fsky);
+                } else if (up_look) {
+                    tile_rect(ttt_slot(TTT_OT_FILL), xa, ya, xb - xa, yb - ya, p->fsky);
                 } else if (kind == 0x74) {
                     tile_rect(ot, xa, ya, xb - xa, yb - ya, cell_rgb);
                 } else if (kind == 0x64) {
@@ -1398,6 +1515,7 @@ static void far_background_ttt(const Screen *s, int yaw, int pitch, const uint16
     }
     if (y < H && bottom_on) band(ot, s, y < 0 ? 0 : y, H * 75 / 100, bottom_rgb);
     if (bottom_on) below_band(s, H * 75 / 100, bottom_rgb);
+    else if (s_force >= 0 && p->fsky_on && y < H) below_band(s, y < 0 ? 0 : y, p->fsky);   /* a cinematic's sky below the rows */
 }
 
 /* ------------------------------------------------------------------ */
@@ -2037,6 +2155,7 @@ static int round_over(void) {
  * arcade's fight loop skips both while paused */
 static void anim_tick(void) {
     Pack *p = &s_pack;
+    t3_wind_tick();
     if (psx_mod_read_word(PAUSED)) return;
     if (p->aframes && ++s_anim_count >= p->aperiod) {
         unsigned f = s_anim_frame % p->aframes;
@@ -3260,6 +3379,34 @@ static void stage7_machine(void) {
     }
 }
 
+/* Stage 6's copies of an odd frame i (0..95): the strip at (0x90, 0x230),
+ * and the switch sw[i] (1..nm, 0 none) to its two 16 x 64 images and palette */
+static void stage6_odd(const uint8_t *q, int i) {
+    const uint8_t *odd = q + 128, *sw = q + 512, *more = q + 612;
+    uint32_t nm; memcpy(&nm, q + 608, 4);
+    const uint8_t *clut = more + 8 * nm, *dest = clut + 4 * nm;
+    hivram_move(rd16(odd + 4 * i), rd16(odd + 4 * i + 2), 16, 32, 0x90, 0x230);
+    int b = sw[i];
+    if (b && (uint32_t)b <= nm) {
+        const uint8_t *m = more + 8 * (b - 1);
+        hivram_move(rd16(m), rd16(m + 2), 16, 64, 0, 0x240);
+        hivram_move(rd16(m + 4), rd16(m + 6), 16, 64, 0, 0x200);
+        hivram_move(rd16(clut + 4 * (b - 1)), rd16(clut + 4 * (b - 1) + 2), 16, 1, rd16(dest), rd16(dest + 2));
+    }
+}
+
+/* B130 (GH#174): stage 6's file leaves a stand-in where its switched
+ * images land, (0, 0x200) and (0, 0x240) (a white smiling face, and its
+ * palette at the TANM destination); the first copy there is the second
+ * frame's (odd frame 0, sw[0] = 2), and the engine draws the stage from its
+ * first frame on: a fresh load (a team's next member on another stage, the
+ * fight after another stage) showed the face for one frame. The load makes
+ * that copy at once: the first frame shows what the second does. Stages 3
+ * and 14 copy on their first frame, stage 7's cage holds a real image. */
+static void tanm_prime(void) {
+    if (s_pack.tanm && s_pack.stage == 6) stage6_odd(s_pack.tanm + 4, 0);
+}
+
 /* 0x8015EB70, one frame (ttt.TttAnim.step): the copies of the frame */
 static void tanm_step(void) {
     const uint8_t *t = s_pack.tanm;
@@ -3284,9 +3431,7 @@ static void tanm_step(void) {
         break;
     }
     case 6: {
-        const uint8_t *even = q, *odd = q + 128, *sw = q + 512, *more = q + 612;
-        uint32_t nm; memcpy(&nm, q + 608, 4);
-        const uint8_t *clut = more + 8 * nm, *dest = clut + 4 * nm;
+        const uint8_t *even = q;
         if ((s16v((int)s_tttanim.a98) >> 1) > 0x5F) s_tttanim.a98 = 0;
         if (!(s_tttanim.a98 & 1)) {
             int e = (int)(((old + 1) * 2 & 0x7C) >> 2);
@@ -3294,14 +3439,7 @@ static void tanm_step(void) {
         } else {
             int i = s16v((int)s_tttanim.a98) >> 1;
             if (i < 0 || i >= 96) break;
-            hivram_move(rd16(odd + 4 * i), rd16(odd + 4 * i + 2), 16, 32, 0x90, 0x230);
-            int b = sw[i];
-            if (b && (uint32_t)b <= nm) {
-                const uint8_t *m = more + 8 * (b - 1);
-                hivram_move(rd16(m), rd16(m + 2), 16, 64, 0, 0x240);
-                hivram_move(rd16(m + 4), rd16(m + 6), 16, 64, 0, 0x200);
-                hivram_move(rd16(clut + 4 * (b - 1)), rd16(clut + 4 * (b - 1) + 2), 16, 1, rd16(dest), rd16(dest + 2));
-            }
+            stage6_odd(q, i);
         }
         break;
     }
@@ -3511,17 +3649,58 @@ static void wind_step(void) {
     s_wind[1] = (int)lround(v[2] * 4096 / l);
 }
 
+/* B141: T3 arcade blows the same wind on its stage 11 (King). 0x801E6ACC, at
+ * each fighter's load (once a fight, every round of it), in a fight (scene
+ * 0x8021FD20 = 4, the attract's too) on stage 0x8021FBB8 = 11 only, draws
+ * the direction as TTT (rand() & 0xE00, the signs of its sine and cosine:
+ * 0x8021FDF0 / F4), and none when a fighter is Gun Jack (models 0x20 and
+ * 0x21); 0x8019C738 is 0x801649A4 (0x8021F690 / 94) and the solver
+ * 0x8019B6D8 pulls as TTT's. The PS1 has neither. */
+static int s_t3_wind;                   /* this fight on T3's stage 11 blows */
+static unsigned s_t3_wind_fight = ~0u;  /* tekken3_stage_decisions() it was drawn for */
+
 int tekken3_ttt_stage_wind(int wind[2]) {
     static int off = -1;            /* TEKKEN3_TTT_WIND=0: no wind, for comparison */
     if (off < 0) { const char *e = getenv("TEKKEN3_TTT_WIND"); off = e && !strcmp(e, "0"); }
-    if (off || s_pack.source != TEKKEN3_STAGE_TTT || !s_pack.glow || psx_mod_read_word(0x800A08F0u) - s_wind_frame > 2) return 0;
+    if (off || psx_mod_read_word(0x800A08F0u) - s_wind_frame > 2) return 0;
+    if (s_pack.source == TEKKEN3_STAGE_TTT ? !s_pack.glow : !s_t3_wind) return 0;
     wind[0] = s_wind[0]; wind[1] = s_wind[1];
     return 1;
 }
 
+/* anim_tick's, once per frame T3's stage is drawn: the fight's draw, then
+ * the gusts but in the pause. Probe: the wind and player 1's accessory
+ * bones 18..21 (their x axis), for tools/test_b141_king_wind.py. */
+static void t3_wind_tick(void) {
+    uint32_t frame = psx_mod_read_word(0x800A08F0u);
+    if (s_pack.stage != 11) {
+        s_t3_wind = 0;
+        s_t3_wind_fight = ~0u;
+    } else if (tekken3_stage_decisions() != s_t3_wind_fight) {      /* a new fight */
+        s_t3_wind_fight = tekken3_stage_decisions();
+        int k = (storm_rand() & 0xE00) >> 9;                        /* 45 degrees each */
+        wind_reset(k % 4 ? (k < 4 ? 1 : -1) : 0, (k + 2) % 4 ? ((k + 2) % 8 < 4 ? 1 : -1) : 0);
+        s_t3_wind = 1;
+        for (int j = 0; j < 2; j++)
+            if ((uint16_t)(psx_mod_read_half(ACTOR(j) + 0x1Cu) - 0x20u) < 2) s_t3_wind = 0;
+        if (s_probe) fprintf(s_probe, "wind-draw %u %d %d %d\n", frame, k, s_wind_sign[0], s_wind_sign[1]);
+    }
+    s_wind_frame = frame;
+    if (s_t3_wind && !psx_mod_read_word(PAUSED)) wind_step();
+    if (s_probe) {          /* the wind as the solvers get it */
+        int w[2] = {0, 0};
+        tekken3_ttt_stage_wind(w);
+        fprintf(s_probe, "wind %u %d %d\nacc %u", frame, w[0], w[1], frame);
+        for (int b = 18; b <= 21; b++)
+            for (int k = 0; k < 3; k++) fprintf(s_probe, " %d", (int16_t)psx_mod_read_half(ACTOR(0) + 0xF74u + 32u * b + 6u * k));
+        fprintf(s_probe, "\n");
+    }
+}
+
 /* T3's solver: its pull, built at 0x80037FEC (x = z = gravity >> 4, y =
  * (256 - gravity) * 16, the bone's block in s3), goes to ApplyRotMatrix
- * (0x80081FD8, a0) back to 0x80038014; on stage 11, TTT's x and z */
+ * (0x80081FD8, a0) back to 0x80038014; on stage 11 (TTT's or T3
+ * arcade's), the wind's x and z */
 extern void __real_func_80081FD8(CPUState *cpu);
 void __wrap_func_80081FD8(CPUState *cpu) {
     int wind[2];
@@ -4247,12 +4426,14 @@ void __wrap_func_8004610C(CPUState *cpu) {
  * the TTT stage is drawn here instead of the TILE, as after 0x8006D014 (its
  * far background covers the screen, as in a lit arena): the camera and the
  * GTE screen are the fight's; no axis step (the PS1 routine that turns it
- * does not run). */
+ * does not run). B143: arena 11's skip in a lit arena only; in the dark
+ * one it took this TILE first, and TTT's stage 11 (on arena 11) was never
+ * drawn at night. */
 extern void __real_func_80048374(CPUState *cpu);
 void __wrap_func_80048374(CPUState *cpu) {
     int entry = cpu->pc == 0 || cpu->pc == 0x80048374u;
     if (entry) light_push(cpu);
-    if (entry && !s_shadow && psx_mod_read_half(ARENA) == 11 && active()) {
+    if (entry && !s_shadow && psx_mod_read_half(ARENA) == 11 && !psx_mod_read_byte(DARK_ARENA) && active()) {
         cpu->pc = cpu->gpr[31];
         return;
     }

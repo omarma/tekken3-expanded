@@ -75,6 +75,28 @@ class Pack:
         self.records.append(bytearray(self.records[like]))
         return len(self.records) - 1
 
+    def compact(self):
+        """The data area with only what the records point at: set_clip / set_cancels append and leave the
+        old blob behind (no_ttt1 rewrites hundreds of lists: Jin's DR pack went past the runtime's 16 MiB).
+        A blob several records share is copied once."""
+        half = lambda o, k: struct.unpack_from('<H', self.data, o + k)[0]
+        def size(k, o, i):
+            if k == 0: return 8 + self.data[o] * 114                       # clip: frames in its low byte
+            if k == 3: return self.meta[i][3] * 12                         # cancel list
+            if k == 7: return 2 * next(j + 1 for j in range(4) if half(o, 2 * j) == 0xffff)
+            return 4 * next(j + 1 for j in range(256) if not half(o, 4 * j))   # properties, a zero frame last
+        new, moved = bytearray(), {}
+        for i in range(len(self.records)):
+            for k in (0, 3, 7, 8):
+                o = self.word(i, k)
+                if o not in moved:
+                    n = size(k, o - self.data_at, i)
+                    new.extend(b'\0' * (-len(new) % 4))
+                    moved[o] = self.data_at + len(new)
+                    new.extend(self.data[o - self.data_at:o - self.data_at + n])
+                self.set_word(i, k, moved[o])
+        self.data = new
+
     def build(self):
         n = len(self.records)
         records_at = 32 + n * 16

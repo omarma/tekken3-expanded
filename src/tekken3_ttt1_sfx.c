@@ -213,6 +213,25 @@ void __wrap_func_80040DF4(CPUState *cpu) {
             if(said<400){said++;fprintf(stderr,"TTT1 characters: P%u metal hit %04X (TTT1)\n",p+1,command);}
             cpu->pc=cpu->gpr[31];return;
         }
+        /* F35: T3's swing (attack_start_sfx 0x80041B30) is always 0x604A,
+         * one frame before the first active one. A DR move names its own
+         * (tools/psp/dr_pack.py: DR's whoosh, a punch's or a kick's, as DR
+         * plays it), a marked category-6 entry of its record's sounds list,
+         * which T3 itself skips. TTT1 moves have none: unchanged. */
+        if(command==0x604a && guest_move(p)) {
+            uint32_t record=psx_mod_read_word(0x800a9228+p*0x188c+0x54);
+            uint32_t list=psx_mod_read_word(record+28);
+            for(unsigned i=0;list && i<4;i++) {
+                unsigned c=psx_mod_read_half(list+i*2);
+                if(c==0xffff)break;
+                if((c>>12)==6 && (c&SFX_MARK) && find(p,c&(SFX_MARK-1),&s)) {
+                    play(&s,c&(SFX_MARK-1));
+                    static unsigned said;
+                    if(said<400){said++;fprintf(stderr,"TTT1 characters: P%u swing %04X (DR)\n",p+1,c);}
+                    cpu->pc=cpu->gpr[31];return;
+                }
+            }
+        }
         /* Unknown played by the CPU switches under pressure, guarding too. */
         if(ra==0x8004127c || ra==0x8004129c)tekken3_guest_note_guard(p);
         int owner=guest_move(p)?(int)p:

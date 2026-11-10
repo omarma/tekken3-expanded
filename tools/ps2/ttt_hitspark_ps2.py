@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""The Mishima's PS2 strong-hit effects, read on your Tekken Tag Tournament
-(USA) PS2 disc (SLUS-20001) and converted to TTT Hitspark's 64 x 64 packs.
+"""The Mishima's and Unknown's PS2 strong-hit effects, read on your Tekken
+Tag Tournament (USA) PS2 disc (SLUS-20001) and converted to TTT Hitspark's
+64 x 64 packs.
 
     python tools/ps2/ttt_hitspark_ps2.py --ttt-disc DISC --out DIR
     python tools/ps2/ttt_hitspark_ps2.py --ttt-disc DISC --sheet SHEET.png
@@ -8,7 +9,9 @@
 Made by ttt_laser_install.py with the lasers (the PS2 EFFECTS content, TIPS
 section 164); this file alone writes them for a check.
 
-On the PS2 each Mishima has his own strong-hit animation: 128 x 128 4-bit
+On the PS2 each Mishima has his own strong-hit animation, and Unknown hers
+(a ghostly screaming face that comes apart in purple lightning; the same
+bytes in her two costumes, F33): 128 x 128 4-bit
 images, each with its own 16-colour palette (the colours fade from one to
 the next), one image a frame (the hit spark study, etude-hitspark-ps2).
 In TEKKEN.BIN the set is one run of 0x2100-byte GS uploads (image, then
@@ -16,15 +19,17 @@ palette), which runs on across the table's file boundaries: it is read by
 its place in TEKKEN.BIN, not in one file. Its head (the set's table and the
 top of image 0) is stored compressed, in a format not read here: image 0 is
 left out and the animation starts on image 1 (Jin 29 images, Heihachi 33,
-Kazuya and Devil 37). Each set is checked by sha256: another version of the
-disc is refused.
+Kazuya and Devil 37, Unknown 34). Each set is checked by sha256: another version of the
+disc is refused. Unknown's set (35 images, 1.. read) lies whole in her
+costume 1 file.
 
 Conversion: each 2 x 2 block keeps its brightest texel (the image's own
 palette), which keeps the PS2's one-texel lightning strokes; colours 8 -> 5
 bits with the STP bit (the PS1's additive mode blends only texels that have
-it), black transparent. At most 32 images (the engine reads the frame from
-the game's UV, 2 x 16 cells): Heihachi's, Kazuya's and Devil's last, the
-palest, go. Angel's (on the PS2 the same as Devil's)
+it), black transparent. The Mishima at most 32 images (the engine reads the
+frame from the game's UV, 2 x 16 cells): Heihachi's, Kazuya's and Devil's
+last, the palest, go. Unknown keeps her 34 (LONG, the user's wish, F33):
+past the game's cells the engine takes the sprite's age. Angel's (on the PS2 the same as Devil's)
 is Devil's with gold palettes (ttt_laser_install.gold, as her laser).
 
 Pack (the engine's .hfx, src/tekken3_ttt1_combat.c): 'HFX6', u16 version 1,
@@ -45,6 +50,7 @@ sys.path.insert(0, str(ROOT / 'tools/ps2'))
 import ttt_disc  # noqa: E402
 
 STRIDE, IMAGE, SIDE, MOST = 0x2100, 128 * 128 // 2, 64, 32
+LONG = {'Unknown': 34}                  # sets kept past MOST (the engine takes up to 35: src/tekken3_ttt1_combat.c PS2_HFX_MOST)
 PALETTE_AT = IMAGE + 96                 # the palette's 64 bytes, after its upload header
 # name: (TEKKEN.BIN file, where image 1's pixels are in it, images 1.., sha256 of their pixels and palettes)
 SETS = {
@@ -56,8 +62,11 @@ SETS = {
                  '1d4eaecc4161eb85bbe3d36edec8c030f67eccd7574f7169d422f6fec08d5b81'),
     'Devil': (585, 0x166350, 37,
                  'bc2f87380aaeea62ad0be7e54747c05c762cf7d2624c50510116daa802994f69'),
+    # Unknown's costume 1 file (its data: file 693 of the F29 count, TIPS section 226); costume 2 has the same set.
+    'Unknown': (615, 0x35b30, 34,
+                'eb5020561b9686337eb2b2e0ce9bd9b581f6781841bf7da60543b1ae53e3dc76'),
 }
-NOT_FOUND = "the Mishima's PS2 strong-hit effects were not found, they keep TTT1's"
+NOT_FOUND = "the Mishima's and Unknown's PS2 strong-hit effects were not found, they keep TTT1's"
 
 
 def read_set(d: ttt_disc.Disc, tekken: ttt_disc.TekkenBin, name: str):
@@ -109,10 +118,10 @@ def shrink(pixels: bytes, palette) -> bytes:
     return bytes(out)
 
 
-def hfx(images, recolour=None) -> bytes:
-    """The .hfx of a set: one palette an image, at most MOST images."""
+def hfx(images, recolour=None, most=MOST) -> bytes:
+    """The .hfx of a set: one palette an image, at most `most` images."""
     import ttt_laser_install as laser
-    images = images[:MOST]
+    images = images[:most]
     head = b'HFX6' + struct.pack('<6H', 1, len(images), SIDE, len(images), 1, 0)
     palettes = b''.join(struct.pack('<16H', *(laser.colour15(*(recolour(*c) if recolour else c))
                                              for c in colours(p))) for _, p in images)
@@ -120,10 +129,10 @@ def hfx(images, recolour=None) -> bytes:
 
 
 def files(disc: Path):
-    """{file name: bytes} of the five packs (Angel's: Devil's in gold)."""
+    """{file name: bytes} of the six packs (Angel's: Devil's in gold)."""
     import ttt_laser_install as laser
     found = sets(disc)
-    out = {f'{name}-PS2-hiteffect64.hfx': hfx(images) for name, images in found.items()}
+    out = {f'{name}-PS2-hiteffect64.hfx': hfx(images, most=LONG.get(name, MOST)) for name, images in found.items()}
     out['Angel-PS2-hiteffect64.hfx'] = hfx(found['Devil'], laser.gold)
     return out
 
@@ -139,7 +148,7 @@ def sheet(disc: Path, out: Path):
     draw = ImageDraw.Draw(page)
     for r, (name, images, recolour) in enumerate(rows):
         draw.text((2, r * 260 + 2), name, fill=(255, 255, 0))
-        for k, (px, p) in enumerate(images[:MOST]):
+        for k, (px, p) in enumerate(images[:LONG.get(name, MOST)]):
             pal = [recolour(*c) if recolour else c for c in colours(p)]
             flat = [c for rgb in pal for c in rgb]
             big = Image.frombytes('P', (128, 128), bytes(v for b in px for v in (b & 15, b >> 4)))

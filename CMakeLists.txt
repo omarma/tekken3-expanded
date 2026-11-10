@@ -164,6 +164,12 @@ set_source_files_properties("${TEKKEN3_ARCADE_CAMERAS_SOURCE}" PROPERTIES
 # scanning src/; DEFINED_IN overrides a defining TU that is not compiled.
 function(tekken3_wrap_symbol sym)
     cmake_parse_arguments(TW "" "WRAPPER;DEFINED_IN" "" ${ARGN})
+    # Every platform: what is wrapped, and by which file when it was given
+    # (the add-ons chain in front of these, tekken3_addon_chain).
+    set_property(GLOBAL APPEND PROPERTY TEKKEN3_WRAPPED_SYMS "${sym}")
+    if(TW_WRAPPER)
+        set_property(GLOBAL PROPERTY TEKKEN3_WRAP_HOLDER_${sym} "${TW_WRAPPER}")
+    endif()
     if(NOT APPLE)
         target_link_options(psx-runtime PRIVATE "-Wl,--wrap=${sym}")
         return()
@@ -231,6 +237,137 @@ function(tekken3_apply_wraps)
     message(STATUS "Emulated -Wl,--wrap for ${_count} symbol(s) without ld64")
 endfunction()
 
+# Add-ons: addons/<id>/addon.cmake, each included once the game's own wraps
+# are declared and before the macOS emulation applies them (MODDING.md,
+# "Add-ons"). The setup lists in TEKKEN3_ADDONS_SKIP the ones it leaves out:
+# their setup step failed, or the build with them did. On Android too: what
+# an add-on stages under mods/ goes into the APK.
+set(TEKKEN3_ADDON_API 1)
+set(TEKKEN3_ADDONS_SKIP "" CACHE STRING "Add-on ids (addons/<id>/) left out of this build")
+
+# The game's file that defines __wrap_<sym> now: an add-on's that chained in
+# front, the WRAPPER given to tekken3_wrap_symbol, else the one source of
+# src/ or of the runtime with a definition of it (a line without ';').
+function(_tekken3_wrap_holder sym out)
+    get_property(_holder GLOBAL PROPERTY TEKKEN3_WRAP_HOLDER_${sym})
+    if(NOT _holder)
+        file(GLOB _candidates "${CMAKE_SOURCE_DIR}/src/*.c" "${CMAKE_SOURCE_DIR}/src/*.cpp"
+             "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/*.c" "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/*.cpp")
+        set(_found "")
+        foreach(_f IN LISTS _candidates)
+            file(STRINGS "${_f}" _hit REGEX "^[A-Za-z_].*[^A-Za-z0-9_]__wrap_${sym}[ \t]*\\([^;]*$" LIMIT_COUNT 1)
+            if(_hit)
+                list(APPEND _found "${_f}")
+            endif()
+        endforeach()
+        list(LENGTH _found _n)
+        if(NOT _n EQUAL 1)
+            message(FATAL_ERROR "tekken3_addon_chain(${sym}): ${_n} sources define __wrap_${sym} (${_found}); "
+                "the game's tekken3_wrap_symbol() call needs WRAPPER")
+        endif()
+        set(_holder "${_found}")
+    endif()
+    set(${out} "${_holder}" PARENT_SCOPE)
+endfunction()
+
+# An add-on's __wrap_<sym> (in WRAPPER) in front of the game's: the source
+# holding __wrap_<sym> now is compiled with it renamed CHAIN, which the
+# add-on's wrapper calls on to. Another add-on may chain in front of this one
+# the same way. When the game does not wrap <sym> (another release, a
+# feature off), it is wrapped for the add-on alone and the variable BRIDGED
+# names is set TRUE: the add-on's own CHAIN then calls __real_<sym>.
+function(tekken3_addon_chain sym)
+    cmake_parse_arguments(TC "" "WRAPPER;CHAIN;BRIDGED" "" ${ARGN})
+    if(NOT TC_WRAPPER OR NOT TC_CHAIN)
+        message(FATAL_ERROR "tekken3_addon_chain(${sym}) needs WRAPPER and CHAIN")
+    endif()
+    get_property(_wrapped GLOBAL PROPERTY TEKKEN3_WRAPPED_SYMS)
+    get_target_property(_links psx-runtime LINK_OPTIONS)
+    set(_bridged FALSE)
+    if("${sym}" IN_LIST _wrapped OR "-Wl,--wrap=${sym}" IN_LIST _links OR "LINKER:--wrap=${sym}" IN_LIST _links)
+        _tekken3_wrap_holder(${sym} _holder)
+        set_property(SOURCE "${_holder}" APPEND PROPERTY COMPILE_DEFINITIONS "__wrap_${sym}=${TC_CHAIN}")
+        if(APPLE)
+            # The emulation gives the symbol's name to the wrapper in front.
+            set_property(GLOBAL PROPERTY TEKKEN3_WRAP_WRAPPER_${sym} "${TC_WRAPPER}")
+        endif()
+    else()
+        tekken3_wrap_symbol(${sym} WRAPPER "${TC_WRAPPER}")
+        set(_bridged TRUE)
+    endif()
+    set_property(GLOBAL PROPERTY TEKKEN3_WRAP_HOLDER_${sym} "${TC_WRAPPER}")
+    if(TC_BRIDGED)
+        set(${TC_BRIDGED} ${_bridged} PARENT_SCOPE)
+    endif()
+endfunction()
+
+# A folder an add-on's setup made, put beside the game at each build, after
+# the game's own staging (which recreates mods/): TO is relative to the
+# executable's folder; a FROM not made yet leaves nothing there.
+function(tekken3_addon_stage)
+    cmake_parse_arguments(TS "" "FROM;TO" "" ${ARGN})
+    set_property(GLOBAL APPEND PROPERTY TEKKEN3_ADDON_STAGES "${TS_FROM}|${TS_TO}")
+endfunction()
+
+function(_tekken3_include_addon file dir id)
+    # Its own scope: what it sets stays its own.
+    set(TEKKEN3_ADDON_DIR "${dir}")
+    set(TEKKEN3_ADDON_ID "${id}")
+    include("${file}")
+endfunction()
+
+function(tekken3_include_addons)
+    if(CMAKE_PROJECT_INCLUDE MATCHES "addons|tmst")
+        message(WARNING "CMAKE_PROJECT_INCLUDE (${CMAKE_PROJECT_INCLUDE}) is an add-on's developer "
+            "include: with the add-on hook it may be built in twice. Configure with -UCMAKE_PROJECT_INCLUDE")
+    endif()
+    file(GLOB _files LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/addons/*/addon.cmake")
+    set(_ids "")
+    foreach(_file IN LISTS _files)
+        get_filename_component(_dir "${_file}" DIRECTORY)
+        get_filename_component(_id "${_dir}" NAME)
+        if(_id IN_LIST TEKKEN3_ADDONS_SKIP)
+            message(STATUS "Add-on ${_id}: left out of this build (TEKKEN3_ADDONS_SKIP)")
+            continue()
+        endif()
+        message(STATUS "Add-on ${_id}: ${_file}")
+        _tekken3_include_addon("${_file}" "${_dir}" "${_id}")
+        list(APPEND _ids "${_id}")
+    endforeach()
+    set_property(GLOBAL PROPERTY TEKKEN3_ADDONS "${_ids}")
+endfunction()
+
+# After the game's own POST_BUILD steps: the add-ons' folders.
+function(tekken3_stage_addons)
+    get_property(_stages GLOBAL PROPERTY TEKKEN3_ADDON_STAGES)
+    if(NOT _stages)
+        return()
+    endif()
+    set(_script "${CMAKE_BINARY_DIR}/tekken3_addon_stage.cmake")
+    file(WRITE "${_script}" "file(REMOVE_RECURSE \"\${DST}\")\n"
+        "if(IS_DIRECTORY \"\${SRC}\")\n    file(COPY \"\${SRC}/\" DESTINATION \"\${DST}\")\nendif()\n")
+    # A plain folder, not $<TARGET_FILE_DIR>: the target below runs before
+    # psx-runtime and must not depend on it.
+    get_target_property(_game_dir psx-runtime RUNTIME_OUTPUT_DIRECTORY)
+    if(NOT _game_dir)
+        set(_game_dir "${CMAKE_BINARY_DIR}")
+    endif()
+    set(_commands "")
+    foreach(_stage IN LISTS _stages)
+        string(REPLACE "|" ";" _parts "${_stage}")
+        list(GET _parts 0 _from)
+        list(GET _parts 1 _to)
+        list(APPEND _commands COMMAND ${CMAKE_COMMAND} "-DSRC=${_from}" "-DDST=${_game_dir}/${_to}" -P "${_script}")
+    endforeach()
+    # After a link (the framework recreates mods/ then), and at every build
+    # without one: an add-on's setup may have remade its folders since.
+    add_custom_command(TARGET psx-runtime POST_BUILD ${_commands}
+        COMMENT "Staging the add-ons' folders" VERBATIM)
+    add_custom_target(tekken3_addons_stage ${_commands}
+        COMMENT "Staging the add-ons' folders" VERBATIM)
+    add_dependencies(psx-runtime tekken3_addons_stage)
+endfunction()
+
 # Apple's ld64 has no --wrap, and the option is a hard error there. The
 # regenerated camera variant is a complete replacement: build_fight_camera.py
 # renames the stock definition to __wrap_func_80064E10, nothing calls
@@ -290,11 +427,18 @@ if(TEKKEN3_TTT1_CHARACTERS)
     tekken3_wrap_symbol(func_8006A3BC)
     tekken3_wrap_symbol(func_8003C8F0)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_combat.c")
+    # Dark Resurrection's move cameras on a DR moveset (<prefix>-camera.txt, PSP-DR.md A3).
+    target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_dr_camera.c")
+    # Tekken 5 DR Content, the mod that lets the DR content in (mods/local-packages/tekken3.character.dr).
+    target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_dr_content.c")
+    tekken3_wrap_symbol(func_80064080)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_jin_omen.c")
     # Unknown's wolf spirit, drawn after her from the cinematics' 0x8003B4F8 wrapper (F08).
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_wolf.c")
     # Devil's and Angel's PS2 laser: textures in the upper VRAM half, the LASERS row.
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_ps2_laser.c")
+    # Unknown's PS2 katana and dagger (F29), from the same pack, drawn by the renderer's blade.
+    target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_ps2_weapons.c")
     set(TTT1_COMBAT_HOOKS "${CMAKE_CURRENT_BINARY_DIR}/tekken3_ttt1_combat_generated.c")
     set(TTT1_PUSH_HOOKS "${CMAKE_CURRENT_BINARY_DIR}/tekken3_ttt1_push_generated.c")
     add_custom_target(tekken3_ttt1_combat_codegen
@@ -313,9 +457,13 @@ if(TEKKEN3_TTT1_CHARACTERS)
     # TTT Hitspark (F12): the strong-hit effect's quads, once linked (src/tekken3_ttt1_combat.c).
     tekken3_wrap_symbol(func_8007745C)
     tekken3_wrap_symbol(func_80077524)
+    # DR packs: the strong-hit effect lit as DR lights it (src/tekken3_ttt1_combat.c).
+    tekken3_wrap_symbol(func_80076C28)
     # and the knockdown smoke's (F22): fx_scatter_tick, fx_scatter_advance.
     tekken3_wrap_symbol(func_8004AC24)
     tekken3_wrap_symbol(func_8004ACB4)
+    # and hit_fx_spawn (B139): a strong-hit effect keeps its sprite to its end.
+    tekken3_wrap_symbol(func_80076884)
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_voices.c")
     # TTT stage music (TTT Stages S5), mixed by the voices' spu_render wrapper.
     # Its file is made from the player's tektagt.zip
@@ -431,6 +579,8 @@ if(TEKKEN3_TTT1_CHARACTERS)
     tekken3_wrap_symbol(func_80031BFC DEFINED_IN "${TTT1_PUSH_HOOKS}")
     tekken3_wrap_symbol(func_8003172C DEFINED_IN "${TTT1_PUSH_HOOKS}")
     tekken3_wrap_symbol(func_800707F4)
+    tekken3_wrap_symbol(func_80070E08)
+    tekken3_wrap_symbol(func_80071110)
     tekken3_wrap_symbol(func_80052AD0)
     tekken3_wrap_symbol(func_80052958)
     tekken3_wrap_symbol(func_80052990)
@@ -461,6 +611,7 @@ else()
     target_sources(psx-runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tekken3_ttt1_off.c")
 endif()
 
+tekken3_include_addons()
 tekken3_apply_wraps()
 
 # A dynamic developer build can import the bundled Clang C++ runtime.  Stage it
@@ -584,6 +735,9 @@ if(TEKKEN3_TTT1_CHARACTERS)
     # TTT Cinematics: its data comes from the setup (tools/ttt_cinematics.py).
     set(TTT_CINEMATICS_PACKAGE "${CMAKE_CURRENT_SOURCE_DIR}/mods/local-packages/tekken3.cinematic.ttt-cinematics/1.0.0/manifest.toml")
     set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS "${TTT_CINEMATICS_PACKAGE}")
+    # Tekken 5 DR Content: its data comes from the setup (tools/dr_setup.py, the player's PSP disc).
+    set(DR_PACKAGE "${CMAKE_CURRENT_SOURCE_DIR}/mods/local-packages/tekken3.character.dr/1.0.0/manifest.toml")
+    set_property(TARGET psx-runtime APPEND PROPERTY LINK_DEPENDS "${DR_PACKAGE}")
     add_custom_command(TARGET psx-runtime POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:psx-runtime>/mods/jun"
             "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.jun-probe"
@@ -591,7 +745,9 @@ if(TEKKEN3_TTT1_CHARACTERS)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TTT1_PACKAGE}" "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.ttt1/1.0.0/manifest.toml"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.cinematic.ttt-cinematics/1.0.0"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TTT_CINEMATICS_PACKAGE}" "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.cinematic.ttt-cinematics/1.0.0/manifest.toml"
-        COMMENT "Staging the TTT1 characters and TTT Cinematics packages"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.dr/1.0.0"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DR_PACKAGE}" "$<TARGET_FILE_DIR:psx-runtime>/mods/packages/tekken3.character.dr/1.0.0/manifest.toml"
+        COMMENT "Staging the TTT1 characters, TTT Cinematics and Tekken 5 DR Content packages"
         VERBATIM)
     # TTT1 guests gathered by tools/ttt1_stage_roster.py, switched at the selector.
     set(TTT1_ROSTER "${CMAKE_CURRENT_SOURCE_DIR}/workspace/ttt1-import/roster")
@@ -603,6 +759,8 @@ if(TEKKEN3_TTT1_CHARACTERS)
             VERBATIM)
     endif()
 endif()
+
+tekken3_stage_addons()
 
 if(WIN32 AND CMAKE_RC_COMPILER)
     target_sources(psx-runtime PRIVATE launcher/icon.rc)
