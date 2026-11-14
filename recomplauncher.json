@@ -1,0 +1,8 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "repo": "omarma/tekken3-expanded",
+  "start": {
+    "program": ["Setup Tekken 3.cmd"]
+  }
+}
