@@ -488,7 +488,8 @@ def convert(ram, bank, records, moveset, body, limb_map, native_exe=None, graft=
                     alt|=(variants[0][1]+1)<<16;normal|=(hit[1]+1)<<16
                 dynamic_hits.append((i,mask,alt,normal))
         t=[0]*14
-        t[0]=pose_offsets[source];t[1]=v[1];t[2]=v[2];t[3]=cp
+        # Attributes: TTT1's window kinds renumbered to T3's (the low crush, B179).
+        t[0]=pose_offsets[source];t[1]=solo.attributes(v[1]);t[2]=v[2];t[3]=cp
         # Both engines add the high halfword to facing at recovery.
         t[4]=(v[4]&0xffff0000)|required_target(v[4]&65535)
         # Only the low halfword becomes damage. The signed high halfword is the

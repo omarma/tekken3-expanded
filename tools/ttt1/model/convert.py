@@ -211,6 +211,7 @@ DROPPED = set()     # soudures G2 retirees : (ligne TTT1 lectrice, rang dans G2)
 SLOTMAP = {}        # ligne TTT1 lectrice -> {ancien emplacement: nouveau} apres retrait
 CUR_T = [0]         # temps de la ligne en cours de conversion
 LEG_ROWS = range(3, 11)   # lignes PS1 du bassin et des deux jambes (parties 2..8) : faces doubles, voir double_sided
+DOUBLE_ROWS = LEG_ROWS    # celles que convert() marque ; aucune pour le loup d'Unknown (B157, convert(double_sided=False))
 WELDS = {}          # ligne TTT1 lectrice -> anciens emplacements dont la soudure (poids 12/4, ...) devient 8/8
 COPIED = []         # soudures devenues copies : (ligne TTT1 lectrice, groupe, rang dans le groupe, poids)
 def natural_prev(t):
@@ -265,6 +266,39 @@ def rewired(T, t):
         perm = {j: i for i, j in enumerate(keep + moved) if i != j}
         if perm: a['perm'] = perm
         out.append(a)
+    return out
+
+def _buffer_writers(T, order):
+    """Pour chaque ligne de `order` : {case du tampon: ligne qui l'a ecrite en dernier} avant elle.
+    Une ligne ecrit sa liste (cases 0..n-1) puis ses copies du groupe 4."""
+    buf, seen = {}, {}
+    for r in order:
+        if row(T, r - 1)[12] <= 2: continue
+        a = SM.variants(block(T, row(T, r - 1)[12]), True)[0]
+        seen[r] = dict(buf)
+        for k in range(list_len(a)): buf[k] = r
+        for f in a['tails'][4]: buf[(f & 0xff) // 2 - 1] = r
+    return seen
+
+def stale_buffer_reads(T):
+    """Lectures du tampon (emprunts g1 restes au tampon apres rewired, soudures du groupe 3 hors de
+    la liste) dont la case, dans l'ordre de dessin PS1 (TORDER), a ete ecrite par une autre ligne que
+    dans l'ordre TTT1 (lignes croissantes). rewired ne reroute que les cases ecrasees ENTRE le lecteur
+    et sa ligne precedente ; une case laissee par une ligne plus ancienne (copies du groupe 4) que le
+    placement dessine ailleurs n'etait pas vue. B153, Anna Poing / Pied (emplacements 36 / 37) : la
+    piece 24, integree au tibia droit, depose les cases 14..17 que le pan 26 lit (24 -> 25 -> 26 sur la
+    borne) ; dessinee avant les bras, ses cases sont ecrasees et le haut du pan suit l'epaule droite.
+    [(lecteur, 'g1' | 'g3', case, ecrivain TTT1, ecrivain PS1)]."""
+    ttt, ps1, out = _buffer_writers(T, sorted(TORDER)), _buffer_writers(T, TORDER), []
+    for r in TORDER:
+        if r not in ps1: continue
+        a = SM.variants(block(T, row(T, r - 1)[12]), True)[0]
+        try: g1 = rewired(T, r)[0]['g1']
+        except ValueError: g1 = a['g1']          # convert_layout le refusera de toute facon
+        n = list_len(a)
+        reads = [('g1', b // 2 - 1) for b in g1] + [('g3', (f & 0xff) // 2 - 1) for f in a['tails'][2]
+                                                    if (f & 0xff) // 2 - 1 >= n]
+        out += [(r, kind, k, ttt[r].get(k), ps1[r].get(k)) for kind, k in reads if ttt[r].get(k) != ps1[r].get(k)]
     return out
 
 _SIN = None
@@ -530,6 +564,43 @@ def double_sided(b, welds):
         p += n * st
     return bytes(b)
 
+LEG_ONLY = range(5, 11)   # lignes PS1 des deux jambes (parties 3..8), sans le bassin (lignes 3 et 4)
+
+def weld_partners(T):
+    """{(ligne TTT1 lectrice, sommet de sa liste): lignes TTT1 de l'autre cote de la soudure}, dans
+    l'ordre TTT1. Lecture du cache (groupes 1, 2) : la ligne qui a ecrit l'entree ; lecture du
+    tampon (groupe 3) : la ligne dont la liste ou le depot occupe la case ; depot (groupes 4, 5) :
+    les lignes qui le lisent. Sommets numerotes comme WELDS (emprunts g1, g2, puis groupes 1..5)."""
+    lists = {r: SM.variants(block(T, row(T, r - 1)[12]), True)[0] for r in range(1, nrows(T)) if row(T, r - 1)[12] > 2}
+    buf, cache, out = {}, {}, {}
+    for r in sorted(lists):
+        a = lists[r]; s0 = len(a['g1']) + len(a['g2']); v = 0
+        for gi, g in enumerate(a['tails'][:5]):
+            for f in g:
+                low = f & 0xff
+                wr = cache.get(low) if gi in (0, 1) else buf.get(low // 2 - 1) if gi == 2 else None
+                if wr:
+                    out.setdefault((r, s0 + v), set()).add(wr[0])
+                    if wr[1] is not None: out.setdefault((wr[0], wr[1]), set()).add(r)
+                v += 1
+        for p in range(s0 + v + len(a['verts'])): buf[p] = (r, None)
+        b = s0
+        for gi, g in enumerate(a['tails'][:5]):
+            for j, f in enumerate(g):
+                if gi == 3: cache[f & 0xff] = (r, b + j)
+                elif gi == 0: cache[f & 0xff] = (r, None)
+                elif gi == 4: buf[(f & 0xff) // 2 - 1] = (r, b + j)
+            b += len(g)
+    return out
+
+def leg_welds(T, t, s, welds, partners, t2s):
+    """Soudures approximees de la ligne t (ligne PS1 s) qui touchent une jambe : toutes sur une
+    jambe ; sur le bassin, celles des hanches seulement. Celles de la taille (bassin <-> torse, ou
+    entre les deux maillages du bassin) ne plient pas comme un genou : leurs faces doubles, dessinees
+    a leur rang de profondeur, passaient devant le ventre (B160, Hwoarang Poing)."""
+    if s in LEG_ONLY: return welds
+    return {v for v in welds if any(t2s.get(p) in LEG_ONLY for p in partners.get((t, v), ()))}
+
 def remap_prims(b, mp):
     if not mp: return b
     b = bytearray(b); p = 0
@@ -620,12 +691,25 @@ def rebuild(T, new, added=None, words=None):
 # l'echelle autour d'elle, enfant v -> v w / 8, parent u -> o + (u - o) pw / 8, rend la soudure 8/8
 # exacte dans toute pose (les deux os passent par o). Seulement pour un depot lu par ce seul lecteur,
 # dans l'ordre TTT1 comme dans l'ordre PS1, et qu'aucun polygone de l'ecrivain ne dessine.
+# Meme regle pour les soudures du cache (B176) : le groupe 2 (lecture du cache, liste B du rendu de la
+# borne, func_8010DC94) melange le sommet propre V du lecteur au depot du groupe 4 (liste C) d'un sommet
+# U de l'ecrivain, poids w et 16 - w. Xiaoyu Poing (84 / 14) : la cuisse droite (ligne 10) prend ainsi
+# ses sommets du haut a 12/4 et 4/12 sur les maillages du bassin (lignes 5 et 6) ; devenus 8/8, le
+# dos de la cuisse restait colle au bassin quand la jambe passait en arriere (aplati). Les maillages
+# secondaires (2, 3 de la poitrine ; 5, 6 du bassin ; 22, 23 de la tete) portent l'os de leur hote
+# (decalage et rotation nuls) : la soudure entre l'un d'eux et l'enfant de l'hote est traitee comme
+# celle de l'hote.
 EXACT_WELDS = True
+EXACT_CACHE_WELDS = True   # B176 : aussi les soudures du cache (groupe 2 sur un depot du groupe 4)
 EXACT_DONE = []     # soudures rendues exactes : (ligne lectrice, ligne ecrivain, poids lecteur, poids ecrivain)
+SECOND_HOST = {2: 1, 3: 1, 5: 4, 6: 4, 22: 21, 23: 21}   # maillage secondaire -> ligne qui porte son os
+EXACT_CACHE = []    # soudures du cache rendues exactes : (ligne lectrice, 1, rang dans le groupe 2)
 
-def exact_welds(T, order):
-    """Modele TTT1 ou les soudures du groupe 3 a poids complementaires autres que 8/8 sont mises a
-    l'echelle autour de l'articulation et passent a 8/8. `order` : ordre de dessin PS1 (TORDER)."""
+def exact_welds(T, order, skip=frozenset()):
+    """Modele TTT1 ou les soudures du groupe 3 (et du groupe 2, EXACT_CACHE_WELDS) a poids
+    complementaires autres que 8/8 sont mises a l'echelle autour de l'articulation et passent a 8/8.
+    `order` : ordre de dessin PS1 (TORDER). skip : soudures du cache (ligne, 1, rang) a laisser
+    (convert : la conversion en a fait des copies, le sommet mis a l'echelle serait copie tel quel)."""
     lists = {r: SM.variants(block(T, row(T, r - 1)[12]), True) for r in range(1, nrows(T)) if row(T, r - 1)[12] > 2}
     one = {r: dict(vs[0], tails=[list(g) for g in vs[0]['tails']], verts=[list(v) for v in vs[0]['verts']])
            for r, vs in lists.items() if len(vs) == 1}
@@ -634,18 +718,33 @@ def exact_welds(T, order):
         for g in a['tails'][:5]: b.append(b[-1] + len(g))
         return b
     def reads(order):
-        """Lectures du tampon : (lecteur, groupe 3 ou 'g1', rang) -> ecrivain (ligne, sommet propre,
-        poids, rang dans le groupe 5) ou None (case de liste, ligne a poses)."""
-        cur, out = {}, {}
+        """Lectures du tampon et du cache : (lecteur, groupe 3 | 'g1' | groupe 1 ou 2 | 'g2', rang) ->
+        ecrivain (ligne, sommet propre, poids, groupe de son depot (4 tampon, 3 cache), rang dans ce
+        groupe) ou None (case de liste, reecriture du groupe 1, ligne a poses)."""
+        cur, ccur, out = {}, {}, {}
         for r in order:
             if r not in one:
                 for p in range(max(len(a['g1']) + len(a['g2']) + len(a['verts']) for a in lists[r])): cur[p] = None
+                for vi, a in enumerate(lists[r]):     # ses lectures du cache comptent (un depot lu deux fois reste)
+                    for j, e in enumerate(a['g2']): out[(r, 'g2', (vi, j))] = ccur.get(e)
+                    for gi in (0, 1):
+                        for j, f in enumerate(a['tails'][gi]): out[(r, gi, (vi, j))] = ccur.get(f & 0xff)
+                for a in lists[r]:
+                    for gi in (0, 3):
+                        for f in a['tails'][gi]: ccur[f & 0xff] = None
                 continue
             a = one[r]; b = bounds(a)
             for j, f in enumerate(a['tails'][2]): out[(r, 2, j)] = cur.get((f & 0xff) // 2 - 1)
             for j, x in enumerate(a['g1']): out[(r, 'g1', j)] = cur.get(x // 2 - 1)
-            for p in range(len(a['g1']) + len(a['g2']) + len(a['verts'])): cur[p] = None
-            for j, f in enumerate(a['tails'][4]): cur[(f & 0xff) // 2 - 1] = (r, b[4] + j, (f >> 8) & 0x1f, j)
+            # le cache tel qu'avant la ligne (liste B ; la liste A et les emprunts g2 relisent aussi un depot)
+            for j, e in enumerate(a['g2']): out[(r, 'g2', j)] = ccur.get(e)
+            for gi in (0, 1):
+                for j, f in enumerate(a['tails'][gi]): out[(r, gi, j)] = ccur.get(f & 0xff)
+            s0 = len(a['g1']) + len(a['g2'])        # case de la liste : ('L', ligne, sommet propre)
+            for p in range(s0 + len(a['verts'])): cur[p] = ('L', r, p - s0, None, None) if p >= s0 else None
+            for j, f in enumerate(a['tails'][4]): cur[(f & 0xff) // 2 - 1] = (r, b[4] + j, (f >> 8) & 0x1f, 4, j)
+            for f in a['tails'][0]: ccur[f & 0xff] = None
+            for j, f in enumerate(a['tails'][3]): ccur[f & 0xff] = (r, b[3] + j, (f >> 8) & 0x1f, 3, j)
         return out
     rt, rp = reads(sorted(lists)), reads([r for r in order if r in lists])
     readers = {}
@@ -654,13 +753,25 @@ def exact_welds(T, order):
     def drawn(r, i):                            # sommet propre i de la ligne r dessine par un de ses polygones
         a = one[r]; s = len(a['g1']) + len(a['g2']) + i
         return any(s in prim_verts(k, p) for k, fl in enumerate(parse_b(block(T, row(T, r)[1]))) for p in fl) if row(T, r)[1] > 2 else False
-    part = lambda r: next((p for p in range(nrows(T)) if ttt1_part_row(p) == r), None)
+    def host(r):                                # ligne qui porte l'os de r (maillage secondaire sans decalage)
+        h = SECOND_HOST.get(r)
+        return h if h is not None and not any(row(T, r)[3:6]) and not any(row(T, r)[7:10]) else r
+    part = lambda r: next((p for p in range(nrows(T)) if ttt1_part_row(p) == host(r)), None)
     changed = set()
+    # groupe du lecteur -> groupe du depot qu'il lit (3 : tampon, groupe 5 ; 2 : cache, groupe 4)
+    kinds = {2: 4, **({1: 3} if EXACT_CACHE_WELDS else {})}
+    # une piece integree a une autre partie (BAKED : accessoire sur l'os d'un frere ou de son parent) ne
+    # tourne plus autour de son articulation au PS1 : ses soudures du cache restent 8/8 (Michelle 1, ligne 26)
+    baked = {S2T[b] for b in BAKED}
+    # un depot du cache laisse aussi sa valeur ponderee dans sa case de la liste : un emprunt de cette
+    # case (g1, soudure du groupe 3) lirait le sommet mis a l'echelle
+    in_list = {wr[1:3] for wr in list(rt.values()) + list(rp.values()) if wr and wr[0] == 'L'}
     for (r, g, j), wr in rt.items():
-        if g != 2 or not wr or rp.get((r, g, j)) != wr: continue
-        a = one[r]; i = bounds(a)[2] + j; w = (a['tails'][2][j] >> 8) & 0x1f
-        x, u, pw, j5 = wr
+        if g not in kinds or r not in one or not wr or rp.get((r, g, j)) != wr or wr[3] != kinds[g]: continue
+        a = one[r]; i = bounds(a)[g] + j; w = (a['tails'][g][j] >> 8) & 0x1f
+        x, u, pw, gw, jw = wr
         if w in (0, 8, 16) or pw + w != 16 or readers[wr[:2]] != [(r, g, j)] or drawn(x, u): continue
+        if g == 1 and (r in baked or x in baked or (r, g, j) in skip or (x, u) in in_list): continue
         R, W = row(T, r), row(T, x)
         if R[6] == part(x): o, (cs, ps), (cw, pp) = R[3:6], (w, False), (pw, True)        # lecteur enfant
         elif W[6] == part(r): o, (cs, ps), (cw, pp) = W[3:6], (w, True), (pw, False)      # ecrivain enfant
@@ -669,9 +780,10 @@ def exact_welds(T, order):
         V, U = scale(a['verts'][i], cs, ps), scale(one[x]['verts'][u], cw, pp)
         if any(abs(c) > 32767 for c in V + U): continue
         a['verts'][i][:3], one[x]['verts'][u][:3] = V, U
-        a['tails'][2][j] = (a['tails'][2][j] & ~0x1f00) | 8 << 8
-        one[x]['tails'][4][j5] = (one[x]['tails'][4][j5] & ~0x1f00) | 8 << 8
+        a['tails'][g][j] = (a['tails'][g][j] & ~0x1f00) | 8 << 8
+        one[x]['tails'][gw][jw] = (one[x]['tails'][gw][jw] & ~0x1f00) | 8 << 8
         changed |= {r, x}; EXACT_DONE.append((r, x, w, pw))
+        if g == 1: EXACT_CACHE.append((r, g, j))
     new = {}
     for r in changed:
         o = row(T, r - 1)[12]; bts = list_bytes(dict(one[r], verts=[tuple(v) for v in one[r]['verts']]))
@@ -1504,6 +1616,26 @@ def _solve(T, ir):
             if seen[key] > 30 or sum(seen.values()) > 3000: raise ValueError(str(L))
             _fix(ir, L)
 
+def route_stale(T, stale):
+    """Modele T ou chaque valeur lue perimee au tampon (stale_buffer_reads) passe par le cache :
+    son depot (copie du groupe 4) devient un depot au cache (groupe 4 PS1, meme poids), ses
+    emprunts g1 des emprunts au cache, ses soudures au tampon des soudures au cache (_to_cache).
+    Le cache, alloue par intervalle de vie dans l'ordre de dessin (plan_cache), la garde jusqu'au
+    lecteur. ValueError si une valeur ne peut pas y passer."""
+    pre = pos_flow(T)[0]
+    ir = ir_build(T)
+    for t in dict.fromkeys(pre[r][k] for r, _, k, _, _ in stale):
+        _to_cache(ir, 'pos', t)
+    out = _solve(T, ir)
+    new, added = {}, {}
+    for (r, k), b in out.items():
+        o = row(T, r)[k]
+        if o <= 2: added[(r, k)] = b; continue
+        ob = block(T, o)
+        if ob[:len(b)] == b and not ob[len(b):].strip(b'\0'): continue
+        new[o] = b + ob[len(b):] if k == 12 and ir[r + 1]['raw'] is not None else b
+    return rebuild(T, new, added, {})
+
 def _assemble(T, ir, B, rebuilt, added, words):
     """Modele final : blocs emis (ceux des lignes `rebuilt`, et des lignes sans bloc, ajoutes),
     ligne B vide."""
@@ -1577,7 +1709,7 @@ def merge_extra_meshes(T):
         else: print(f'ligne {lost} sans place : ' + ' ; '.join(why))
     return T
 
-def convert(src, keep=()):
+def convert(src, keep=(), double_sided=True):
     """Essaie les placements candidats dans l'ordre ; le premier qui se convertit gagne. keep :
     lignes TTT1 d'accessoires que la borne balance avec une borne (mode 1 de son solveur,
     tools/ttt1/accessories.py keep_rows) ; quand il faut integrer une piece (plus de pieces que de
@@ -1587,30 +1719,68 @@ def convert(src, keep=()):
     EXACT_WELDS, les soudures a poids libres sont d'abord rendues exactes (exact_welds). Avec
     HALF_WELDS, le placement est converti deux fois : a blanc (soudures perdues, COPIED), puis sur
     le modele aux soudures moitie (half_welds) ; la conversion a blanc reste si la seconde echoue.
-    Plus de pieces que de places PS1 : certaines sont d'abord repliees (fold_accessories)."""
-    global KEEP
+    Plus de pieces que de places PS1 : certaines sont d'abord repliees (fold_accessories).
+    double_sided=False : aucune face double (double_sided) ; le loup d'Unknown, dont les lignes 3..10
+    sont le bassin et les cuisses d'un torse que le moteur dessine dans l'ordre de ses listes : ses
+    faces arriere passaient devant le ventre (B157)."""
+    global KEEP, DOUBLE_ROWS
+    DOUBLE_ROWS = LEG_ROWS if double_sided else ()
     errors = []; HALF_DONE.clear(); HALF_SKIPPED.clear(); KEEP = frozenset(keep)
     src = fold_accessories(merge_extra_meshes(src))
-    for s2t, second, hosts in layouts(src):
-        set_layout(s2t, second, hosts)
-        EXACT_DONE.clear(); T = exact_welds(src, TORDER) if EXACT_WELDS else src
-        try:
-            out = convert_layout(T)
-        except ValueError as e:
-            errors.append(f'{sorted(s2t.items())[21:]} : {e}'); continue
-        if HALF_WELDS:
-            dropped = len(DROPPED); T2 = half_welds(T, TORDER)
-            if T2 is not T:
+    # Lectures perimees du tampon (stale_buffer_reads, B153). Trois passages, chacun seulement si les
+    # precedents ne donnent rien : 'clean', les placements qui n'en ont pas (le choix d'avant B153
+    # quand il en etait un : rien ne change pour eux) ; 'routed', ceux dont les valeurs perimees
+    # passent par le cache (route_stale ; Anna Poing / Pied, un seul placement possible) ; 'any', tous,
+    # tels quels, comme avant B153.
+    for mode in ('clean', 'routed', 'any'):
+        for s2t, second, hosts in layouts(src):
+            set_layout(s2t, second, hosts)
+            EXACT_DONE.clear(); EXACT_CACHE.clear(); T = exact_welds(src, TORDER) if EXACT_WELDS else src
+            stale = stale_buffer_reads(T) if mode != 'any' else []
+            if stale and mode == 'clean': continue
+            if stale:
                 try:
-                    out2 = convert_layout(T2)
-                    if len(DROPPED) <= dropped: return out2
-                    e = 'cache plein, soudures de lissage retirees'
-                except ValueError as err: e = err
-                print(f'soudures moitie abandonnees ({e})')
-                HALF_SKIPPED.extend(('conversion', r, w) for _, r, _, w in HALF_DONE)
-                HALF_DONE.clear(); out = convert_layout(T)
-        return out
+                    T = route_stale(T, stale); left = stale_buffer_reads(T)
+                except ValueError as e:
+                    left = [str(e)]
+                if left:
+                    errors.append(f'{sorted(s2t.items())[21:]} : tampon perime {left[:4]}'); continue
+            elif mode == 'routed': continue                 # deja essaye au premier passage
+            def redo(skip, routed=bool(stale)):      # B176 : soudures du cache laissees 8/8
+                T2 = exact_welds(src, TORDER, skip)
+                return route_stale(T2, stale_buffer_reads(T2)) if routed else T2
+            out = _convert_placed(T, s2t, errors, redo if EXACT_WELDS else None)
+            if out is not None: return out
     raise ValueError('aucun placement ne se convertit :\n' + '\n'.join(errors))
+
+def _convert_placed(T, s2t, errors, redo=None):
+    """Conversion du placement courant (set_layout) ; None s'il ne se convertit pas. redo(skip) : le
+    modele refait sans les soudures du cache `skip` rendues exactes (B176)."""
+    try:
+        out = convert_layout(T)
+        # Une soudure du cache rendue exacte que la conversion change en copie (valeur lue entiere au
+        # PS1 : Ganryu, son tablier) copierait le sommet mis a l'echelle : elle reste 8/8 (B176).
+        skip = set()
+        while redo is not None:
+            lost = ({(r, 1, j) for r, gi, j, _ in COPIED if gi == 1} | {(r, 1, j) for r, j in DROPPED}) & set(EXACT_CACHE)
+            if not lost: break
+            skip |= lost
+            EXACT_DONE.clear(); EXACT_CACHE.clear(); T = redo(frozenset(skip))
+            out = convert_layout(T)
+    except ValueError as e:
+        errors.append(f'{sorted(s2t.items())[21:]} : {e}'); return None
+    if HALF_WELDS:
+        dropped = len(DROPPED); T2 = half_welds(T, TORDER)
+        if T2 is not T:
+            try:
+                out2 = convert_layout(T2)
+                if len(DROPPED) <= dropped: return out2
+                e = 'cache plein, soudures de lissage retirees'
+            except ValueError as err: e = err
+            print(f'soudures moitie abandonnees ({e})')
+            HALF_SKIPPED.extend(('conversion', r, w) for _, r, _, w in HALF_DONE)
+            HALF_DONE.clear(); out = convert_layout(T)
+    return out
 
 HAND_ROWS = (13, 17)      # PS1 rows of the two hands (the engine's 0x80034844 callers)
 REGULAR_POSES = 17        # TTT1's open -> fist progression; some characters have more poses after it
@@ -1654,6 +1824,7 @@ def convert_layout(src):
         snap = (dict(HALF['c']), dict(HALF['s']))
         pos_off[t] = [put(convert_positions(a, rd, prev_rd, half=(dict(snap[0]), dict(snap[1])))) for a in vs]
         convert_positions(vs[0], rd, prev_rd, track=True)       # etat moitie / entier apres la ligne
+    partners, t2s = weld_partners(T), {t: s for s, t in S2T.items()}
     for s in range(NROWS):
         t = S2T[s]; w = list(row(T, t)); new = [0] * 14
         new[3:12] = w[3:12]
@@ -1663,7 +1834,8 @@ def convert_layout(src):
             new[3:6] = [0, 0, 0]; new[7:10] = [0, 0, 0]   # os integre aux sommets
             new[6] = next(q for q, r in SECOND.items() if r == s)   # partie hote (mot 6, lu par le runtime)
         if w[0] > 2: new[0] = put(block(T, w[0]))          # normales : recopiees
-        prims = double_sided(block(T, w[1]), WELDS.get(t, set())) if s in LEG_ROWS and w[1] > 2 else block(T, w[1]) if w[1] > 2 else b''
+        prims = double_sided(block(T, w[1]), leg_welds(T, t, s, WELDS.get(t, set()), partners, t2s)) \
+            if s in DOUBLE_ROWS and w[1] > 2 else block(T, w[1]) if w[1] > 2 else b''
         if w[1] > 2: new[1] = put(remap_prims(prims, SLOTMAP.get(t, {})))
         if w[2] > 2: new[2] = put(convert_texture(block(T, w[2])))
         nxt = S2T.get(s + 1)

@@ -10,7 +10,8 @@ guests' conversion as it is (tools/ttt1_import.py model():
 tools/ttt1/model/convert.py, texpack.py, faces, accessory springs) and is
 written as <Name>-Native-TTT1-arcade-P<v + 1>.{3dm,relocs,tim,face,acc} in
 --out (default workspace/ttt1-import/native-models/), v the cabinet's variant
-of the button (VARIANT). Two buttons on one slot (Mokujin) convert it once.
+of the button (VARIANT); a native's random_select slot (Xiaoyu's 85, no
+button: the random cell's variant 7) as P8 (F37). Two buttons on one slot (Mokujin) convert it once.
 The runtime draws the native with the model of the button that picked it,
 its own moves, sounds and effects kept (src/tekken3_ttt1_mod.c,
 native_model_entry). --key converts one button only; --slot replaces its
@@ -34,7 +35,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1'), str(ROOT / 'tools/ttt1/model')]
 TABLE = ROOT / 'tools/data/ttt1_native_models.json'
 # Cabinet variant of each button (select_apply_costume_button): file P<v + 1>.
-VARIANT = {'LP': 0, 'LK': 1, 'RP': 2, 'RK': 3, 'Start': 4}
+# 'Random' is no button: the cabinet's random cell gives variant 7 (Xiaoyu's
+# model 85, one time in six; the table's random_select), file P8 (F37).
+VARIANT = {'LP': 0, 'LK': 1, 'RP': 2, 'RK': 3, 'Start': 4, 'Random': 7}
 SUFFIXES = ('3dm', 'relocs', 'tim', 'face', 'acc', 'hilt', 'stick')
 
 
@@ -66,7 +69,8 @@ def convert(native, out, work=None, keys=None, slot=None, log=print):
     # tables) is static, by slot, the same in every capture.
     rams = sorted(I.CAPTURES.glob('*-select-ram.bin'))
     if not rams: raise SystemExit(f'{I.CAPTURES}: no select RAM')
-    buttons = natives()[native]['buttons']
+    entry = natives()[native]
+    buttons = dict(entry['buttons'], Random=entry.get('random_select', {}).get('slot'))
     name = file_name(native)
     out.mkdir(parents=True, exist_ok=True)
     reports, done = {}, {}                        # done: slot -> variant converted
@@ -84,7 +88,9 @@ def convert(native, out, work=None, keys=None, slot=None, log=print):
             log(json.dumps(dict(native=native, button=button, **reports[button])))
             continue
         try:
-            r = I.model(rams[0], s, out, f'{name}-Native', out / 'work' / f'{native}-{s}', v + 1)
+            # B176: the eyes-shut image Tekken 3's open / shut face shows (blink and hits).
+            shut = natives()[native].get('eyes_shut', {}).get(str(s))
+            r = I.model(rams[0], s, out, f'{name}-Native', out / 'work' / f'{native}-{s}', v + 1, eyes_shut=shut)
             reports[button] = dict(slot=s, **{k: r[k] for k in ('bytes', 'relocations', 'unplaced_rows', 'texture_mismatches')})
             done[s] = v
         except (Exception, SystemExit) as e:          # entries() stops with SystemExit

@@ -227,6 +227,7 @@ def check(key, e, scene, head, by_t, relinks, capture_name):
             problem(f"script {t}: cmd 24 entry {ev['a']} (0x3AC940: (colour - picture) times the frame buffer's alpha, "
                     "no PS1 semi-transparency for it)", cmd=c, t=t)
             continue
+        if c == 28 and ev['a'] & 1 < len(head['parents']) and wing_roots(head['parents'][ev['a'] & 1]): continue   # `wings` (below)
         if c in PLAYED or (embu(scene) and c in EMBU_PLAYED) or (c == 7 and e.get('ttt_stage')): continue
         problem(f"script {t}: cmd {c} ({UNSUPPORTED.get(c, 'unknown command')}) a={ev['a']} b={ev['b']} c={ev['c']}", cmd=c, t=t)
 
@@ -529,6 +530,108 @@ def eyes(head, by_t, relinks, actor, frames):
     return out
 
 
+# The wings (cmd 28, "True Ogre / Devil state", characters 20 and 29: +0xB052).
+# Measured on Devil's ending (scene 32, nodes 103-108: two roots on the chest
+# node 2, two nodes on each): state 0 the wings at rest, still; 1 unfolded over
+# ~16 frames, then a flap every 29 frames; 2 the flap under way finished, then
+# held open and low (gliding); 1 again, flapping on without unfolding. Tekken 3
+# plays the TTT1 arcade's own wings instead (the user, 2026-11-10: not the PS2's):
+# a table of 37 vertex poses on one row of the model (0 folded, 1-8 unfolding,
+# 9-16 raised, 16-36 the flap), which Tekken 3's flap machine walks (tables
+# 0x80095888: 0..16, then 0x8009589C: 16..39, round again; tekken3_ttt1_mod.c
+# wings_step). Each frame the pose is the one of that walk nearest to the PS2's
+# wings: the direction of each wing (its nodes' mean, in the chest's frame, the
+# guest's row frame too: x up, y front, z side; at rest 12 degrees from pose 0,
+# gliding 2 degrees from 34), the walk forward 0 to 2 poses a frame, from the end
+# of the flap (35, 36) back to its start (16, 17), so the flap keeps the PS2's
+# beat (29 frames, the arcade's own is 35) and the glide holds a pose (state 2:
+# no new flap until the next command; free, the walk began the next one a frame
+# before the PS2's, 1143, the wings up while the PS2's were still open). At rest
+# (state 0, before the first command) pose 0, folded (the user's choice: the
+# arcade's rest; the PS2's wings rest raised, nearer pose 9-12 but smaller).
+WING_LAST, WING_LOOP = 36, 16
+
+
+def wing_roots(parents):
+    """The PS2 wing nodes: (root, its children) for each wing, roots on the chest (node 2) with children of their own."""
+    kids = {}
+    for n, q in enumerate(parents): kids.setdefault(q, []).append(n)
+    return [(n, kids[n]) for n in range(98, len(parents)) if parents[n] == 2 and kids.get(n)]
+
+
+def arcade_wings(model):
+    """The model's wing poses: [pose][side] the unit direction of each wing's
+    moving vertices' mean (row frame), sides ordered z < 0 then z > 0."""
+    import numpy as np
+    sys.path[:0] = [str(ROOT / 'tools/ttt1'), str(ROOT / 'tools/ttt1/model')]
+    from fmt import load, nrows
+    from simulate import vlist, nvariants
+    m = load(model)
+    r = max(range(1, nrows(m) + 1), key=lambda r: nvariants(m, r))
+    n = nvariants(m, r)
+    if n < 24: raise SystemExit(f'{model}: no wing table (at most {n} poses on a row)')
+    V = np.stack([np.array([v[:3] for v in vlist(m, r, variant=k)['verts']], float) for k in range(n)])
+    moving = np.ptp(V, axis=0).max(1) > 5
+    out = []
+    for k in range(n):
+        sides = [V[k][moving & (V[0, :, 2] < 0)].mean(0), V[k][moving & (V[0, :, 2] > 0)].mean(0)]
+        out.append([v / np.linalg.norm(v) for v in sides])
+    return out
+
+
+def wings(e, scene, head, by_t, actor, frames):
+    """[[frame, pose], ...] each time the actor's arcade wing pose changes over
+    `frames`; [] without a cmd 28 for it."""
+    import numpy as np
+    events = sorted((ev['t'], ev['b']) for ev in scene['events'] if ev['cmd'] == 28 and ev['a'] & 1 == actor)
+    if not events: return []
+    x = e['actors'][actor]
+    skel = x.get('skeleton', x['cast'])
+    model = IMPORT / x['model'] if x.get('model') else IMPORT / skel / 'guest' / f'{skel.capitalize()}-TTT1-arcade-P1.3dm'
+    poses = arcade_wings(model)
+    n = min(len(poses), WING_LAST + 1)
+    roots = wing_roots(head['parents'][actor])
+    state = lambda t: next((b for at, b in reversed(events) if at <= t), 0)
+    INF = 1e9
+    cost, back = [], []
+    prev = None
+    for t in frames:
+        d = by_t.get(t)
+        err = np.zeros(n)
+        if d and d['actors'][actor]:
+            M = [np.array(v, float).reshape(4, 4) for v in d['actors'][actor]]
+            R, c = M[2][:3, :3], M[2][3, :3]
+            dirs = []
+            for root, kids in roots:
+                v = (np.mean([M[k][3, :3] for k in [root] + kids], axis=0) - c) @ np.linalg.inv(R)
+                dirs.append(v / np.linalg.norm(v))
+            dirs.sort(key=lambda v: v[2])
+            for k in range(n):
+                err[k] = sum(np.degrees(np.arccos(np.clip(a @ b, -1, 1))) for a, b in zip(poses[k], dirs))
+        if state(t) == 0: err[1:] = INF
+        if prev is None:
+            here, came = err.copy(), [k for k in range(n)]
+            if state(t) == 0: here[1:] = INF
+        else:
+            here, came = np.full(n, INF), [0] * n
+            for k in range(n):
+                if state(t) == 0:
+                    src = [j for j in range(n)]                  # back at rest from anywhere
+                else:
+                    src = [j for j in (k, k - 1, k - 2) if j >= 0] + ([j for j in (WING_LAST, WING_LAST - 1) if j < n] if k in (WING_LOOP, WING_LOOP + 1) and state(t) != 2 else [])
+                j = min(src, key=lambda j: prev[j])
+                here[k], came[k] = prev[j] + err[k], j
+        cost.append(here); back.append(came); prev = here
+    k = int(np.argmin(prev)); path = []
+    for i in range(len(frames) - 1, -1, -1):
+        path.append(k); k = back[i][k]
+    path.reverse()
+    out = []
+    for t, k in zip(frames, path):
+        if not out or out[-1][1] != k: out.append([t, int(k)])
+    return out
+
+
 def nudged(poses, nudges, frames):
     """The declaration's "nudge" of an actor: [{"from": A, "to": B, "offset": [x, y, z]}, ...],
     its root moved by the offset (TTT1 units, the retarget's frame: y down) over
@@ -696,11 +799,13 @@ def main(argv=None):
                      poses=nudged(spliced(segments[i], [t for t, _, _ in found.get(i, [])], 'poses', frames), x.get('nudge', []), frames),
                      side=r['calibration'].get('side', 0), fingers=fingers(head, by_t, i, frames, relinks),
                      eyes=eyes(head, by_t, relinks, i, frames),
+                     wings=wings(e, scene, head, by_t, i, frames),
                      faces=[[f['t'], f['expression']] for f in x.get('faces', [])],
                      swaps=[dict(t=t, cast=w['cast'], costume=w['costume'], side=s['calibration'].get('side', 0),
                                  models=w.get('models', []))
                             for (t, w, _), s in zip(found.get(i, []), segments[i][1:])],
-                     hidden=hidden[i], models=x.get('models', []), effect=x.get('effect'), light=x.get('light'))
+                     hidden=hidden[i], shadow=[{k: v for k, v in s.items() if k != 'why'} for s in x.get('shadow', [])],
+                     models=x.get('models', []), effect=x.get('effect'), light=x.get('light'))
                 for i, (x, r) in enumerate(zip(e['actors'], rs))],
         camera=camera_track(e, by_t, frames, rs[0]['calibration'], hidden) if e.get('camera') else by_frame(rs[0], 'camera', frames),
         fades=[list(f) for f in fade_list], music=music,
@@ -709,6 +814,7 @@ def main(argv=None):
         spray_look=dict(SPRAY_LOOK, radius=round(SPRAY_LOOK['radius'] * rs[0]['calibration']['scale']),
                         colour=e.get('spray_colour', 'ffffff')),
         ttt_stage=(e.get('ttt_stage') or {}).get('stage'), ttt_courtyard=(e.get('ttt_stage') or {}).get('courtyard'),
+        ttt_light=(e.get('ttt_stage') or {}).get('light'),
         storms=storms(scene, e), filters=filters(scene),
         sprite_look=dict(SPRITE_LOOK, radius=round(SPRITE_LOOK['radius'] * rs[0]['calibration']['scale']),
                          colour=e.get('sprite_colour', 'ffffff')))

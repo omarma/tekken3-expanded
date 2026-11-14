@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <time.h>
 
 /* Widest name bitmap, in halfwords: 19 is the widest stock name (YOSHIMITSU, 76px). */
@@ -210,6 +211,30 @@ static void add_guest(const char *key) {
     }
     g->catalog_index=roster_count++;
 }
+static void select_guest(void);
+/* F36: the costumes guest character `id` has files for, bit c for -arcade-P<c + 1>.3dm (the CPU
+ * COSTUME row of GAME OPTION draws among them, tekken3_native_moves.c); 0 for another fighter. */
+unsigned tekken3_guest_costume_files(unsigned id) {
+    static unsigned char known[GUEST_MAX];
+    select_guest();
+    const char *root=tekken3_ttt1_asset_root();
+    if(id<23 || id-23>=roster_count || !root)return 0;
+    unsigned k=id-23;
+    if(!known[k]) {
+        known[k]=0x80;
+        for(unsigned c=0;c<3;c++) {
+            char path[4096];FILE *f;
+            if(snprintf(path,sizeof path,"%s/%s-arcade-P%u.3dm",root,roster[k].data_prefix,c+1)<(int)sizeof path &&
+               (f=fopen(path,"rb"))){fclose(f);known[k]|=(unsigned char)(1u<<c);}
+        }
+    }
+    return known[k]&7u;
+}
+int tekken3_guest_costumes_any(void) {
+    select_guest();
+    for(unsigned k=0;k<roster_count;k++){unsigned m=tekken3_guest_costume_files(23+k);if(m&(m-1))return 1;}
+    return 0;
+}
 /* The roster: the catalogue, else the guests forced at launch (TEKKEN3_GUEST,
  * TEKKEN3_GUEST_P2), else Jun. Player 1 starts as TEKKEN3_GUEST or the first
  * guest, player 2 as TEKKEN3_GUEST_P2 or player 1's guest; both then follow
@@ -243,6 +268,10 @@ static void select_guest(void) {
 enum { NO_NATIVE=0xffff };
 static Tekken3Guest natives[2];
 static unsigned native_id[2]={NO_NATIVE,NO_NATIVE};
+/* B163: a native on its TTT1 or DR moves whose actor Ogre's cutscene gives to
+ * the stage 9 boss lends its identity until phase 20's reload (below). */
+static Tekken3Guest lifted_native[2];
+static unsigned lifted_native_id[2]={NO_NATIVE,NO_NATIVE};
 /* Devil Jin on his TTT1 moves (tekken3_devil_jin_moves, tekken3_ttt1_mod.c):
  * his moves, tables, idle stance and move sounds are DevilJin-TTT1-*, read
  * through the same identity as a guest's. His model, name plate and cries
@@ -266,6 +295,7 @@ static void bump(unsigned player) {
 int tekken3_native_moves_set(unsigned player,unsigned id,const char *key,unsigned moveset,const char *source) {
     if(player>1)return 0;
     select_guest();
+    lifted_native_id[player]=NO_NATIVE;           /* a choice made again: nothing to give back */
     if(!key) {
         if(native_id[player]==NO_NATIVE)return 1;
         native_id[player]=NO_NATIVE;bump(player);
@@ -318,6 +348,13 @@ extern int tekken3_ttt1_native_model_player(unsigned player);
  * 0x800ADD98 + 2 * player for the loading screen and to the actor's +0x14. */
 static unsigned costumes[2];
 unsigned tekken3_guest_costume(unsigned player){return player<2?costumes[player]:0;}
+/* F36: the guest a player's identity is (its character ID in *id) and its costume files; 0 when
+ * that identity is a native's or Devil Jin's. */
+unsigned tekken3_guest_costume_files_for(unsigned player,unsigned *id) {
+    if(player>1 || guest(player)!=&guests[player])return 0;
+    *id=23+guests[player].catalog_index;
+    return tekken3_guest_costume_files(*id);
+}
 static void follow_costume(unsigned player,unsigned costume) {
     if(costume>2)costume=0;
     if(costume==costumes[player])return;
@@ -1157,11 +1194,19 @@ static void grey_colours(const unsigned char *p,uint16_t *grey,unsigned n) {
  * wolf write there and put theirs back themselves; the stage pack does not,
  * and stays loaded after its fight (the same arena next is not loaded
  * again). So a slot is written over the loaded stage's rectangles only on
- * the selector and the grids (states 9, 10), where no stage draws, and the
- * stage is told to put them back before it draws again
- * (tekken3_stage_high_vram_disturbed); elsewhere such a slot keeps the
- * 32 x 58 tile. A slot is used only once it holds its whole tile. */
-enum { HD_SLOTS=GUEST_MAX+ALT_FACES, HD_COLS=16, HD_CARDS=2 };
+ * the selector, the grids and the loading screen (states 9, 10, 11), where
+ * no stage draws, and the stage is told to put them back before it draws
+ * again (tekken3_stage_high_vram_disturbed); elsewhere such a slot keeps the
+ * 32 x 58 tile. A slot is used only once it holds its whole tile.
+ *
+ * The loading screen is where a portrait chosen on a grid first needs its
+ * copy: the grids show no big portrait, so with QUICK SELECT (and in VS,
+ * Team Battle, Tekken Ball) the copy is written in state 11. Refused there
+ * after any fight (its stage still loaded over (192 p, 768)), the card
+ * showed the 126 x 252 portrait (B172, GH#220). */
+enum { HD_SLOTS=GUEST_MAX+ALT_FACES, HD_COLS=16, HD_CARDS=2, T3_FACE_COUNT=21 };
+static void t3_tiles_put(void);                       /* the stock fighters' (B186), below */
+static const uint16_t *t3_face_portrait(unsigned id);
 static int hd_tiles_on;
 extern int tekken3_stage_high_vram_used(int x,int y,int w,int h);
 extern void tekken3_stage_high_vram_disturbed(void);
@@ -1177,7 +1222,7 @@ static int hd_rect_ready(unsigned x,unsigned y,unsigned w,unsigned h,const uint1
     if(r==h)return 1;
     unsigned state=psx_mod_read_word(0x800ae204);
     int stage=tekken3_stage_high_vram_used((int)x,(int)y,(int)w,(int)h);
-    if(stage && state!=9 && state!=10)return 0;
+    if(stage && state!=9 && state!=10 && state!=11)return 0;
     if(!psx_mod_gpu_high_vram_upload((int)x,(int)y,(int)w,(int)h,px))return 0;
     if(stage)tekken3_stage_high_vram_disturbed();
     return 1;
@@ -1196,13 +1241,14 @@ static void hd_tiles_put(void) {
     for(unsigned k=0;k<roster_count;k++)if(roster[k].hd_tile)hd_tile_put(k,roster[k].hd_tile,tile_uv(k));
     for(unsigned a=0;a<ALT_FACES;a++)
         if(alt_faces[a].ui && alt_faces[a].hd_tile)hd_tile_put(GUEST_MAX+a,alt_faces[a].hd_tile,alt_tile_uv(a,0));
+    t3_tiles_put();
     hd_tiles_on=1;
 }
 static void hd_portraits_clear(void);
 static void hd_tiles_clear(void) {
     hd_portraits_clear();
     if(!hd_tiles_on)return;
-    for(unsigned s=0;s<HD_SLOTS+HD_CARDS;s++)psx_mod_gpu_sprite_hd_clear(s);
+    for(unsigned s=0;s<HD_SLOTS+HD_CARDS+T3_FACE_COUNT+2;s++)psx_mod_gpu_sprite_hd_clear(s);  /* + True Ogre's strips */
     hd_tiles_on=0;
 }
 /* Player p's loading card (icon word `uv`, page ICON_PAGE) from g's HD tile, or the 32 x 58 card. */
@@ -1226,19 +1272,20 @@ static void hd_card_put(unsigned p,const Tekken3Guest *g,uint32_t uv) {
  * guest's portrait (or Panda's, Tiger's) with an HD copy, the copy goes to
  * the upper half at (192 * p, 768) and those quads take it
  * (psx_mod_gpu_texture_hd_set slot p); a stock portrait clears it. */
-static const Tekken3Guest *portrait_face[2];
+static const uint16_t *portrait_face[2];
 static void hd_portrait_put(unsigned p) {
-    const Tekken3Guest *g=portrait_face[p];
+    const uint16_t *px=portrait_face[p];
     unsigned x=192*p,y=768;
-    if(g && g->hd_portrait && hd_rect_ready(x,y,HD_PORTRAIT_W,HD_PORTRAIT_H,g->hd_portrait))
+    if(px && hd_rect_ready(x,y,HD_PORTRAIT_W,HD_PORTRAIT_H,px))
         psx_mod_gpu_texture_hd_set(p,0x9c+p,502+p,256,512,2,0,126,252,x,y,HD_PORTRAIT_W,HD_PORTRAIT_H);
     else psx_mod_gpu_texture_hd_clear(p);
 }
-static void hd_portrait_face(int p,const Tekken3Guest *g) {
+static void hd_portrait_pixels(int p,const uint16_t *px) {
     if(p<0 || p>1)return;
-    portrait_face[p]=g;
+    portrait_face[p]=px;
     if(gpu_high_vram_pixels())hd_portrait_put((unsigned)p);
 }
+static void hd_portrait_face(int p,const Tekken3Guest *g){hd_portrait_pixels(p,g?g->hd_portrait:NULL);}
 static void hd_portraits_tick(void) {
     if(!gpu_high_vram_pixels())return;
     for(unsigned p=0;p<2;p++)if(portrait_face[p])hd_portrait_put(p);
@@ -1421,6 +1468,169 @@ void tekken3_ranking_faces_restore(void) {
         gr_vram_transfer_in(x,y,TILE_W,TILE_H,face_backup[slot]);
         gr_vram_transfer_in(cx,cy,256,1,face_palette_backup[slot]);
     }
+}
+/* The stock fighters' HD faces (B186, GH#239). Beside the guests' HD tiles
+ * (F28) the stock 32 x 58 tiles showed their texels. Tekken 3's arcade
+ * selector holds each face in its 168 x 252 portrait about twice as fine as
+ * its 44 x 58 tile: the setup cuts the HD tile from the portrait at the
+ * tile's framing, over the tile's own background, and keeps the portrait
+ * (tools/arcade_stages/faces.py, beside the arcade stage packs:
+ * face-NN-tile-hd.bin 64 x 116, face-NN-portrait-hd.bin 168 x 252, NN the
+ * ID). Without them (no tekken3.zip), and for Gon, Anna and Dr. B (absent
+ * from the arcade, or drawn otherwise there), the tile is the stock one
+ * doubled here from VRAM (Lanczos 3, then a light unsharp mask), and the
+ * portrait stays the stock one. IDs 0..20; the icon table's 21 is rewritten
+ * for each guest's cell. A lent icon (face_lend) keeps its
+ * 32 x 58 tile.
+ *
+ * True Ogre (20) is no 32 x 58 sprite: his tile lies over the top of
+ * Paul's, as three 32 x 24 strips side by side (u 128, 160, 192, v 0), drawn
+ * one under the other, 24, 24 and 10 rows high (measured on the Team Battle
+ * grid, gpu_frame_dump). Each strip takes its rows of his HD tile.
+ *
+ * Upper-half places: after the guests' 20, the rest of their second row
+ * (12), then a row at y 768 from x 384 (9), right of the portraits' copies
+ * (x 0..359). Substitute slots T3_SPRITE0 + ID, True Ogre's second and
+ * third strips after the 21. */
+enum { T3_FACES=T3_FACE_COUNT, T3_SPRITE0=HD_SLOTS+HD_CARDS };
+typedef struct {
+    uint16_t *tile,*portrait;                   /* the setup's files, or NULL */
+    uint16_t smooth[HD_TILE_W*HD_TILE_H];       /* the stock tile doubled */
+    uint16_t source[TILE_W*TILE_H+256];         /* ... from these texels and palette */
+    int smooth_ok;
+} T3Face;
+static T3Face t3_faces[T3_FACES];
+static int t3_faces_loaded;
+extern const char *tekken3_arcade_stages_dir(void);
+static uint16_t *t3_face_file(unsigned id,const char *what,unsigned w,unsigned h) {
+    char path[4096];const char *dir=tekken3_arcade_stages_dir();
+    if(!dir || snprintf(path,sizeof path,"%s/face-%02u-%s-hd.bin",dir,id,what)>=(int)sizeof path)return NULL;
+    FILE *f=fopen(path,"rb");if(!f)return NULL;
+    uint16_t *px=malloc((size_t)w*h*2);
+    if(!(px && fread(px,2,(size_t)w*h,f)==(size_t)w*h && fgetc(f)==EOF)) {
+        fprintf(stderr,"stock faces: %s is not %u x %u halfwords, not used\n",path,w,h);
+        free(px);px=NULL;
+    }
+    fclose(f);
+    return px;
+}
+static void t3_faces_load(void) {
+    if(t3_faces_loaded)return;
+    t3_faces_loaded=1;
+    unsigned tiles=0,portraits=0;
+    for(unsigned id=0;id<T3_FACES;id++) {
+        t3_faces[id].tile=t3_face_file(id,"tile",HD_TILE_W,HD_TILE_H);
+        t3_faces[id].portrait=t3_face_file(id,"portrait",HD_PORTRAIT_W,HD_PORTRAIT_H);
+        tiles+=t3_faces[id].tile!=NULL;portraits+=t3_faces[id].portrait!=NULL;
+    }
+    fprintf(stderr,"stock faces: %u arcade HD tiles, %u arcade portraits (%s); the other tiles doubled from the PS1's\n",
+            tiles,portraits,tekken3_arcade_stages_dir());
+}
+static float lanczos3(float x) {
+    if(x>-1e-6f && x<1e-6f)return 1.f;
+    if(x<=-3.f || x>=3.f)return 0.f;
+    float a=3.14159265f*x;
+    return 3.f*sinf(a)*sinf(a/3.f)/(a*a);
+}
+/* n RGB samples (stride ss floats) to m (stride ds), Lanczos 3, edges clamped. */
+static void resample3(const float *s,int n,int ss,float *d,int m,int ds) {
+    float scale=(float)n/(float)m;
+    for(int j=0;j<m;j++) {
+        float c=((float)j+.5f)*scale-.5f,acc[3]={0,0,0},wsum=0;
+        int lo=(int)floorf(c)-2;
+        for(int i=lo;i<lo+6;i++) {
+            float w=lanczos3((float)i-c);
+            int k=i<0?0:i>=n?n-1:i;
+            for(int ch=0;ch<3;ch++)acc[ch]+=w*s[k*ss+ch];
+            wsum+=w;
+        }
+        for(int ch=0;ch<3;ch++)d[j*ds+ch]=acc[ch]/wsum;
+    }
+}
+/* The stock tile (8 bits, 32 x 58, then its palette) doubled to 64 x 116
+ * 15-bit texels: Lanczos 3 both ways, then u + 0.6 (u - gauss(u, 1)). */
+static void t3_smooth(const uint16_t *src,uint16_t *out) {
+    enum { SW=TILE_W*2, SH=TILE_H, DW=HD_TILE_W, DH=HD_TILE_H };
+    static float a[SH][SW][3],b[SH][DW][3],u[DH][DW][3],t[DH][DW][3];
+    const uint16_t *pal=src+TILE_W*TILE_H;
+    for(int y=0;y<SH;y++)for(int x=0;x<SW;x++) {
+        uint16_t c=pal[(src[y*TILE_W+x/2]>>((x&1)*8))&255];
+        a[y][x][0]=(float)(c&31)*255.f/31.f;a[y][x][1]=(float)((c>>5)&31)*255.f/31.f;a[y][x][2]=(float)((c>>10)&31)*255.f/31.f;
+    }
+    for(int y=0;y<SH;y++)resample3(&a[y][0][0],SW,3,&b[y][0][0],DW,3);
+    for(int x=0;x<DW;x++)resample3(&b[0][x][0],SH,DW*3,&u[0][x][0],DH,DW*3);
+    float g[7],gs=0;
+    for(int i=0;i<7;i++){g[i]=expf(-(float)((i-3)*(i-3))/2.f);gs+=g[i];}
+    for(int y=0;y<DH;y++)for(int x=0;x<DW;x++)for(int ch=0;ch<3;ch++) {
+        float s=0;
+        for(int i=0;i<7;i++){int k=x+i-3;k=k<0?0:k>=DW?DW-1:k;s+=g[i]*u[y][k][ch];}
+        t[y][x][ch]=s/gs;
+    }
+    for(int y=0;y<DH;y++)for(int x=0;x<DW;x++) {
+        unsigned v=0;
+        for(int ch=0;ch<3;ch++) {
+            float s=0;
+            for(int i=0;i<7;i++){int k=y+i-3;k=k<0?0:k>=DH?DH-1:k;s+=g[i]*t[k][x][ch];}
+            float o=u[y][x][ch]+.6f*(u[y][x][ch]-s/gs);
+            o=o<0?0:o>255?255:o;
+            v|=(unsigned)((o*31.f+127.f)/255.f)<<(5*ch);
+        }
+        out[y*DW+x]=(uint16_t)(v?v:0x8000);
+    }
+}
+enum { TRUE_OGRE=20, OGRE_STRIPS=3, OGRE_STRIP_H=24 };
+static const unsigned ogre_strip_rows[OGRE_STRIPS]={24,24,10};
+/* ID's HD tile: the setup's, else the stock tile in VRAM doubled (again
+ * only when its texels or palette changed); NULL if its icon is not an 8-bit
+ * one in the lower half. */
+static const uint16_t *t3_face_tile(unsigned id) {
+    T3Face *f=&t3_faces[id];
+    if(f->tile)return f->tile;
+    unsigned x,y,cx,cy;
+    const uint16_t *vram=gpu_get_vram();
+    if(!vram || !icon_place(id,&x,&y,&cx,&cy))return NULL;
+    uint16_t src[TILE_W*TILE_H+256];
+    for(unsigned r=0;r<TILE_H;r++) {
+        unsigned sx=x,sy=y+r;
+        if(id==TRUE_OGRE){sx=x+(r/OGRE_STRIP_H)*TILE_W;sy=y+r%OGRE_STRIP_H;}  /* his three strips */
+        memcpy(src+r*TILE_W,vram+(size_t)sy*1024+sx,TILE_W*2);
+    }
+    memcpy(src+TILE_W*TILE_H,vram+(size_t)cy*1024+cx,512);
+    if(!f->smooth_ok || memcmp(src,f->source,sizeof src)) {
+        memcpy(f->source,src,sizeof src);
+        t3_smooth(src,f->smooth);
+        f->smooth_ok=1;
+    }
+    return f->smooth;
+}
+static void t3_place(unsigned id,unsigned *x,unsigned *y) {
+    unsigned q=HD_SLOTS+id;
+    if(q<2*HD_COLS){hd_slot_place(q,x,y);return;}
+    q-=2*HD_COLS;*x=384+(q%10)*HD_TILE_W;*y=768+(q/10)*HD_TILE_H;
+}
+static void t3_tiles_put(void) {
+    t3_faces_load();
+    for(unsigned id=0;id<T3_FACES;id++) {
+        unsigned slot=T3_SPRITE0+id,x,y;
+        const uint16_t *px=id<RANKING_FACE_SLOTS && face_lent[id]?NULL:t3_face_tile(id);
+        uint32_t uv=psx_mod_read_word(0x8002152c+id*8),page=psx_mod_read_word(0x8002152c+id*8+4)&0xffff;
+        t3_place(id,&x,&y);
+        int ready=px && hd_rect_ready(x,y,HD_TILE_W,HD_TILE_H,px);
+        if(id==TRUE_OGRE) {
+            for(unsigned k=0;k<OGRE_STRIPS;k++) {
+                unsigned s=k?T3_SPRITE0+T3_FACES+k-1:slot;
+                if(ready)psx_mod_gpu_sprite_hd_set(s,page,uv+k*TILE_W*2,TILE_W*2,ogre_strip_rows[k],
+                                                   x,y+k*OGRE_STRIP_H*2,HD_TILE_W,ogre_strip_rows[k]*2);
+                else psx_mod_gpu_sprite_hd_clear(s);
+            }
+        } else if(ready)psx_mod_gpu_sprite_hd_set(slot,page,uv,TILE_W*2,TILE_H,x,y,HD_TILE_W,HD_TILE_H);
+        else psx_mod_gpu_sprite_hd_clear(slot);
+    }
+}
+/* ID's arcade portrait, or NULL (the stock one stays). */
+static const uint16_t *t3_face_portrait(unsigned id) {
+    t3_faces_load();
+    return id<T3_FACES?t3_faces[id].portrait:NULL;
 }
 /* The stock icons' palettes (a 256 x 1 row each, (256, 480 + slot)) are
  * crossed by player 1's texture band (x 384..447): a guest's costume writes
@@ -2536,8 +2746,13 @@ void __wrap_func_80031BFC(CPUState *cpu) {
             cpu->gpr[2]=g->ui_lengths[0];cpu->pc=cpu->gpr[31];return;
         }
     }
-    if(tekken3_ttt1_roster_enabled() && (cpu->pc==0 || cpu->pc==0x80031bfc))
-        hd_portrait_face(portrait_player(cpu),NULL);   /* a stock portrait */
+    /* A stock portrait: the fighter's arcade one if the setup made it (B186). */
+    if(tekken3_ttt1_roster_enabled() && (cpu->pc==0 || cpu->pc==0x80031bfc)) {
+        int p=portrait_player(cpu);
+        unsigned id=cpu->gpr[31]==0x8010e574?psx_mod_read_word(cpu->gpr[16]+0x1c):
+                    p>=0?psx_mod_read_half(0x800add5c+(unsigned)p*2):0xffff;
+        hd_portrait_pixels(p,t3_face_portrait(id));
+    }
     __real_func_80031BFC(cpu);
 }
 /* Loading-screen portrait is the same native banded TIM. */
@@ -2630,6 +2845,27 @@ static int arena_player(const CPUState *cpu) {
 enum { DEMO=6 };
 static void demo_fighters(void);
 extern int tekken3_cine_pending(void);
+/* B167 (GH#214): Xiaoyu's and Jin's school uniforms are their TTT1 Start models (slots 39, 40),
+ * Tekken 3's third costume, whose records (ID * 4 + 2) fight at the school, arena 7. The CPU
+ * COSTUME row draws only the model, the game keeps its punch or kick costume, so its record gave
+ * the fighter's own arena. A CPU native drawn in its uniform takes the arena and music of its
+ * costume-2 record, as a player who picks the uniform; the STAGES row then decides Tekken 3's
+ * school or TTT's (AUTO: one or the other). Only these two: the other natives' costume-2
+ * records name another fighter (Nina's Anna, Eddy's Tiger, Ogre's True Ogre), their music too. */
+extern int tekken3_cpu_native_variant(unsigned slot,unsigned id,unsigned costume);
+extern void tekken3_cpu_costume_fight_set_up(void);
+static const char *fighter_name(unsigned id);
+enum { XIAOYU_ID=7, START_VARIANT=4, UNIFORM_COSTUME=2 };
+static int uniform_arena(int p,unsigned *music) {
+    if(p!=0 && p!=1)return -1;
+    unsigned id=psx_mod_read_half(0x800add5c+p*2),costume=psx_mod_read_half(0x800add98+p*2)&3;
+    if((id!=XIAOYU_ID && id!=JIN_ID) || costume>=UNIFORM_COSTUME ||
+       tekken3_cpu_native_variant((unsigned)p,id,costume)!=START_VARIANT)return -1;
+    uint32_t record=psx_mod_read_word(0x80097d40+(id*4+UNIFORM_COSTUME)*4);
+    if(record>>24!=0x80)return -1;
+    *music=psx_mod_read_byte(record+11);
+    return psx_mod_read_byte(record+10);
+}
 void __wrap_func_8004F3B0(CPUState *cpu) {
     /* The roster's correction with TTT1 Characters on; the fight's stage with
      * it, or with TTT Stages alone (natives only, TTT Stages S7). */
@@ -2640,6 +2876,9 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
     /* The STAGE line of VS and Practice (F18, src/tekken3_stage_select.c):
      * the fight's stage, before the source is decided. */
     if(entry)tekken3_stage_select_fight(psx_mod_read_word(cpu->gpr[4]));
+    unsigned uniform_music=0;
+    if(entry)tekken3_cpu_costume_fight_set_up();
+    int uniform=entry?uniform_arena(arena_player(cpu),&uniform_music):-1;
     if(entry && (guests || tekken3_arcade_stages_source_ready(TEKKEN3_STAGE_TTT))) {
         /* The attract's demo fight; a cinematic's scene loads in its mode
          * too, on the game's stage. */
@@ -2665,12 +2904,23 @@ void __wrap_func_8004F3B0(CPUState *cpu) {
             unsigned id=psx_mod_read_half(0x800add5c+p*2),costume=psx_mod_read_half(0x800add98+p*2)&3;
             uint32_t record=id<23?psx_mod_read_word(0x80097d40+(id*4+costume)*4):0;   /* 23 records: Tiger is 22 */
             if(record>>24==0x80)arena=psx_mod_read_byte(record+10);
+            if(uniform>=0)arena=uniform;             /* B167: the school */
         }
         tekken3_stage_source_decide(scene?~0u:mode,p,k>=0?roster[k].key:NULL,arena);
         /* Gon's arena (Roger's, Alex's) given a TTT stage: that stage's (B122). */
         if(k>=0 && tekken3_stage_source_load_arena()>=0)arena_value=(unsigned)tekken3_stage_source_load_arena();
     }
     __real_func_8004F3B0(cpu);
+    /* B167: the uniform's arena and music, written as a guest's until the fight (arena_tick);
+     * Tekken Ball keeps its own arena. */
+    if(uniform>=0) {
+        unsigned mode=psx_mod_read_word(cpu->gpr[4]);
+        arena_value=(unsigned)uniform;music_value=uniform_music;music_only=mode==7;arena_pending=1;
+        if(!music_only){psx_mod_write_half(ARENA,(uint16_t)arena_value);psx_mod_write_byte(ARENA_COPY,(uint8_t)arena_value);}
+        psx_mod_write_half(MUSIC,(uint16_t)music_value);psx_mod_write_byte(MUSIC_COPY,(uint8_t)music_value);
+        fprintf(stderr,"TTT1 characters: CPU P%d's %s in the school uniform (TTT Start model): arena %d (B167)\n",
+                arena_player(cpu)+1,fighter_name(psx_mod_read_half(0x800add5c+arena_player(cpu)*2)),uniform);
+    }
     /* Again every VBlank until the fight (tekken3_stage_select.c's tick). */
     if(entry && tekken3_stage_select_arena()>=0) {
         psx_mod_write_half(ARENA,(uint16_t)tekken3_stage_select_arena());
@@ -2839,6 +3089,14 @@ void __wrap_func_8006C618(CPUState *cpu) {
         unsigned player=back==LIFT_WANT_P2,id=psx_mod_read_byte(OPPONENTS+8*4),costume=psx_mod_read_byte(OPPONENTS+8*4+1)&3;
         uint32_t actor=0x800a9228+player*0x188c;
         int k=tekken3_guest_character(id);
+        /* B163: the player's own identity as a native on its TTT1 or DR moves
+         * came before the boss's: a guest boss read the player's files (Ogre
+         * lifted Hwoarang in Devil's place). Lent until phase 20's reload. */
+        if(native_id[player]!=NO_NATIVE) {
+            lifted_native[player]=natives[player];lifted_native_id[player]=native_id[player];
+            native_id[player]=NO_NATIVE;bump(player);
+            fprintf(stderr,"TTT1 characters: Ogre's cutscene, P%u leaves %s until the reload\n",player+1,natives[player].data_prefix);
+        }
         if(k<0)fprintf(stderr,"TTT1 characters: Ogre's cutscene lifts %s (P%u)\n",fighter_name(psx_mod_read_half(actor+0x18)),player+1);
         else {
             psx_mod_write_half(actor+0x14,(uint16_t)(id*4+costume));
@@ -2861,6 +3119,14 @@ void __wrap_func_8006C63C(CPUState *cpu) {
 }
 /* Phase 20's reload (src/tekken3_embu_scenes.c): the player's own fighter. */
 void tekken3_ogre_lift_reload(unsigned p1,unsigned c1,unsigned p2,unsigned c2) {
+    /* B163: the native's moves back before the reload loads them (the choice
+     * stays made: tekken3_native_moves_reload does not make it again). */
+    for(unsigned p=0;p<2;p++)
+        if(lifted_native_id[p]!=NO_NATIVE && lifted_native_id[p]==(p?p2:p1)) {
+            natives[p]=lifted_native[p];native_id[p]=lifted_native_id[p];bump(p);
+            fprintf(stderr,"TTT1 characters: Ogre's cutscene over, P%u back on %s\n",p+1,natives[p].data_prefix);
+        }
+    lifted_native_id[0]=lifted_native_id[1]=NO_NATIVE;
     if(lift_player<0)return;
     unsigned id=lift_player?p2:p1;
     follow((unsigned)lift_player,id);follow_costume((unsigned)lift_player,(lift_player?c2:c1)&3);
@@ -2972,7 +3238,9 @@ void __wrap_func_8004F0E4(CPUState *cpu) {
  * in a filled place (the CPU's, a Random fill's) tosses its moves, Tekken 3
  * or TTT1, kept for the match (tekken3_native_moves_assign). Mokujin is
  * subject to his unlock. TEKKEN3_TEAM_GUESTS="one_in,max[,boss_one_in]" sets
- * the CPU's rates (max 0 = no guest, boss_one_in 0 = no boss). */
+ * the CPU's rates (max 0 = no guest, boss_one_in 0 = no boss).
+ * TEKKEN3_TEAM_FILL_NATIVE=<id> (benches, F37) makes a human's first filled
+ * place that native, never redrawn (tools/test_f37_xiaoyu_random.py). */
 enum { TEAM_BATTLE=2, TEAMS=0x800afa88+89, TEAM_STRIDE=13, TEAM_EMPTY=88, RANDOM_FILL_POOL=0x1f7fff };
 extern int tekken3_native_moves_assign(unsigned slot,unsigned id,int ttt1);
 static unsigned team_one_in=4,team_max=2,team_boss_one_in=12;
@@ -3007,6 +3275,15 @@ static void team_tick(unsigned state) {
         int boss_in=0;
         for(unsigned i=chosen;i<size;i++) {
             if(members[i]==TEAM_EMPTY)continue;
+            const char *forced=human && i==chosen?getenv("TEKKEN3_TEAM_FILL_NATIVE"):NULL;
+            if(forced && *forced && (unsigned)atoi(forced)<STOCK_FIGHTERS) {
+                unsigned id=(unsigned)atoi(forced);
+                members[i]=(unsigned char)(id*4+(members[i]&3));
+                psx_mod_write_byte(team+i,members[i]);
+                if(i==0){psx_mod_write_half(0x800add5c+p*2,(uint16_t)id);psx_mod_write_half(0x800add98+p*2,(uint16_t)(members[i]&3));first_swapped[p]=1;}
+                fprintf(stderr,"TTT1 characters: fighter %u placed by TEKKEN3_TEAM_FILL_NATIVE in P%u's team (member %u)\n",id,p+1,i+1);
+                continue;
+            }
             /* Who is in either team, this place left out. */
             unsigned stock_taken=0;
             unsigned char guest_taken[GUEST_MAX]={0};

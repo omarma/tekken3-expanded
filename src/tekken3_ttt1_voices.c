@@ -2,6 +2,7 @@
  * Playback runs on the emulation thread, before the existing host audio queue,
  * fade, master volume and resampler. No sample ROM is embedded in the binary. */
 #include "psx_runtime.h"
+#include "savestate.h"
 #include "mod_plugins.h"
 #include "psx_sha256.h"
 #include "spu.h"
@@ -290,7 +291,9 @@ static int gon_pose_fall(CPUState *cpu) {
     /* a nested call that stops at a return address never reached */
     uint32_t ra=cpu->gpr[31];
     cpu->gpr[5]=GON_FALL;cpu->gpr[6]=0;cpu->gpr[31]=NESTED_RETURN;cpu->pc=0;
+    psx_savestate_hold++;   /* B181: no save state inside the nested call */
     psx_dispatch_call(cpu,0x800753bc,NESTED_RETURN);
+    psx_savestate_hold--;
     cpu->gpr[31]=ra;
     cpu->pc=ra;
     return 1;

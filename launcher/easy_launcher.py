@@ -48,6 +48,24 @@ def reveal(path):
     if os.name=='nt':os.startfile(str(path))
     else:subprocess.Popen(['open' if sys.platform=='darwin' else 'xdg-open',str(path)])
 
+def work_area(window):
+    """(x, y, width, height) the window may use: the screen without the taskbar
+    (B159: a 720p screen, or 175 % scaling, is shorter than the setup)."""
+    if os.name=='nt':
+        from ctypes import wintypes
+        rect=wintypes.RECT()
+        if ctypes.windll.user32.SystemParametersInfoW(48,0,ctypes.byref(rect),0):   # SPI_GETWORKAREA
+            return rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top
+    scale=window.winfo_fpixels('1i')/96   # macOS menu bar and Dock, Linux panels
+    return 0,int(30*scale),window.winfo_screenwidth(),window.winfo_screenheight()-int(110*scale)
+
+def fit_window(req,area,frame):
+    """The window's size and place: its natural size, cut to the work area
+    less the title bar and borders (frame), centered in it."""
+    ax,ay,aw,ah=area;fw,fh=frame
+    width=max(1,min(req[0],aw-fw));height=max(1,min(req[1],ah-fh))
+    return width,height,ax+max(0,(aw-fw-width)//2),ay+max(0,(ah-fh-height)//2)
+
 def gui(test_hook=None,android_only=False,android_setup=False):
     """android_only: the APK of a game already set up. android_setup: the
     files, then the APK alone (no PC game), for the phone only."""
@@ -56,7 +74,7 @@ def gui(test_hook=None,android_only=False,android_setup=False):
     class App:
         def __init__(self):
             self.window=tk.Tk();self.window.title('Tekken 3 — First setup')
-            self.window.configure(bg='#11131b');self.window.resizable(False,False)
+            self.window.configure(bg='#11131b')   # resizable: the options scroll, the buttons stay (B159)
             self.job=None;self.process=None;self.events=queue.Queue();self.busy=False
             self.epoch=0;self.completed=False;self.apk=None;self.android_only=android_only
             self.android_setup=android_setup
@@ -74,7 +92,14 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             s.configure('TCheckbutton',background='#11131b',foreground='#ececf2')
             s.map('TCheckbutton',background=[('active','#11131b')])
             s.configure('TProgressbar',background='#9775ea',troughcolor='#232735',borderwidth=0)
-            root=ttk.Frame(self.window,padding=28);root.pack(fill='both',expand=True)
+            s.configure('Vertical.TScrollbar',background='#2d3242',troughcolor='#11131b',bordercolor='#11131b',
+                        arrowcolor='#a9adbd',lightcolor='#2d3242',darkcolor='#2d3242')
+            s.map('Vertical.TScrollbar',background=[('active','#404758')])
+            # B159: the status and the buttons are packed first at the bottom, so they
+            # always show; the options above them scroll when the screen is too short.
+            outer=ttk.Frame(self.window,padding=28);outer.pack(fill='both',expand=True)
+            footer=ttk.Frame(outer);footer.pack(side='bottom',fill='x',pady=(12,0))
+            root=self.scroll_area(outer)
             ttk.Label(root,text='TEKKEN 3',style='Title.TLabel').pack(anchor='w')
             ttk.Label(root,text='Build the Android version of your game.' if android_only
                       else 'Choose your files. We’ll build the game for your Android phone.' if android_setup
@@ -89,7 +114,9 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.ttt_disc=tk.StringVar(value=saved.get('ttt_disc',''))
             self.dr_iso=tk.StringVar(value=saved.get('dr_iso',''))
             self.dr_content=tk.BooleanVar(value=saved.get('dr_content',bool(saved.get('dr_iso'))))
-            self.controls=[];self.ttt1_controls=[];self.dr_controls=[]
+            self.ppsspp=tk.StringVar(value=saved.get('ppsspp',''))
+            self.ppsspp_note=tk.StringVar(value='');self.ppsspp_check=None
+            self.controls=[];self.ttt1_controls=[];self.dr_controls=[];self.ppsspp_controls=[]
             if android_only:self.android_page(root)
             else:self.setup_page(root)
             # An earlier setup: up to date (Setup Tekken 3 opened it), or an update needs it.
@@ -100,10 +127,10 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.detail=tk.StringVar(value=f'It will be saved as {backend.APK.name} in the tekken3-expanded folder.' if android_only or android_setup
                                      else 'No Python or compiler installation needed.' if os.name=='nt'
                                      else 'Your files stay on this Mac.' if sys.platform=='darwin' else 'Your files stay on this computer.')
-            ttk.Label(root,textvariable=self.status,font=(FONT,11,'bold'),wraplength=585).pack(anchor='w')
-            ttk.Label(root,textvariable=self.detail,style='Muted.TLabel',wraplength=585,justify='left').pack(anchor='w',pady=(5,10))
-            self.progress=ttk.Progressbar(root,mode='indeterminate',length=590);self.progress.pack(fill='x',pady=(0,16))
-            actions=ttk.Frame(root);actions.pack(fill='x')
+            ttk.Label(footer,textvariable=self.status,font=(FONT,11,'bold'),wraplength=585).pack(anchor='w')
+            ttk.Label(footer,textvariable=self.detail,style='Muted.TLabel',wraplength=585,justify='left').pack(anchor='w',pady=(5,10))
+            self.progress=ttk.Progressbar(footer,mode='indeterminate',length=590);self.progress.pack(fill='x',pady=(0,16))
+            actions=ttk.Frame(footer);actions.pack(fill='x')
             self.primary=ttk.Button(actions,text='Build Android APK' if android_only or android_setup else 'Update & play' if self.updating else 'Set up & play',
                                     style='Play.TButton',command=self.start)
             self.primary.pack(side='right')
@@ -112,10 +139,56 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             ttk.Button(actions,text='Open setup log',command=self.open_log).pack(side='left')
             self.window.protocol('WM_DELETE_WINDOW',self.close)
             self.update_ttt1();self.window.after(100,self.poll)
+            self.fit(outer,footer)
+        def scroll_area(self,parent):
+            """A frame that scrolls (scroll bar, mouse wheel, Tab) inside parent's free room."""
+            body=ttk.Frame(parent);body.pack(fill='both',expand=True)
+            canvas=tk.Canvas(body,bg='#11131b',highlightthickness=0,borderwidth=0)
+            bar=ttk.Scrollbar(body,orient='vertical',command=canvas.yview)
+            canvas.configure(yscrollcommand=bar.set);canvas.pack(side='left',fill='both',expand=True)
+            content=ttk.Frame(canvas);item=canvas.create_window(0,0,window=content,anchor='nw')
+            self.canvas=canvas;self.content=content;self.scrollbar=bar
+            def layout(event=None):
+                canvas.itemconfigure(item,width=canvas.winfo_width())
+                canvas.configure(scrollregion=(0,0,content.winfo_reqwidth(),content.winfo_reqheight()))
+                overflow=content.winfo_reqheight()>canvas.winfo_height()
+                if overflow and not bar.winfo_ismapped():bar.pack(side='right',fill='y',padx=(8,0),before=canvas)
+                elif not overflow and bar.winfo_ismapped():bar.pack_forget();canvas.yview_moveto(0)
+            content.bind('<Configure>',layout);canvas.bind('<Configure>',layout)
+            def wheel(event):
+                if not bar.winfo_ismapped():return
+                if event.num==4:step=-1
+                elif event.num==5:step=1
+                elif sys.platform=='darwin':step=-event.delta
+                else:step=-event.delta//120 or (-1 if event.delta>0 else 1)
+                canvas.yview_scroll(step*3 if os.name=='nt' or event.num in (4,5) else step,'units')
+            def follow(event):   # Tab onto an option scrolled out of sight
+                widget=event.widget
+                if not isinstance(widget,tk.Misc) or not bar.winfo_ismapped() or not str(widget).startswith(str(content)+'.'):return
+                top=widget.winfo_rooty()-content.winfo_rooty();bottom=top+widget.winfo_height()
+                seen=canvas.canvasy(0);height=canvas.winfo_height();total=max(1,content.winfo_reqheight())
+                if top<seen:canvas.yview_moveto(max(0,top-12)/total)
+                elif bottom>seen+height:canvas.yview_moveto((bottom+12-height)/total)
+            for sequence in ('<MouseWheel>','<Button-4>','<Button-5>'):self.window.bind(sequence,wheel,add='+')
+            self.window.bind('<FocusIn>',follow,add='+')
+            return content
+        def fit(self,outer,footer):
+            """B159: the natural size, cut to the screen's free room; the footer (status, buttons) always shows."""
             self.window.update_idletasks()
-            width=self.window.winfo_reqwidth();height=self.window.winfo_reqheight()
-            x=max(0,(self.window.winfo_screenwidth()-width)//2);y=max(0,(self.window.winfo_screenheight()-height)//2)
-            self.window.geometry(f'+{x}+{y}')
+            # Long check box texts wrap at the width of the file rows instead of widening the window.
+            rows=[w for w in self.content.pack_slaves() if w.winfo_class()=='TFrame']
+            if rows:
+                ttk.Style(self.window).configure('TCheckbutton',wraplength=max(w.winfo_reqwidth() for w in rows)-int(self.window.winfo_fpixels('0.3i')))
+                self.window.update_idletasks()
+            self.canvas.configure(width=self.content.winfo_reqwidth(),height=self.content.winfo_reqheight())
+            self.window.update_idletasks()
+            scale=self.window.winfo_fpixels('1i')/96   # title bar and borders, as Windows 11 draws them
+            req=(self.window.winfo_reqwidth(),self.window.winfo_reqheight());area=work_area(self.window);frame=(int(16*scale),int(40*scale))
+            if req[1]>area[3]-frame[1]:req=(req[0]+self.scrollbar.winfo_reqwidth()+8,req[1])   # room for the scroll bar
+            width,height,x,y=fit_window(req,area,frame)
+            self.window.geometry(f'{width}x{height}+{x}+{y}')
+            pad=outer.winfo_reqheight()-self.canvas.winfo_reqheight()-footer.winfo_reqheight()   # padding and the footer's gap
+            self.window.minsize(min(width,int(420*scale)),min(height,pad+footer.winfo_reqheight()+int(90*scale)))
         def setup_page(self,root):
             self.file_row(root,'Tekken 3 · USA PlayStation disc',self.disc,[('Disc image','*.cue *.bin *.iso')])
             self.check=ttk.Checkbutton(root,text='Include Tekken Tag Tournament Content (TTT1 characters, TTT stages and music)',variable=self.ttt1,command=self.update_ttt1)
@@ -125,16 +198,24 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             # Optional: the TTT stages' PS2 music (BGM SELECT: REMIXED) and the endings' music.
             self.file_row(root,'Tekken Tag Tournament · USA PS2 disc (optional: PS2 music of the TTT stages and TTT Cinematics)',
                           self.ttt_disc,[('Disc image','*.cue *.bin *.iso')],ttt1=True)
+            # The TTT settings stay together; Tekken 5 DR Content comes after them (B155).
+            self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",variable=self.cinematics)
+            self.cinematics_check.pack(anchor='w',pady=(6,6));self.controls.append(self.cinematics_check);self.ttt1_controls.append(self.cinematics_check)
             # Tekken 5 DR Content (experimental, F34): ticked, the Dark Resurrection content is copied
             # from the player's PSP disc; for now Jin's DR moveset. Unticked, none of it.
             self.dr_check=ttk.Checkbutton(root,text="Add-on: Tekken 5 DR Content (experimental: it will hold Tekken 5 Dark Resurrection's content;"
                                           " for now only Jin's traditional karate moveset)",variable=self.dr_content,command=self.update_ttt1)
             self.dr_check.pack(anchor='w',pady=(6,6));self.controls.append(self.dr_check);self.ttt1_controls.append(self.dr_check)
-            self.file_row(root,"Tekken: Dark Resurrection · USA PSP disc, copied by Tekken 5 DR Content (needs PPSSPP installed)",
+            self.file_row(root,"Tekken: Dark Resurrection · USA PSP disc, copied by Tekken 5 DR Content (needs PPSSPP, installed or portable)",
                               self.dr_iso,[('Disc image','*.iso')],ttt1=True)
             self.dr_controls.extend(w for w in self.ttt1_controls[-2:])
-            self.cinematics_check=ttk.Checkbutton(root,text="Add-on: TTT Cinematics",variable=self.cinematics)
-            self.cinematics_check.pack(anchor='w',pady=(6,6));self.controls.append(self.cinematics_check);self.ttt1_controls.append(self.cinematics_check)
+            # B162: PPSSPP's folder, searched for; chosen here when the search misses it (a portable
+            # zip, another drive, a Linux package elsewhere). The line under it says which one is used.
+            frame=self.file_row(root,'PPSSPP folder (optional: only if the setup does not find your PPSSPP, installed or portable)',
+                                self.ppsspp,None,ttt1=True,folder=True)
+            self.ppsspp_controls.extend(self.ttt1_controls[-2:])
+            ttk.Label(frame,textvariable=self.ppsspp_note,style='Muted.TLabel',wraplength=585,justify='left').pack(anchor='w',pady=(4,0))
+            self.ppsspp.trace_add('write',lambda *_:self.check_ppsspp(later=True))
             ttk.Label(root,text='Use your own game files. Nothing is uploaded.\n'+
                       ('Only the Android game is built, for an arm64 phone.\nThe first time also downloads the Android tools (about 1 GB).\n'
                        if self.android_setup else '')+('Tools download automatically; ' if os.name=='nt' else 'Needs cmake, ninja and SDL3 (brew install cmake ninja sdl3); '
@@ -146,12 +227,12 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                       'with the characters and options you chose. The first time downloads the\n'
                       'Android tools (about 1 GB) and takes a while; later builds are quicker.',
                       style='Muted.TLabel',justify='left').pack(anchor='w',pady=(0,20))
-        def file_row(self,parent,label,value,types,ttt1=False):
+        def file_row(self,parent,label,value,types,ttt1=False,folder=False):
             frame=ttk.Frame(parent);frame.pack(fill='x',pady=(0,9))
             ttk.Label(frame,text=label).pack(anchor='w',pady=(0,5))
             row=ttk.Frame(frame);row.pack(fill='x')
             entry=ttk.Entry(row,textvariable=value,width=58);entry.pack(side='left',fill='x',expand=True)
-            button=ttk.Button(row,text='Browse',command=lambda:self.browse(value,types))
+            button=ttk.Button(row,text='Browse',command=lambda:self.browse_folder(value) if folder else self.browse(value,types))
             button.pack(side='right',padx=(9,0))
             self.controls.extend((entry,button))
             if ttt1:self.ttt1_controls.extend((entry,button))
@@ -163,11 +244,23 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                 folder=Path(selected).parent
                 if not self.ttt.get() and (folder/'tektagt.zip').is_file():self.ttt.set(str(folder/'tektagt.zip'))
                 if not self.tekken3.get() and (folder/'tekken3.zip').is_file():self.tekken3.set(str(folder/'tekken3.zip'))
+        def browse_folder(self,value):
+            selected=filedialog.askdirectory(parent=self.window,title='Choose your PPSSPP folder',mustexist=True,
+                                             initialdir=value.get() or None)
+            if selected:value.set(str(Path(selected)))
+        def check_ppsspp(self,later=False):
+            """The line under PPSSPP folder (B162), once typing stops (the search takes a moment)."""
+            if self.ppsspp_check:self.window.after_cancel(self.ppsspp_check);self.ppsspp_check=None
+            if later:self.ppsspp_check=self.window.after(400,self.check_ppsspp);return
+            if not (self.ttt1.get() and self.dr_content.get()):self.ppsspp_note.set('');return
+            try:self.ppsspp_note.set(backend.ppsspp_note(self.ppsspp.get().strip())[1])
+            except Exception as error:self.ppsspp_note.set('');backend.log_line(f'PPSSPP search: {error}')
         def update_ttt1(self):
             for widget in self.ttt1_controls:widget.configure(state='normal' if self.ttt1.get() and not self.busy else 'disabled')
             # The DR disc's field only with Tekken 5 DR Content ticked.
-            for widget in self.dr_controls:
+            for widget in self.dr_controls+self.ppsspp_controls:
                 widget.configure(state='normal' if self.ttt1.get() and self.dr_content.get() and not self.busy else 'disabled')
+            if hasattr(self,'ppsspp_note'):self.check_ppsspp(later=True)
         def set_busy(self,value):
             self.busy=value
             for widget in self.controls:widget.configure(state='disabled' if value else 'normal')
@@ -204,6 +297,7 @@ def gui(test_hook=None,android_only=False,android_setup=False):
                 if self.dr_content.get():
                     command.append('--dr-content')
                     if self.dr_iso.get():command+=['--dr-iso',self.dr_iso.get()]
+                    if self.ppsspp.get().strip():command+=['--ppsspp',self.ppsspp.get().strip()]
             else:command+=['--disc',self.disc.get(),'--no-ttt1']
             try:
                 self.job=ProcessJob()
@@ -222,7 +316,7 @@ def gui(test_hook=None,android_only=False,android_setup=False):
             self.status.set('Checking your optional files');self.detail.set('');self.window.update_idletasks()
             problems=backend.optional_problems(ttt1,(ttt1 and self.tekken3.get()) or None,(ttt1 and self.ttt_disc.get()) or None,
                                                self.cinematics.get(),pc,(ttt1 and self.dr_content.get() and self.dr_iso.get()) or None,
-                                               ttt1 and self.dr_content.get())
+                                               ttt1 and self.dr_content.get(),self.ppsspp.get().strip() or None)
             if not problems or self.ask_optional(problems):return True
             names=' and '.join(p['file'] for p in problems)
             self.status.set('Choose another '+names+('' if not self.android_only else ' in Setup Tekken 3'))

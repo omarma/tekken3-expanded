@@ -50,6 +50,7 @@ static uint32_t s_entry_pc;
 static int      s_configured   = 0;
 static int      s_save_pending = -1;   /* slot, or -1 */
 static int      s_load_pending = -1;
+int             psx_savestate_hold = 0;   /* see savestate.h */
 static int      s_load_completed = 0;
 static int      s_load_failed = 0;
 /* Frame anchor for frame-exact debug captures (debug_server capture_plan):
@@ -593,6 +594,7 @@ uint64_t savestate_last_load_vblanks(void) {
 
 void savestate_poll(CPUState* cpu, uint32_t resume_pc) {
     if (s_save_pending < 0 && s_load_pending < 0) return;   /* hot path: nothing staged */
+    if (psx_savestate_hold > 0) return;   /* host code mid guest call: later */
 
     if (s_save_pending >= 0) {
         int slot = s_save_pending;

@@ -3196,6 +3196,19 @@ void gpu_set_screen_kind(int kind) {
     s_screen_lut_init = 0;  /* rebuild on next scanout */
 }
 
+/* The effective screen model (PSX_SCREEN env first, then the config value),
+ * read by the OpenGL present pass that draws the CRT scanlines and mask. */
+int gpu_get_screen_kind(void) {
+    static int env_read = 0, env_kind = -1;
+    if (!env_read) {
+        const char* name = getenv("PSX_SCREEN");
+        ScreenKind k;
+        if (name && screen_kind_from_name(name, &k)) env_kind = (int)k;
+        env_read = 1;
+    }
+    return env_kind >= 0 ? env_kind : s_screen_kind_cfg;
+}
+
 static void screen_lut_ensure(void) {
     if (s_screen_lut_init) return;
     s_screen_lut_init = 1;
@@ -5976,7 +5989,7 @@ static void hivram_execute_command(uint8_t opcode) {
 /* Sprite HD substitutes (mod_plugins.h, psx_mod_gpu_sprite_hd_set): the
  * game's sprite keeps its packet, place and blending; above native
  * resolution its texels come from a finer copy in the upper half. */
-#define SPRITE_HD_SLOTS 32
+#define SPRITE_HD_SLOTS 64
 typedef struct {
     uint32_t uv;
     uint16_t page, w, h, hx, hy, hw, hh;

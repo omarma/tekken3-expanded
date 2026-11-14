@@ -1540,6 +1540,41 @@ extern "C" int psx_ws_get_native_wide(void) { return g_ws_native_wide; }
 
 static bool          g_gl_active = false;    /* GL context live -> GL present path */
 static bool          g_vk_active = false;    /* Vulkan context live -> VK present path */
+/* B161: the OpenGL driver could not be loaded at all (no GL window, or no GL
+ * context). The game then rasterizes in software and presents through
+ * Direct3D on Windows instead of quitting silently. */
+static bool          g_gl_unavailable = false;
+
+#ifdef _WIN32
+/* B161: on hybrid laptops (AMD/Intel iGPU + NVIDIA/AMD dGPU) ask the drivers
+ * to run this exe on the dedicated GPU. Besides speed, this keeps a broken
+ * iGPU OpenGL driver (AMD's "LoadLibrary failed with error 126" box) out of
+ * the way. Both drivers look these exports up in the .exe by name. */
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
+/* Present driver for the SDL_Renderer path: OpenGL by default (GDI hang
+ * history below), Direct3D when OpenGL is unusable on this machine. */
+static const char *win_present_render_driver(void) {
+    return g_gl_unavailable ? "direct3d11,direct3d,direct3d12" : "opengl";
+}
+
+static void win_show_gpu_error(const char *detail) {
+    char msg[1024];
+    std::snprintf(msg, sizeof msg,
+        "Tekken 3 Expanded could not open its window.\n\n"
+        "Graphics error: %s\n\n"
+        "This usually means the graphics driver is missing or broken.\n"
+        "1. Install the latest driver from AMD, NVIDIA or Intel (not only Windows Update).\n"
+        "2. On a laptop with two GPUs, set Tekken_3_Expanded.exe to \"High performance\" in\n"
+        "   Windows Settings > System > Display > Graphics.\n"
+        "Then start the game again.",
+        detail ? detail : "unknown");
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Tekken 3 Expanded", msg, NULL);
+}
+#endif
 /* Present straight from the FBO (fast, no readback). Set PSX_GL_FORCE_CPU_PRESENT=1
  * to force the software readout path instead — a diagnostic/fallback that also
  * keeps CPU VRAM current every frame (so screenshots reflect the screen). */
@@ -1677,7 +1712,7 @@ static int ensure_sw_sdl_present(void) {
         return -1;
     if (!sdl_renderer) {
 #ifdef _WIN32
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, win_present_render_driver());
 #endif
         Uint32 rflags = SDL_RENDERER_ACCELERATED |
                         (g_video_vsync != 0 ? SDL_RENDERER_PRESENTVSYNC : 0u);
@@ -12466,8 +12501,28 @@ session_reboot:
         game_w, game_h,
         win_flags
     );
+#ifdef _WIN32
+    /* B161: no usable OpenGL driver (e.g. AMD's "LoadLibrary failed with
+     * error 126"): open a plain window and fall back to software raster +
+     * Direct3D present below instead of quitting without a word. */
+    if (!sdl_window && (win_flags & SDL_WINDOW_OPENGL)) {
+        std::fprintf(stderr, "psxrecomp: OpenGL window failed (%s); "
+                     "falling back to software + Direct3D present\n", SDL_GetError());
+        g_gl_unavailable = true;
+        win_flags &= ~(Uint32)SDL_WINDOW_OPENGL;
+        sdl_window = SDL_CreateWindow(
+            window_title.c_str(),
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            game_w, game_h,
+            win_flags
+        );
+    }
+#endif
     if (!sdl_window) {
         std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+#ifdef _WIN32
+        win_show_gpu_error(SDL_GetError());
+#endif
         return 1;
     }
 
@@ -12500,8 +12555,14 @@ session_reboot:
      * this phase) and fall through to the SDL_Renderer present path below. */
     if (g_video_renderer == 1) {
         gl_renderer_set_swap_interval(g_video_vsync);   /* applied at context init */
-        g_gl_active = (gl_renderer_init_context(sdl_window) != 0);
+        g_gl_active = !g_gl_unavailable &&
+                      (gl_renderer_init_context(sdl_window) != 0);
         if (!g_gl_active) {
+#ifdef _WIN32
+            /* B161: a GL window without a GL context is the same broken
+             * driver; present through Direct3D, not SDL's OpenGL renderer. */
+            g_gl_unavailable = true;
+#endif
             gr_set_backend(GR_BACKEND_SOFTWARE);
             gl_renderer_set_cpu_auth_dual(0);
             g_gl_fbo_present = 0;
@@ -12572,7 +12633,7 @@ session_reboot:
      * fall back progressively if a driver can't provide vsync/accel. */
   if (!g_gl_active && !g_vk_active) {
 #ifdef _WIN32
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, win_present_render_driver());
 #endif
     /* Vsync off (g_video_vsync==0) drops PRESENTVSYNC for lowest display
      * latency; the wall-clock pacer still holds 59.94Hz (may tear). */

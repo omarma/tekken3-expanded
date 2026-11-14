@@ -453,7 +453,14 @@ int tekken3_dr_air_reaction(unsigned p) {
  * 94 degrees at once as he started to get up (hips -90 to 176, measured on the bones). The body's
  * yaw is read on the bones (+0x908 + 68 * bone: hips 12 and 15) each frame; at the change, the facing
  * (+0x2C, +0x0E) turns by the jump, 20 degrees or more, and Tekken 3's own get-up turns it to the
- * opponent from there. */
+ * opponent from there.
+ * Not across a round's start: these steps run in fights only, and the victim left on a DR death or
+ * reaction as the last round or fight ended was seen leaving it on the next one's first frame, its intro
+ * a big jump from the lying body: turned away, then back to the opponent (Paul, Xiaoyu, Mokujin spinning
+ * in their intro after Jin DR knocked the last one out, B185). round_start (0x8002A1DC, anim_blend_reset)
+ * and the K.O. replay's start and end hold the pose blends for 20 frames (pose_blend_hold): no reaction
+ * is left then, the state is cleared. */
+enum { POSE_BLEND_HOLD=0x800a8d6c };
 static struct {int on_reaction,yaw,valid,facing,dir;} reaction_ends[2];
 static int body_yaw(uint32_t actor) {
     uint32_t a=actor+0x908+12*68,b=actor+0x908+15*68;
@@ -463,6 +470,7 @@ static int body_yaw(uint32_t actor) {
 }
 static void reaction_end_step(unsigned state) {
     for(unsigned p=0;p<2;p++) {
+        if(state==8 && psx_mod_read_word(POSE_BLEND_HOLD)){memset(&reaction_ends[p],0,sizeof reaction_ends[p]);continue;}
         uint32_t them=ACTOR0+(p^1)*ACTOR_SIZE;
         const char *prefix=tekken3_guest_moves_prefix_for(p);
         int on=state==8 && prefix && strstr(prefix,"-DR") && tekken3_ttt1_record_index(p,psx_mod_read_word(them+0x54))>=0;

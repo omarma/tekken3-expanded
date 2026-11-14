@@ -409,8 +409,12 @@ static Tekken3SelectorPlacement other_menu_place(
          * that player has chosen, then slid in. Centred as is, the parked
          * bars showed in the 16:9 margins; stretch their travel so they
          * start past the wide edge instead. The chosen faces' frame
-         * lines end at y = 386 and stay with the faces. */
-        if (p->y >= 370 && p->y + p->height <= 440 &&
+         * lines end at y = 386 and stay with the faces, and so do the
+         * faces themselves: True Ogre's and Gon's are strips, the last one
+         * at y = 374 (x 70 / 266, 32 x 10). Every handicap piece ends
+         * below y = 386 (LIFE glyphs from 376, 16 high). */
+        if (p->y >= 370 && p->y + p->height > 386 &&
+            p->y + p->height <= 440 &&
             (p->opcode < 0x40 || p->opcode >= 0x60)) {
             int side = p->x + p->width <= 150 ? 0 : p->x >= 219 ? 1 : -1;
             if (side >= 0 && f->handicap_seen[side])
@@ -431,7 +435,13 @@ static Tekken3SelectorPlacement other_menu_place(
         out.role = TEKKEN3_SELECTOR_LEFT_PLAYER;
         out.group_id = 1;
         out.sidecar_dx = -margin;
-    } else if (p->y >= 270 && p->x >= 208) {
+    } else if (p->y >= 270 && (p->x >= 208 ||
+               /* The mode banner on the prompt row (QUICK SELECT's Time
+                * Attack: TIME ATTACK! in 14x24 glyphs from x = 204 to
+                * 361) is centred under the right panel; its first letter
+                * starts left of x = 208. */
+               (p->y < 300 && p->opcode == 0x65 && p->width == 14 &&
+                p->height == 24 && p->x + p->width / 2 >= f->display_width / 2))) {
         out.role = TEKKEN3_SELECTOR_RIGHT_PLAYER;
         out.group_id = 2;
         out.sidecar_dx = margin;

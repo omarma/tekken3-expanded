@@ -194,7 +194,9 @@ static Pack s_pack;
 static int s_tried = -1;                /* arena whose pack was last looked for (T3) */
 static int s_tried_ttt = -1;            /* TTT stage whose pack was last looked for */
 static int s_force = -1;                /* TTT stage forced by a cinematic (tekken3_ttt_stage_force) */
-static int s_floor_at, s_floor_xz[2], s_floor_half;   /* a cinematic's TTT floor (tekken3_ttt_floor_centre) */
+enum { CINE_LIGHT_EYE = 2000 };   /* a cinematic's TTT floor light (kind 2): under its look point past this eye height */
+static int s_floor_at, s_floor_xz[2], s_floor_half;
+static int s_floor_light_look;      /* `floor-light look` (tekken3_ttt_floor_light) */   /* a cinematic's TTT floor (tekken3_ttt_floor_centre) */
 static int16_t s_sin[4096], s_cos[4096];
 static int s_trig_ps1;
 static int s_log = -1;
@@ -657,6 +659,9 @@ static const char *pack_dir_of(int source) {
     }
     return s_dir[k];
 }
+/* The Tekken 3 arcade pack folder: it also holds the stock fighters' HD
+ * selector faces (tools/arcade_stages/faces.py, read by tekken3_ttt1_roster.c). */
+const char *tekken3_arcade_stages_dir(void) { return pack_dir_of(TEKKEN3_STAGE_T3); }
 
 static const char *pack_dir(void) { return pack_dir_of(TEKKEN3_STAGE_T3); }
 
@@ -2776,9 +2781,23 @@ static void ttt_floor_grid(const View *w, const Screen *s, int light1[2], int li
         }
     } else if (kind == 2) {
         int mx = (light1[0] + light2[0]) >> 1, mz = (light1[1] + light2[1]) >> 1;
+        /* A cinematic's eye high above the floor (Devil flying off with Jun on stage 14, the
+         * eye up to 8 000 and more, the fighters far from where it looks): the fighters' light
+         * (full within ~3 300 of them) lit a small disc of a black floor, or none at all, where
+         * the PS2's is lit all over. Above CINE_LIGHT_EYE the light is under the point the
+         * camera looks at (the cinematic's floor centre), its reach grown with the eye's height:
+         * the same share of the screen lit as from a fight's camera. Lower, as the game; only
+         * for a cinematic that asks (`floor-light look`): Angel's ending, on the same stage with
+         * its eye up to 7 450, keeps the light it was validated with. */
+        int64_t reach = 0;
+        if (s_floor_at && s_floor_light_look && -w->cam[1] > CINE_LIGHT_EYE) {
+            mx = s_floor_xz[0]; mz = s_floor_xz[1]; reach = -w->cam[1];
+        }
         for (unsigned i = 0; i < p->gnv; i++) {
             int64_t ex = mx - (cx + p->gverts[2 * i]), ez = mz - (cz + p->gverts[2 * i + 1]);
-            int32_t d = i32(ex * ex + ez * ez);
+            int64_t dd = ex * ex + ez * ez;
+            if (reach) dd = dd * CINE_LIGHT_EYE / reach * CINE_LIGHT_EYE / reach;
+            int32_t d = i32(dd);
             if (!d) d = 1;
             int v = tdiv(0x7A120000, d);
             if (v > 0xC0) v = 0xC0;
@@ -3973,6 +3992,8 @@ int tekken3_ttt_stage_force(int stage) {
     }
     return 1;
 }
+
+void tekken3_ttt_floor_light(int look) { s_floor_light_look = look; }
 
 void tekken3_ttt_floor_centre(int on, int x, int z, int half) {
     s_floor_at = on;

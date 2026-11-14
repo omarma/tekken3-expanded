@@ -24,6 +24,7 @@ extern unsigned tekken3_native_moves_id(unsigned player);
 extern int tekken3_ttt1_roster_enabled(void);
 extern int tekken3_guest_character(unsigned id);
 extern void tekken3_ttt1_face_tick(unsigned player,int advanced,int expression,unsigned duration,unsigned flag);
+extern void tekken3_ttt1_shine_tick(unsigned player);
 extern void tekken3_jin_omen_face(unsigned player,unsigned character,int advanced,int expression,unsigned duration);
 extern int tekken3_cine_engine_frame(void);
 static uint32_t face_record[2];
@@ -978,9 +979,13 @@ static int ready(unsigned player) {
  * (tekken3_guest_draw_moveset), and their moves are rebuilt
  * before the routine puts the fighters back in their stance. Only on entry:
  * a sliced call resumes through this wrapper with pc at the resume point. */
+void tekken3_ttt1_sfx_round_start(void);
 void __wrap_func_8002A914(CPUState *cpu) {
     if((cpu->pc==0 || cpu->pc==0x8002a914) && tekken3_ttt1_roster_enabled())
         for(unsigned p=0;p<2;p++)if(tekken3_guest_draw_moveset(p))ready(p);
+    /* B174: T3 reads Down for Mokujin's wood in this routine (0x8002AA44):
+     * the same for Tetsujin's metal (tekken3_ttt1_sfx.c). */
+    if(cpu->pc==0 || cpu->pc==0x8002a914)tekken3_ttt1_sfx_round_start();
     __real_func_8002A914(cpu);
 }
 /* As a fight loads (0x8006A158), 0x8002D07C links the two players' alias
@@ -3052,8 +3057,10 @@ void tekken3_ttt1_combat_tick(void) {
                         }
                     }
                 }
-                if(tekken3_ttt1_player_motion_mode(player)==2 && !tekken3_devil_jin_player(player))
+                if(tekken3_ttt1_player_motion_mode(player)==2 && !tekken3_devil_jin_player(player)) {
                     tekken3_ttt1_face_tick(player,advanced,expression,duration,flag);
+                    tekken3_ttt1_shine_tick(player);   /* F38: Tetsujin's reflection */
+                }
                 else if(tekken3_ttt1_player_motion_mode(player)==4)   /* Jin's Omen: the Devil mark */
                     tekken3_jin_omen_face(player,psx_mod_read_half(actor+0x18),advanced,expression,duration);
             }

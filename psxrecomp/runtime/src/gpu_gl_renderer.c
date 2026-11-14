@@ -224,6 +224,7 @@ typedef void   (APIENTRY *PFN_glEndQuery)(GLenum);
 typedef void   (APIENTRY *PFN_glGetQueryObjectui64v)(GLuint, GLenum, GLuint64 *);
 typedef void   (APIENTRY *PFN_glGetQueryObjectiv)(GLuint, GLenum, GLint *);
 typedef void   (APIENTRY *PFN_glQueryCounter)(GLuint, GLenum);
+typedef void   (APIENTRY *PFN_glGenerateMipmap)(GLenum);
 #ifndef GL_TIME_ELAPSED
 #define GL_TIME_ELAPSED            0x88BF
 #endif
@@ -286,6 +287,7 @@ static PFN_glEndQuery            p_glEndQuery;
 static PFN_glGetQueryObjectui64v p_glGetQueryObjectui64v;
 static PFN_glGetQueryObjectiv    p_glGetQueryObjectiv;
 static PFN_glQueryCounter        p_glQueryCounter;
+static PFN_glGenerateMipmap      p_glGenerateMipmap;   /* CRT pass; optional */
 static void gl_perf_init(void);   /* frame_perf — defined below, called from init_gpu_raster */
 static void gl_perf_mirror_begin(void); /* frame_perf: GPU-time bracket around ONE native-wide */
 static void gl_perf_mirror_end(void);   /* mirror pass (timestamp pair; splits scene canonical/mirror) */
@@ -368,6 +370,8 @@ static int load_modern_gl(void) {
     p_glGetQueryObjectui64v = (void *)SDL_GL_GetProcAddress("glGetQueryObjectui64v");
     p_glGetQueryObjectiv    = (void *)SDL_GL_GetProcAddress("glGetQueryObjectiv");
     p_glQueryCounter        = (void *)SDL_GL_GetProcAddress("glQueryCounter");
+    /* CRT present pass (B189) only: without it the pass stays off. */
+    p_glGenerateMipmap      = (void *)SDL_GL_GetProcAddress("glGenerateMipmap");
 #undef LOAD
     return ok;
 }
@@ -1147,8 +1151,28 @@ static void read_raw16(GLint x, GLint y, GLsizei w, GLsizei h, uint16_t *out) {
     free(tmp);
 }
 
+/* CRT present pass (B189, see crt_pass): rect and PS1 source grid of the
+ * last real present, noted by pres_record and reused by hold-last. */
+static volatile int s_crt_have;
+static int    s_crt_lx, s_crt_ly, s_crt_lw, s_crt_lh;
+static float  s_crt_vw, s_crt_vh;
+static void crt_forget_context(int ci);   /* defined with crt_pass */
+static void crt_note_present(int path, int lx, int ly, int lw, int lh) {
+    if (path == GL_PRES_BLANK || lw < 8 || lh < 8) { s_crt_have = 0; return; }
+    GpuDisplayInfo di;
+    gpu_get_display_info(&di);
+    float vh = (float)(di.height ? di.height : 240u);
+    float vw = (float)(di.width ? di.width : 320u);
+    /* Wide or stretched pictures keep the PS1 pixel width: widen the grid. */
+    vw = vw * ((float)lw * 3.0f) / ((float)lh * 4.0f);
+    s_crt_lx = lx; s_crt_ly = ly; s_crt_lw = lw; s_crt_lh = lh;
+    s_crt_vw = vw; s_crt_vh = vh;
+    s_crt_have = 1;
+}
+
 static void pres_record(int path, int dx, int dy, int w, int h,
                         int lx, int ly, int lw, int lh) {
+    crt_note_present(path, lx, ly, lw, lh);
     /* The ring metadata stays always-on, but pixel probing must not: each
      * glReadPixels synchronously drains queued GPU work. Two probes per frame
      * were enough to make Tomba 2 miss its frame budget. */
@@ -3593,6 +3617,8 @@ void gl_renderer_shutdown(void) {
      * (rematch 24-bit FMV → black picture, audio still runs). */
     s_present_w = 0;
     s_present_h = 0;
+    crt_forget_context(0);
+    crt_forget_context(1);
     s_osd_tex = 0;
     s_osd_tw = 0;
     s_osd_th = 0;
@@ -5088,10 +5114,214 @@ static void gl_draw_touch_controls(int ww, int wh, GLuint vao) {
     glViewport(0, 0, ww, wh);
 }
 
+/* ---- CRT present pass (B189) ---------------------------------------------
+ * The launcher's "Screen model" (CRT / Composite / Trinitron) used to change
+ * only a colour table on the 1x software scanout, so with OpenGL and
+ * supersampling it did nothing at all. This pass runs on every OpenGL present
+ * (VRAM, native-wide, CPU, interpolated, hold-last): just before the host OSD
+ * is composited, it copies the presented picture back from the drawable, builds
+ * its mipmaps, and redraws it through a CRT shader whose source grid is the
+ * PS1 display (its scanout lines, so the scanlines stay one per PS1 line at
+ * any supersampling or window size). The mip level averages the supersampled
+ * picture down to that grid, so the beam still sees the anti-aliased image.
+ *
+ * The shader is Timothy Lottes' CRT shader (public domain), libretro
+ * glsl-shaders crt/shaders/crt-lottes.glsl, ported to this renderer's present
+ * quad (Hyllian's was tried too; the user picked Lottes). Its parameters are
+ * fixed per screen model below. The software renderer keeps the colour table
+ * only. */
+static const char *CRT_LOTTES_FS =
+    "#version 330\n"
+    "in vec2 v_uv; out vec4 frag;\n"
+    "uniform sampler2D u_src; uniform vec2 u_src_size; uniform float u_lod;\n"
+    "uniform float u_hard_scan; uniform float u_hard_pix; uniform int u_mask;\n"
+    "uniform float u_mask_dark; uniform float u_mask_light; uniform float u_bloom;\n"
+    "uniform float u_bright;\n"
+    "const float shape=2.0; const float hardBloomPix=-1.5; const float hardBloomScan=-2.0;\n"
+    "vec3 ToLinear(vec3 c){ return mix(c/12.92, pow((c+0.055)/1.055, vec3(2.4)), step(vec3(0.04045), c)); }\n"
+    "vec3 ToSrgb(vec3 c){ c=max(c,vec3(0.0)); return mix(c*12.92, 1.055*pow(c, vec3(0.41666))-0.055, step(vec3(0.0031308), c)); }\n"
+    "vec3 Fetch(vec2 pos, vec2 off){\n"
+    "  pos=(floor(pos*u_src_size+off)+vec2(0.5))/u_src_size;\n"
+    "  return ToLinear(u_bright*textureLod(u_src,pos,u_lod).rgb); }\n"
+    "vec2 Dist(vec2 pos){ pos=pos*u_src_size; return -((pos-floor(pos))-vec2(0.5)); }\n"
+    "float Gaus(float pos, float scale){ return exp2(scale*pow(abs(pos),shape)); }\n"
+    "vec3 Horz3(vec2 pos, float off){\n"
+    "  vec3 b=Fetch(pos,vec2(-1.0,off)), c=Fetch(pos,vec2(0.0,off)), d=Fetch(pos,vec2(1.0,off));\n"
+    "  float dst=Dist(pos).x; float s=u_hard_pix;\n"
+    "  float wb=Gaus(dst-1.0,s), wc=Gaus(dst,s), wd=Gaus(dst+1.0,s);\n"
+    "  return (b*wb+c*wc+d*wd)/(wb+wc+wd); }\n"
+    "vec3 Horz5(vec2 pos, float off){\n"
+    "  vec3 a=Fetch(pos,vec2(-2.0,off)), b=Fetch(pos,vec2(-1.0,off)), c=Fetch(pos,vec2(0.0,off));\n"
+    "  vec3 d=Fetch(pos,vec2(1.0,off)), e=Fetch(pos,vec2(2.0,off));\n"
+    "  float dst=Dist(pos).x; float s=u_hard_pix;\n"
+    "  float wa=Gaus(dst-2.0,s), wb=Gaus(dst-1.0,s), wc=Gaus(dst,s), wd=Gaus(dst+1.0,s), we=Gaus(dst+2.0,s);\n"
+    "  return (a*wa+b*wb+c*wc+d*wd+e*we)/(wa+wb+wc+wd+we); }\n"
+    "vec3 Horz7(vec2 pos, float off){\n"
+    "  vec3 a=Fetch(pos,vec2(-3.0,off)), b=Fetch(pos,vec2(-2.0,off)), c=Fetch(pos,vec2(-1.0,off));\n"
+    "  vec3 d=Fetch(pos,vec2(0.0,off)), e=Fetch(pos,vec2(1.0,off)), f=Fetch(pos,vec2(2.0,off)), g=Fetch(pos,vec2(3.0,off));\n"
+    "  float dst=Dist(pos).x; float s=hardBloomPix;\n"
+    "  float wa=Gaus(dst-3.0,s), wb=Gaus(dst-2.0,s), wc=Gaus(dst-1.0,s), wd=Gaus(dst,s);\n"
+    "  float we=Gaus(dst+1.0,s), wf=Gaus(dst+2.0,s), wg=Gaus(dst+3.0,s);\n"
+    "  return (a*wa+b*wb+c*wc+d*wd+e*we+f*wf+g*wg)/(wa+wb+wc+wd+we+wf+wg); }\n"
+    "float Scan(vec2 pos, float off){ return Gaus(Dist(pos).y+off, u_hard_scan); }\n"
+    "float BloomScan(vec2 pos, float off){ return Gaus(Dist(pos).y+off, hardBloomScan); }\n"
+    "vec3 Tri(vec2 pos){\n"
+    "  return Horz3(pos,-1.0)*Scan(pos,-1.0)+Horz5(pos,0.0)*Scan(pos,0.0)+Horz3(pos,1.0)*Scan(pos,1.0); }\n"
+    "vec3 Bloom(vec2 pos){\n"
+    "  return Horz5(pos,-2.0)*BloomScan(pos,-2.0)+Horz7(pos,-1.0)*BloomScan(pos,-1.0)\n"
+    "        +Horz7(pos,0.0)*BloomScan(pos,0.0)+Horz7(pos,1.0)*BloomScan(pos,1.0)\n"
+    "        +Horz5(pos,2.0)*BloomScan(pos,2.0); }\n"
+    "vec3 Mask(vec2 pos){\n"
+    "  vec3 mask=vec3(u_mask_dark);\n"
+    "  if(u_mask==1){\n"
+    "    float line=u_mask_light; float odd=0.0;\n"
+    "    if(fract(pos.x*0.166666666)<0.5) odd=1.0;\n"
+    "    if(fract((pos.y+odd)*0.5)<0.5) line=u_mask_dark;\n"
+    "    pos.x=fract(pos.x*0.333333333);\n"
+    "    if(pos.x<0.333) mask.r=u_mask_light; else if(pos.x<0.666) mask.g=u_mask_light; else mask.b=u_mask_light;\n"
+    "    mask*=line;\n"
+    "  } else if(u_mask==2){\n"
+    "    pos.x=fract(pos.x*0.333333333);\n"
+    "    if(pos.x<0.333) mask.r=u_mask_light; else if(pos.x<0.666) mask.g=u_mask_light; else mask.b=u_mask_light;\n"
+    "  } else if(u_mask==3){\n"
+    "    pos.x+=pos.y*3.0; pos.x=fract(pos.x*0.166666666);\n"
+    "    if(pos.x<0.333) mask.r=u_mask_light; else if(pos.x<0.666) mask.g=u_mask_light; else mask.b=u_mask_light;\n"
+    "  } else return vec3(1.0);\n"
+    "  return mask; }\n"
+    "void main(){\n"
+    "  vec2 pos=v_uv; vec3 c=Tri(pos);\n"
+    "  if(u_bloom>0.0) c+=Bloom(pos)*u_bloom;\n"
+    "  c*=Mask(gl_FragCoord.xy*1.000001);\n"
+    "  frag=vec4(ToSrgb(c),1.0); }\n";
+
+enum { CRT_U_SRC, CRT_U_SRC_SIZE, CRT_U_LOD, CRT_U_UV_RECT,
+       CRT_U_A, CRT_U_B, CRT_U_C, CRT_U_D, CRT_U_E, CRT_U_F, CRT_U_G, CRT_U_COUNT };
+/* Per GL context (0 = main, 1 = interpolation thread): programs, uniforms,
+ * and the copy of the drawable the shader reads. */
+static GLuint s_crt_prog[2];
+static GLint  s_crt_u[2][CRT_U_COUNT];
+static int    s_crt_failed;
+static GLuint s_crt_tex[2];
+static int    s_crt_tw[2], s_crt_th[2];
+
+static void crt_forget_context(int ci) {
+    s_crt_prog[ci] = 0;
+    s_crt_tex[ci] = 0; s_crt_tw[ci] = 0; s_crt_th[ci] = 0;
+}
+
+static int crt_build(int ci) {
+    static const char *names[CRT_U_COUNT] = {
+        "u_src", "u_src_size", "u_lod", "u_uv_rect", "u_hard_scan", "u_hard_pix",
+        "u_mask", "u_mask_dark", "u_mask_light", "u_bloom", "u_bright" };
+    if (s_crt_prog[ci]) return 1;
+    if (s_crt_failed) return 0;
+    GLuint p = build_program(PRESENT_VS, CRT_LOTTES_FS);
+    if (!p) {
+        s_crt_failed = 1;
+        fprintf(stdout, "psxrecomp: the CRT shader failed on this GPU; screen model off\n");
+        return 0;
+    }
+    s_crt_prog[ci] = p;
+    for (int i = 0; i < CRT_U_COUNT; i++)
+        s_crt_u[ci][i] = p_glGetUniformLocation(p, names[i]);
+    return 1;
+}
+
+static void crt_pass(void) {
+    int kind = gpu_get_screen_kind();
+    if (kind <= 0 || kind > 3 || !s_crt_have || !p_glGenerateMipmap || !s_ctx) return;
+    int ci = (s_interp_ctx && SDL_GL_GetCurrentContext() == s_interp_ctx) ? 1 : 0;
+    GLuint vao = ci ? s_interp_thread_vao : s_present_vao;
+    if (!vao) return;
+    if (!crt_build(ci)) return;
+    int ww = 0, wh = 0;
+    SDL_GL_GetDrawableSize(s_win, &ww, &wh);
+    int lx = s_crt_lx, ly = s_crt_ly, lw = s_crt_lw, lh = s_crt_lh;
+    if (lx < 0) { lw += lx; lx = 0; }
+    if (ly < 0) { lh += ly; ly = 0; }
+    if (lx + lw > ww) lw = ww - lx;
+    if (ly + lh > wh) lh = wh - ly;
+    if (lw < 8 || lh < 8) return;
+
+    p_glBindFramebuffer(PSXGL_FRAMEBUFFER, 0);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    p_glActiveTexture(PSXGL_TEXTURE0);
+    if (!s_crt_tex[ci]) glGenTextures(1, &s_crt_tex[ci]);
+    glBindTexture(GL_TEXTURE_2D, s_crt_tex[ci]);
+    if (s_crt_tw[ci] != lw || s_crt_th[ci] != lh) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, lw, lh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        s_crt_tw[ci] = lw; s_crt_th[ci] = lh;
+    }
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, lx, ly, lw, lh);
+    p_glGenerateMipmap(GL_TEXTURE_2D);
+
+    /* Mip level whose texels match the PS1 grid: the beam reads the
+     * supersampled picture averaged down to one value per PS1 pixel. */
+    float ratio = (float)lh / (s_crt_vh > 0.f ? s_crt_vh : 240.f);
+    float lod = ratio > 1.f ? log2f(ratio) : 0.f;
+
+    const GLint *u = s_crt_u[ci];
+    glViewport(lx, ly, lw, lh);
+    p_glUseProgram(s_crt_prog[ci]);
+    p_glUniform1i(u[CRT_U_SRC], 0);
+    p_glUniform2f(u[CRT_U_SRC_SIZE], s_crt_vw, s_crt_vh);
+    p_glUniform1f(u[CRT_U_LOD], lod);
+    /* The copy is bottom-up like the drawable: v from 0 at the bottom. */
+    p_glUniform4f(u[CRT_U_UV_RECT], 0.f, 1.f, 1.f, 0.f);
+    /* CRT: stretched slot-like mask; Composite: TV shadow mask and a softer
+     * beam; Trinitron: aperture grille, sharper beam. */
+    float hard_pix = kind == 2 ? -1.5f : kind == 3 ? -4.0f : -3.0f;
+    int mask = kind == 2 ? 1 : kind == 3 ? 2 : 3;
+    p_glUniform1f(u[CRT_U_A], -8.0f);     /* hardScan */
+    p_glUniform1f(u[CRT_U_B], hard_pix);  /* hardPix */
+    p_glUniform1i(u[CRT_U_C], mask);      /* shadowMask */
+    p_glUniform1f(u[CRT_U_D], 0.5f);      /* maskDark */
+    p_glUniform1f(u[CRT_U_E], 1.5f);      /* maskLight */
+    p_glUniform1f(u[CRT_U_F], 0.15f);     /* bloomAmount */
+    p_glUniform1f(u[CRT_U_G], 1.0f);      /* brightBoost */
+    p_glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    p_glBindVertexArray(0);
+    p_glUseProgram(0);
+    glViewport(0, 0, ww, wh);
+}
+
+/* Debug command window_shot: the drawable after the CRT pass, before the
+ * host OSD, i.e. the picture the player sees. */
+static void crt_window_shot_poll(void) {
+    extern const char *debug_server_window_shot_wanted(void);
+    extern void debug_server_window_shot_write(const uint8_t *rgb, int w, int h);
+    if (!debug_server_window_shot_wanted()) return;
+    int ww = 0, wh = 0;
+    SDL_GL_GetDrawableSize(s_win, &ww, &wh);
+    if (ww <= 0 || wh <= 0) return;
+    uint8_t *px = (uint8_t *)malloc((size_t)ww * wh * 3), *row = (uint8_t *)malloc((size_t)ww * 3);
+    if (!px || !row) { free(px); free(row); return; }
+    p_glBindFramebuffer(PSXGL_READ_FRAMEBUFFER, 0);
+    GLint pack = 4; glGetIntegerv(GL_PACK_ALIGNMENT, &pack); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    read_rgb(0, 0, ww, wh, px);
+    glPixelStorei(GL_PACK_ALIGNMENT, pack);
+    for (int y = 0; y < wh / 2; y++) {
+        uint8_t *a = px + (size_t)y * ww * 3, *b = px + (size_t)(wh - 1 - y) * ww * 3;
+        memcpy(row, a, (size_t)ww * 3); memcpy(a, b, (size_t)ww * 3); memcpy(b, row, (size_t)ww * 3);
+    }
+    debug_server_window_shot_write(px, ww, wh);
+    free(row); free(px);
+}
+
 /* Composite host toast + volume bar into the default framebuffer, then swap. */
 static void gl_swap_with_osd(void) {
     if (s_present_prog && s_ctx) {
         int ww = 0, wh = 0;
+        crt_pass();             /* B189: Screen model CRT / Composite / Trinitron */
+        crt_window_shot_poll();
         SDL_GL_GetDrawableSize(s_win, &ww, &wh);
         if (ww > 0 && wh > 0) {
             const uint32_t *px = NULL;

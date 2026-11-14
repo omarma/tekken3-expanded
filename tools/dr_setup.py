@@ -22,8 +22,8 @@ only, written after every other file), then the stamp dr-import-version.txt.
 The catalogue and the stamp are removed first: an import cut short is redone.
 Up to date (same stamp): nothing is done unless --force.
 
-Needs numpy and PPSSPP's VFPU tables (assets/vfpu/*.dat of a PPSSPP install, or
-PPSSPP_VFPU): DR's pose (tools/psp/dr_pose_a3.py, session B1's code) is computed
+Needs numpy and PPSSPP's VFPU tables (assets/vfpu/*.dat of a PPSSPP, installed or portable:
+--ppsspp, PPSSPP_VFPU, else searched for by tools/ppsspp_vfpu.py): DR's pose (tools/psp/dr_pose_a3.py, session B1's code) is computed
 to the bit as the PSP does, sines included. The launcher's setup calls it after
 the TTT1 import when the player gives the DR ISO (launcher/setup_backend.py).
 Nothing from the game is written outside the catalogue and workspace/dr-a3.
@@ -81,26 +81,20 @@ def devil_jin(roster):
 BUILDERS = {'deviljin': devil_jin}
 
 
-def vfpu_dir():
-    """PPSSPP's assets/vfpu folder: PPSSPP_VFPU, else the usual installs (Windows, macOS, Linux),
-    else beside a PPSSPP on the PATH. None when there is none."""
-    found = [os.environ.get('PPSSPP_VFPU')]
-    for exe in ('PPSSPPWindows64.exe', 'PPSSPPWindows.exe', 'PPSSPPSDL', 'ppsspp'):
-        w = shutil.which(exe)
-        if w: found.append(str(Path(w).resolve().parent / 'assets/vfpu'))
-    for base in (os.environ.get('ProgramFiles'), os.environ.get('ProgramFiles(x86)'),
-                 os.environ.get('LOCALAPPDATA') and str(Path(os.environ['LOCALAPPDATA']) / 'Programs')):
-        if base: found.append(str(Path(base) / 'PPSSPP/assets/vfpu'))
-    found += ['/Applications/PPSSPPSDL.app/Contents/Resources/assets/vfpu', '/usr/share/ppsspp/assets/vfpu',
-              '/usr/local/share/ppsspp/assets/vfpu', str(Path.home() / '.local/share/ppsspp/assets/vfpu')]
-    return next((Path(f) for f in found if f and (Path(f) / 'vfpu_sin_lut8192.dat').is_file()), None)
+def vfpu_dir(ppsspp=None):
+    """PPSSPP's assets/vfpu folder: the player's choice (the setup's PPSSPP folder), PPSSPP_VFPU,
+    else a search of this computer (tools/ppsspp_vfpu.py, B162). None when there is none."""
+    import ppsspp_vfpu
+    return ppsspp_vfpu.vfpu_dir(ppsspp)
 
 
-def iso_problem(iso):
-    """Why this ISO cannot be used for the DR movesets, or None (the launcher asks before starting)."""
+def iso_problem(iso, ppsspp=None):
+    """Why this ISO cannot be used for the DR movesets, or None (the launcher asks before starting).
+    ppsspp: the PPSSPP folder the player chose, if any."""
     if not Path(iso).is_file(): return 'It is no longer there (moved, renamed or deleted).'
-    if vfpu_dir() is None:
-        return "PPSSPP was not found on this computer: its VFPU tables (assets/vfpu) are needed to read DR's animations."
+    if vfpu_dir(ppsspp) is None:
+        import ppsspp_vfpu
+        return ppsspp_vfpu.problem(ppsspp)
     import dr_iso
     try:
         dr_iso.Disc(Path(iso)).raw(dr_iso.COMMON_ANIM)       # checked against the file table's SHA-1
@@ -207,6 +201,7 @@ def main():
     ap.add_argument('--iso', type=Path, required=True)
     ap.add_argument('--roster', type=Path, default=ROOT / 'workspace/ttt1-import/roster')
     ap.add_argument('--force', action='store_true')
+    ap.add_argument('--ppsspp', help="PPSSPP's folder, program, or assets/vfpu folder (else it is searched for)")
     a = ap.parse_args()
     roster = a.roster.resolve()
     if not (roster / 'natives.txt').is_file() or not C.ttt1_ready(roster):
@@ -214,8 +209,10 @@ def main():
     if V.read_stamp(roster) == V.DR_IMPORT_VERSION and not a.force:
         print(f'DR movesets up to date (version {V.DR_IMPORT_VERSION})'); return
     if not a.iso.is_file(): raise SystemExit(f'{a.iso}: no such ISO')
-    vfpu = vfpu_dir()
-    if vfpu is None: raise SystemExit("PPSSPP's VFPU tables not found (install PPSSPP, or set PPSSPP_VFPU to its assets/vfpu)")
+    vfpu = vfpu_dir(a.ppsspp)
+    if vfpu is None:
+        import ppsspp_vfpu
+        raise SystemExit(ppsspp_vfpu.problem(a.ppsspp))
     os.environ['PPSSPP_VFPU'] = str(vfpu)                    # read by tools/psp/dr_pose_a3.py at import
     import dr_iso
     dr_iso.ISO = a.iso.resolve()

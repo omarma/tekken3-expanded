@@ -160,6 +160,20 @@ def registers(g):
     return int(pc, 16) if isinstance(pc, str) else pc
 
 
+LOADING = 0x800add5c          # the loading choice, one halfword per player
+
+
+def boss_model(log, since, player, guests):
+    """The fighter whose TTT1 model the mod grafted on player 2's actor since
+    `since` ("Kazuya model: P2 model header replaced", "Law (TTT1 model)
+    model: P2 ..."), lower case; None if none (the PS1 model)."""
+    found = None
+    for l in log[since:].splitlines():
+        if ' model: P2 model header replaced' not in l: continue
+        found = l.split(' model: P2 ')[0].replace(' (TTT1 model)', '').strip().lower().replace(' ', '').replace('-', '').replace('.', '')
+    return found
+
+
 def observe(g, seconds, shots, tag):
     """The boss fight for that long: player 1 punches now and then."""
     boss = ACTOR + BOSS * ACTOR_SIZE
@@ -196,6 +210,7 @@ def run(g, player, stages, seconds, shots, guests, pokes=(), fast=False, ttt1=Fa
     results, met, in_boss, i, started, seen = [], 0, False, 0, time.monotonic(), set()
     stage, full = g.value(STAGE, 2), g.value(LIFE, 2)
     route_at = dump_route(g, guests)
+    log_at = len(g.log())
     for p in pokes:                                    # STAGE=KEY: that boss, in RAM, for this run
         n, key = p.split('=')
         fid, costume = fighter_id(key, guests)
@@ -233,9 +248,16 @@ def run(g, player, stages, seconds, shots, guests, pokes=(), fast=False, ttt1=Fa
             stage = g.value(STAGE, 2)
             m = observe(g, seconds, shots, f'{player}-{index + 1}-{got}')
             want = route[index] if route and 0 <= index < len(route) else '?'
-            ok = got == want and m['in_scan'] < m['samples'] // 4 and m['still'] < m['samples'] // 4 and m['records'] >= 3
+            # B182: the TTT1 model grafted on the boss's actor must be its
+            # own, or none (its PS1 model): Kazuya's on Law was the bug.
+            drawn = boss_model(g.log(), log_at, player, guests)       # since the last boss: soldiers have none
+            log_at = len(g.log())
+            loading = name_of(g.value(LOADING + 2, 2), guests)
+            model_ok = drawn is None or drawn == got.replace('panda', 'kuma')
+            ok = (got == want and model_ok and m['in_scan'] < m['samples'] // 4 and m['still'] < m['samples'] // 4
+                  and m['records'] >= 3)
             line = dict(player=player, stage=index + 1, t=round(time.monotonic() - started), stage_id=hex(stage), boss=got,
-                        costume=costume, expected=want, held=ok, **m)
+                        costume=costume, expected=want, model=drawn, p2_loading=loading, held=ok, **m)
             print(json.dumps(line), flush=True)
             results.append(line)
             if not ok: return results

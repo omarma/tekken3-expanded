@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { ACTORS_MAX=8, PLAYED=2, MODELS_MAX=8, FADES_MAX=64, BONES_MAX=32, CHANNELS=57, HAND_STEPS=512 };
+enum { ACTORS_MAX=8, PLAYED=2, MODELS_MAX=8, FADES_MAX=64, BONES_MAX=32, CHANNELS=57, HAND_STEPS=512, WING_STEPS=1024 };
 enum { SPARKS_MAX=64, SPRITES_MAX=64, SPRITE_POINTS_MAX=32, SWAPS_MAX=16, LOADS_MAX=2*(SWAPS_MAX+1), SHOWS_MAX=64, STORMS_MAX=64 };
 enum { ACTOR0=0x800a9228, ACTOR_SIZE=0x188c, STATE=0x800ae204, PHASE=0x800ae224 };
 typedef struct { int from,to,a,b; } Fade;
@@ -58,6 +58,11 @@ typedef struct {
     struct { int frame,closed; } eyes[SHOWS_MAX]; int eye_count;
     /* `face`: from each frame on, the face its eyes open show: expression n of the costume's .face (0 the plain one). */
     struct { int frame,expression; } faces[SHOWS_MAX]; int face_count;
+    /* `wings`: from each frame on, the pose of the model's wing table shown (TTT1 Devil, Angel,
+     * Devil Jin: 0 folded .. 36); the game's own flap machine before the first. */
+    struct { int frame,pose; } wings[WING_STEPS]; int wing_count;
+    /* `shadow`: from each frame on, its shadow drawn (1) or not (0); drawn before the first. */
+    struct { int frame,on; } shadows[SHOWS_MAX]; int shadow_count;
 } Actor;
 typedef struct {
     char name[32],dir[1024];
@@ -72,6 +77,7 @@ typedef struct {
     int light;                                  /* -1 none */
     int ttt_stage;                              /* a TTT arcade stage drawn instead, -1 none */
     int ttt_courtyard;                          /* its courtyard, |x|, |z| <= this (the floor), 0 no limit */
+    int floor_light_look;                       /* `floor-light look`: the TTT floor's light under the look point, eye high */
     struct { int frame,type; } storms[STORMS_MAX]; int storm_count;
 } Cine;
 static void storms(void);
@@ -145,6 +151,7 @@ static Cine *cine_read(const char *path) {
         else if(!strcmp(w[0],"background") && n==2) c->background=strcmp(w[1],"arena")?(int)strtol(w[1],NULL,16):-1;
         else if(!strcmp(w[0],"light") && n==2) c->light=(int)strtol(w[1],NULL,16);
         else if(!strcmp(w[0],"ttt-stage") && (n==2 || n==3)) { c->ttt_stage=num(w[1]); c->ttt_courtyard=n==3?num(w[2]):0; }
+        else if(!strcmp(w[0],"floor-light") && n==2) c->floor_light_look=!strcmp(w[1],"look");
         else if(!strcmp(w[0],"storm") && (n==3 || (n==4 && !strcmp(w[3],"quiet"))) && c->storm_count<STORMS_MAX) {
             c->storms[c->storm_count].frame=num(w[1]);
             c->storms[c->storm_count++].type=num(w[2])|(n==4?TEKKEN3_TTT_FLASH_QUIET:0);
@@ -176,6 +183,16 @@ static Cine *cine_read(const char *path) {
             int frame=num(w[2]);
             if(a->show_count==SHOWS_MAX || (a->show_count && frame<a->shows[a->show_count-1].frame)) ok=0;
             else { a->shows[a->show_count].frame=frame; a->shows[a->show_count++].shown=w[0][0]=='s'; }
+        }
+        else if(!strcmp(w[0],"shadow") && n==4 && (a=actor_of(c,w[1]))) {
+            int frame=num(w[2]);
+            if(a->shadow_count==SHOWS_MAX || (a->shadow_count && frame<a->shadows[a->shadow_count-1].frame)) ok=0;
+            else { a->shadows[a->shadow_count].frame=frame; a->shadows[a->shadow_count++].on=num(w[3])!=0; }
+        }
+        else if(!strcmp(w[0],"wings") && n==4 && (a=actor_of(c,w[1]))) {
+            int frame=num(w[2]);
+            if(a->wing_count==WING_STEPS || (a->wing_count && frame<a->wings[a->wing_count-1].frame) || num(w[3])<0) ok=0;
+            else { a->wings[a->wing_count].frame=frame; a->wings[a->wing_count++].pose=num(w[3]); }
         }
         else if(!strcmp(w[0],"eyes") && n==4 && (a=actor_of(c,w[1]))) {
             int frame=num(w[2]);
@@ -308,6 +325,16 @@ int tekken3_cine_hand(unsigned player,unsigned hand) {
     if(!a->hand_count[hand]) return -1;
     int f=frame_or_zero(),out=a->hands[hand][0].index;
     for(int i=0;i<a->hand_count[hand] && a->hands[hand][i].frame<=f;i++) out=a->hands[hand][i].index;
+    return out;
+}
+/* A player's wing pose at this frame (`wings`: an index into the model's wing table,
+ * src/tekken3_ttt1_mod.c wings_step), the first step held before it; -1 for the game's own. */
+int tekken3_cine_wings(unsigned player) {
+    if(!playing || player>=PLAYED || player>=(unsigned)cine->actor_count) return -1;
+    const Actor *a=&cine->actors[player];
+    if(!a->wing_count) return -1;
+    int f=frame_or_zero(),out=a->wings[0].pose;
+    for(int i=0;i<a->wing_count && a->wings[i].frame<=f;i++) out=a->wings[i].pose;
     return out;
 }
 /* A player's eyes at this frame (`eyes`, `face`): 1 closed (the blink image),
@@ -835,6 +862,7 @@ static int stage_forced;
  * the user's picture at 726). */
 static void ttt_floor_centre(int on) {
     int16_t eye[3],target[3];
+    tekken3_ttt_floor_light(on && stage_forced && cine->floor_light_look);
     if(!on || !stage_forced || !tekken3_cine_camera(eye,target)) { tekken3_ttt_floor_centre(0,0,0,0); return; }
     double d[3]={target[0]-eye[0],target[1]-eye[1],target[2]-eye[2]};
     double h=sqrt(d[0]*d[0]+d[2]*d[2]);
@@ -1215,6 +1243,31 @@ void __wrap_func_8003B4F8(CPUState *cpu) {
         return_pc=0;
         tekken3_ttt1_wolf_after_actor(cpu,actor);
     }
+}
+
+/* `shadow <i> <frame> 0`: the actor casts no shadow from that frame on. Tekken 3's
+ * (0x80037B28, called by the actor's draw with its +0x1274) is its silhouette laid on the
+ * floor along the light, slid the further the higher the actor is: Devil flying off with Jun
+ * (his TTT ending) left a black shape on the floor far beside them, the PS2 none. Their
+ * heights on the floor and flying overlap (Devil 1 142 at most standing, 1 216 at least in
+ * the air; Jun 1 238 and 1 276): no height rule, the declaration says from when. The
+ * routine returns the primitive pointer it was given (a2) moved past its packets in v0,
+ * which the draw goes on with (0x8003B564): skipped, a2 itself. */
+static int shadowless(unsigned p) {
+    if(!playing || p>=PLAYED || p>=(unsigned)cine->actor_count) return 0;
+    const Actor *a=&cine->actors[p];
+    int f=frame_or_zero(),on=1;
+    for(int i=0;i<a->shadow_count && a->shadows[i].frame<=f;i++) on=a->shadows[i].on;
+    return !on;
+}
+extern void __real_func_80037B28(CPUState *cpu);
+void __wrap_func_80037B28(CPUState *cpu) {
+    if(playing && (cpu->pc==0 || cpu->pc==0x80037b28u))
+        for(unsigned p=0;p<PLAYED;p++)
+            if(cpu->gpr[4]==psx_mod_read_word(ACTOR0+p*ACTOR_SIZE+0x1274) && shadowless(p)) {
+                cpu->gpr[2]=cpu->gpr[6]; cpu->pc=cpu->gpr[31]; return;
+            }
+    __real_func_80037B28(cpu);
 }
 
 /* The phase machine draws a phase's primitives from its display buffer's own

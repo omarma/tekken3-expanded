@@ -28,7 +28,9 @@ The game (libmain.so on Android) also links:
 - through recomp-ui: Dear ImGui 1.91.9b (MIT), stb_image 2.30, stb_image_write
   1.16 and stb_truetype 1.26 (public domain or MIT), tinyfiledialogs 3.21.3
   (zlib license), and a generated OpenGL loader (`gl_core_3_1`);
-- through psxrecomp: toml11 3.7.1 (MIT) and fmt 9.1.1 (MIT).
+- through psxrecomp: toml11 3.7.1 (MIT) and fmt 9.1.1 (MIT);
+- the OpenGL CRT screen model ports Timothy Lottes' public-domain CRT shader
+  (libretro glsl-shaders, `crt/shaders/crt-lottes.glsl`).
 
 Their licenses are retained in the source next to each library, or collected
 in the setup archive's `licenses/` directory.

@@ -1,0 +1,21 @@
+{
+ "about": "Devil's Tekken Tag Tournament (PS2) ending (scene 32): Devil finds Jun lying unconscious, picks her up and flies away with her (cmd 28 at 819, 899 and 1144: his wings unfold and flap, glide, flap again), seen at last from above, high over the floor. His wings are the TTT1 arcade's (the `wings` poses of his model), not the PS2's (the user, 2026-11-10). Converted by tools/ps2/ttt_to_cine.py (docs/CINE-CONVERT.md).",
+ "scene": "devil",
+ "arena": 6,
+ "dark": 2,
+ "trigger": "arcade-end p1=devil",
+ "ttt_stage": {"stage": 14, "light": "look",
+               "why": "the PS2 script's stage 14 (scene table 0x51B388), TTT arcade's stage 14 (Unknown's: a black background, a small floor), as Jun's and Angel's: every TTT cinematic on its TTT stage (the user, 2026-10-21); without TTT Stages, Ogre's temple dark above; \"light\": the floor's light (fighters' kind 2) under the point the camera looks at while the eye is over 2 000 up (`floor-light look`): flying off, seen from 8 000 above, it lit a small disc of a black floor, the PS2's floor lit all over"},
+ "actors": [
+  {"cast": "devil", "costume": 0, "skeleton": "devil",
+   "retarget": ["--basis", "canonical", "--twists", "--collars", "--world", "--calib-frame", "0:170"],
+   "retarget_why": "--calib-frame 0:170: the arm twists' bases on him standing, arms hanging (170). By default (canonical) the last frame, flying with Jun in his arms, wrists bent: standing, his right hand came out turned ~90 degrees from it and the wrist tore his forearm open (a hole through it, seen by the user at 0:02 of video v2)",
+   "shadow": [{"from": 830, "why": "flying from 830 (the hips 1 278 up and rising), seen from above at 1080-1199: Tekken 3's shadow, his silhouette laid along the light, lay far beside him on the floor, a black shape the PS2 has not"}],
+   "why": "TTT costume -1 (the player's): T3 costume 0; wings at rest folded (arcade pose 0, the user's choice of 2026-11-11) until cmd 28 at 819"},
+  {"cast": "jun", "costume": 0, "skeleton": "jun",
+   "retarget": ["--calib", "{actor0}", "--twists", "--collars"],
+   "shadow": [{"from": 830, "why": "carried by Devil flying from 830: no shadow, as his"}],
+   "why": "TTT costume 0: T3 costume 0; unconscious all along (lying, then carried)"}
+ ],
+ "ignore": []
+}

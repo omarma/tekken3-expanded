@@ -50,6 +50,9 @@ int tekken3_ttt_stage_flash(int type);
  * floor's light still from the fighters. 0: the game's floor again, as
  * tekken3_ttt_stage_force(-1) does. */
 void tekken3_ttt_floor_centre(int on, int x, int z, int half);
+/* A cinematic's TTT floor light (kind 2) under the point its camera looks at when the eye is
+ * high (`floor-light look`, src/tekken3_cine.c); 0 the game's, under the fighters. */
+void tekken3_ttt_floor_light(int look);
 
 /* B126: TTT stage 11's wind this frame, x and z (world, 4096 = 1), or 0:
  * none (another stage, or not drawn). TTT pulls the accessory bones in the

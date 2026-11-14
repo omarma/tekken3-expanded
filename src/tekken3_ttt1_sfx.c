@@ -156,10 +156,66 @@ static int metal_guest(unsigned p) {
     const char *prefix=tekken3_guest_data_prefix_for(p);
     return prefix && (!strcmp(prefix,"Jack2-TTT1") || !strcmp(prefix,"Pjack-TTT1"));
 }
+/* B174: Down held at round start, Mokujin's wood and Tetsujin's metal.
+ * T3's round start (8002A914) clears mokujin_down_flags (800954A8, one word
+ * per player) and, for a fighter whose ID is 15, sets it when Down (0x4000)
+ * is held: pad_held 800ADD68 for player 1 (in Tekken Force, mode 8, the pad
+ * of force_player_side 800B6BF4), p2_pad_held 800ADD6A for player 2. The
+ * hit handler ko_voice_choose (80040EA0) then answers a hit on that fighter
+ * with hit_sfx_mokujin (80041C40, table 8001A6F0) and a guard with
+ * 0x707A / 0x707B; a hit on Gun Jack (ID 16) with hit_sfx_metal (80041B70:
+ * 0x705D, 0x7098 / 0x7099 when hard). TTT1 arcade keeps both tests
+ * (80114114, 801141F0) but never writes its flag (80242E7C): the trick is
+ * dead there, and Tetsujin (sound profile 17) is in neither list. TTT PS2
+ * has it: Down held while the round loads, metal for Tetsujin, wood for
+ * Mokujin's other costumes. A guest has its own ID, so T3 never armed it for
+ * Tetsujin. Here: the same reading at the same moment for the Tetsujin guest
+ * (Kinjin included), and T3's metal (Gun Jack's samples) where T3 gives
+ * Mokujin his wood: hits by hit_sfx_metal, guards by 0x705D. */
+enum { PAD_HELD=0x800add68, P2_PAD_HELD=0x800add6a, MODE_BLOCK=0x800afa88, FORCE_PLAYER_SIDE=0x800b6bf4,
+       PAD_DOWN=0x4000, METAL_GUARD=0x705d,
+       GUARD_STRONG_RETURN=0x8004127c, GUARD_WEAK_RETURN=0x8004129c, HIT_LIST_RETURN=0x80041364,
+       GUARD_STRONG_RECORD=0x80041270, GUARD_WEAK_RECORD=0x80041290, HIT_LIST_RECORD=0x80041358 };
+static int tetsujin_down[2];
+static int tetsujin_guest(unsigned p) {
+    if(p>1 || tekken3_ttt1_player_motion_mode(p)!=2)return 0;
+    const char *prefix=tekken3_guest_data_prefix_for(p);
+    return prefix && !strcmp(prefix,"Tetsujin-TTT1");
+}
+static int tetsujin_metal(unsigned p){return p<2 && tetsujin_down[p] && tetsujin_guest(p);}
+/* TEKKEN3_TETSUJIN_DOWN=<players> (benches, tools/test_b174_tetsujin_metal.py):
+ * Down counts as held for those players ("2", "12"); the lite debug server
+ * has no pad 2. */
+void tekken3_ttt1_sfx_round_start(void) {
+    const char *forced=getenv("TEKKEN3_TETSUJIN_DOWN");
+    for(unsigned p=0;p<2;p++) {
+        tetsujin_down[p]=0;
+        if(!tetsujin_guest(p))continue;
+        uint32_t pad=P2_PAD_HELD;
+        if(!p)pad=psx_mod_read_word(MODE_BLOCK)!=8 || !psx_mod_read_word(FORCE_PLAYER_SIDE)?PAD_HELD:P2_PAD_HELD;
+        tetsujin_down[p]=(psx_mod_read_half(pad)&PAD_DOWN)!=0 || (forced && strchr(forced,(int)('1'+p)));
+        fprintf(stderr,"TTT1 characters: P%u Tetsujin round start, Down %s\n",p+1,
+                tetsujin_down[p]?"held: metal sounds":"not held");
+    }
+}
+/* The events kept for the replay: a guard on him is recorded as the metal
+ * one; the hit list's own event is dropped when hit_sfx_metal records its
+ * own (both from ko_voice_choose, before the sound plays). */
+extern void __real_func_8003352C(CPUState *cpu);
+void __wrap_func_8003352C(CPUState *cpu) {
+    uint32_t ra=cpu->gpr[31];
+    unsigned p=cpu->gpr[5]&0xffff,group=(cpu->gpr[6]&0xffff)>>12;
+    if((cpu->pc==0 || cpu->pc==0x8003352c) && in_fight() && p<2) {
+        if((ra==GUARD_STRONG_RECORD || ra==GUARD_WEAK_RECORD) && tetsujin_metal(p))cpu->gpr[6]=METAL_GUARD;
+        else if(ra==HIT_LIST_RECORD && (group==1 || group==7) && tetsujin_metal(p^1)){cpu->pc=ra;return;}
+    }
+    __real_func_8003352C(cpu);
+}
 void __wrap_func_80041CB4(CPUState *cpu) {
     uint32_t attacker=cpu->gpr[4];
     unsigned p=(attacker-ACTOR_BASE)/ACTOR_SIZE;
-    if((cpu->pc==0 || cpu->pc==0x80041cb4) && in_fight() && p<2 && attacker==ACTOR_BASE+p*ACTOR_SIZE && metal_guest(p^1)) {
+    if((cpu->pc==0 || cpu->pc==0x80041cb4) && in_fight() && p<2 && attacker==ACTOR_BASE+p*ACTOR_SIZE &&
+       (metal_guest(p^1) || tetsujin_metal(p^1))) {
         cpu->gpr[5]=ACTOR_BASE+(p^1)*ACTOR_SIZE;
         cpu->pc=0;
         func_80041B70(cpu);
@@ -205,6 +261,25 @@ void __wrap_func_80040DF4(CPUState *cpu) {
          * same number replaces T3's. The guard sound belongs to the
          * attacker's move. */
         uint32_t ra=cpu->gpr[31];
+        /* B174: Tetsujin with Down held. T3's metal plays as for Gun Jack:
+         * the answer of hit_sfx_metal, the guard as 0x705D, and an event of
+         * the hit list (any but the impacts, which 80041CB4 sends there)
+         * becomes hit_sfx_metal(attacker, victim), as T3 does for Gun Jack. */
+        if(p<2 && ((ra==METAL_HIT_RETURN && tetsujin_metal(p)) ||
+                   ((ra==GUARD_STRONG_RETURN || ra==GUARD_WEAK_RETURN) && tetsujin_metal(p)))) {
+            if(ra!=METAL_HIT_RETURN)cpu->gpr[5]=METAL_GUARD;
+            static unsigned said;
+            if(said<400){said++;fprintf(stderr,"TTT1 characters: P%u Tetsujin metal %04X (was %04X)\n",p+1,
+                                        (unsigned)cpu->gpr[5]&0xffff,command);}
+            __real_func_80040DF4(cpu);return;
+        }
+        if(p<2 && ra==HIT_LIST_RETURN && (group==1 || group==7) && tetsujin_metal(p^1)) {
+            cpu->gpr[4]=ACTOR_BASE+p*ACTOR_SIZE;
+            cpu->gpr[5]=ACTOR_BASE+(p^1)*ACTOR_SIZE;
+            cpu->pc=0;
+            func_80041B70(cpu);
+            return;
+        }
         /* The metallic answer to a hit on Jack-2 / P.Jack (80041B70 above): the
          * victim's own pack holds TTT1's clang. */
         if(ra==METAL_HIT_RETURN && p<2 && metal_guest(p) && find(p,index,&s)) {
@@ -253,7 +328,8 @@ void __wrap_func_80040DF4(CPUState *cpu) {
  * said "Jin Kazama"; its pack carries the name TTT1's announcer gives it
  * when it is picked. It returns 0 once the name is playing, 1 when there is
  * none (actor+0x14 == 0x22, Eddy's third costume); a guest without a name
- * (Tetsujin) stays silent too. */
+ * in its pack stays silent too (Tetsujin before import 23: TTT1 splices its
+ * name from three samples, tools/ttt1/sfx.py NAME_RAW). */
 /* Set by each name call, cleared once "wins" may follow (8008D658 below);
  * name_guest: the name plays in our mixer, voice 1 keeps what it had. */
 static unsigned name_wait;

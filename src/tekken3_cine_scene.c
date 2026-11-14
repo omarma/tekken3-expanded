@@ -42,7 +42,8 @@
 
 enum { STATE=0x800ae204, PHASE=0x800ae224, MODE=0x800afa88, MODE_SIZE=0x30, IDS=0x800add5c, COSTUMES=0x800add98,
        ARENA=0x800adc84, ARENA2=0x800afaa2, DARK=0x800afaa0, HUMAN=0x800ae1f8, SIDES=0x800adf10, AI_STAGE=0x800ae211,
-       FIXED_VIEW=0x800b040c, DEMO=6, CINE_SCENE_BLACK=1, PRE=30 };
+       FIXED_VIEW=0x800b040c, REPLAY_STATE=0x8009bca8,
+       FIGHT_FREEZE=0x80095468, PAUSE_REQUEST=0x8009548c, PAUSE_REQUEST_PREV=0x80095490, GAME_PAUSED=0x80095494, DEMO=6, CINE_SCENE_BLACK=1, PRE=30 };
 extern int tekken3_cine_prepare(const char *path);
 extern int tekken3_cine_play(const char *path,int pre,void (*on_done)(void));
 extern int tekken3_cine_scene_of(int *arena,int *dark,char character[2][32],int costume[2]);
@@ -56,7 +57,7 @@ static enum { IDLE, LOADING, PLAYING } stage;
 static int flags, arena, dark, id[2], costume[2];
 static void (*done)(void);
 /* What the caller had, put back at the end. */
-static struct { unsigned state,phase; uint8_t mode[MODE_SIZE]; uint16_t id[2],costume[2],human[2],winner_side; uint8_t arena,arena2,dark,ai_stage; uint32_t fixed_view; } saved;
+static struct { unsigned state,phase; uint8_t mode[MODE_SIZE]; uint16_t id[2],costume[2],human[2],winner_side; uint8_t arena,arena2,dark,ai_stage; uint32_t fixed_view,replay_state; } saved;
 
 int tekken3_cine_scene_loading(void) { return stage==LOADING; }
 
@@ -98,6 +99,7 @@ static void put_back(void) {
     for(unsigned p=0;p<2;p++) psx_mod_write_half(HUMAN+p*2,saved.human[p]);
     psx_mod_write_half(SIDES,saved.winner_side); psx_mod_write_byte(AI_STAGE,saved.ai_stage);
     psx_mod_write_word(FIXED_VIEW,saved.fixed_view);
+    psx_mod_write_word(REPLAY_STATE,saved.replay_state);
 }
 
 static void finished(void) {
@@ -135,6 +137,7 @@ int tekken3_cine_play_scene(const char *path,int scene_flags,void (*on_done)(voi
     for(unsigned p=0;p<2;p++) saved.human[p]=psx_mod_read_half(HUMAN+p*2);
     saved.winner_side=psx_mod_read_half(SIDES); saved.ai_stage=psx_mod_read_byte(AI_STAGE);
     saved.fixed_view=psx_mod_read_word(FIXED_VIEW);
+    saved.replay_state=psx_mod_read_word(REPLAY_STATE);
     flags=scene_flags; done=on_done; stage=LOADING;
     /* The demo fight's mode, the fight overlay (file 0) wanted, the
      * loading screen going on to phase 3. */
@@ -264,6 +267,26 @@ void tekken3_cine_scene_tick(void) {
          * lost that way, the Embu's Jin turned to the camera, Xiaoyu too
          * close, Hwoarang and Devil Jin out of the frame (B78). */
         psx_mod_write_word(FIXED_VIEW,0);
+        /* What the round's setup (0x8002A914, round_start) clears, which
+         * the cinematic skips too (B166, "the characters just appear and
+         * stay still"):
+         * - the pause and the freeze (fight_freeze_maybe 0x80095468,
+         *   pause_request 0x8009548C and its previous value, game_paused
+         *   0x80095494), also cleared by the game's own Embu (embu_reset,
+         *   0x800D2614): a fight left by Start + Select from its pause menu
+         *   kept pause_request at 1, and each actor's step then held its
+         *   pose, the TTT Embu's actors standing still in one pose
+         *   while the camera went on; not given back at the end (the next
+         *   fight or Embu clears them anyway);
+         * - the replay (replay_state 0x8009BCA8, replay_init(2)): each
+         *   actor's animation step (0x8003A818) first replays a recorded
+         *   frame of the last fight in its place (replay_move_restore
+         *   0x80032C74 for 1, 3, 4, 6), its record and frame over the
+         *   engine's: a fight left during its K.O.'s replay kept it at 1. */
+        psx_mod_write_word(FIGHT_FREEZE,0);
+        psx_mod_write_word(PAUSE_REQUEST,0); psx_mod_write_word(PAUSE_REQUEST_PREV,0);
+        psx_mod_write_word(GAME_PAUSED,0);
+        psx_mod_write_word(REPLAY_STATE,0);
         stage=PLAYING;
         if(!tekken3_cine_play(NULL,PRE,finished)) { fprintf(stderr,"Cine scene: could not play\n"); finished(); }
     }

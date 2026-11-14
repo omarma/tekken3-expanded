@@ -34,6 +34,7 @@ import dr_convert as X
 from pack_edit import Pack
 
 BASE_ID = 8192
+GUARD = 10                           # a reaction row's standing guard slot (HitEntry guard[0], +0x14)
 WALL = 135                           # DR's wall contact condition: not taken (A2 rule 1)
 NEW_PROVENANCE = 0x803f0000          # records the DR moves add (src/tekken3_ttt1_pack.h: below 0x80400000)
 JALON = ('d/f+2', 'd/f+1', 'd+1+2')
@@ -91,6 +92,12 @@ THROW_HITS = {'deviljin': {'Dv_Beam_n': ((61, 5), (66, 5), (71, 5), (76, 5), (81
               'jin': {'Jz_front_n': ((51, 2), (52, 2), (53, 2), (54, 2), (65, 4), (171, 28)),
                       'Jz_front2_n': ((51, 2), (52, 2), (53, 2), (54, 2), (65, 4), (171, 30))}}
 LASER_LIMB = 0x3f
+# DR hit points off the skeleton (game bones past 106) that stand in for a bone of it (limbs()): 112 is the
+# right foot's, where the kick's other moves have bone 16 (Jin's u/f+4 Jz_jprk00F [112, 0, 112, 15] against u+4
+# Jz_jprk00 [16, 0, 16, 15], the same kick from the knee, 15; Paul's Co_jprk00F [112, 0, 0, 0]). Unmapped, its
+# record hit with (0, 0, 13, 0): no capsule on the foot, u/f+4 never hit (B185). Paul's 111 (pol_ki00,
+# pol_sjk00F) and 114 (Tetsuzan's shoulder) stay to limbs()'s own rule.
+DR_POINTS = {112: 16}
 # A DR charge (Devil Jin's Infinite Power, b+1+2): the stance's command leads to its start move, which
 # goes on to the charge; there releasing the buttons fires a level by the frame (DR command 0x2000000,
 # the runtime's condition BUTTONS_UP on the buttons held, src/tekken3_ttt1_combat.c), the charge's
@@ -288,6 +295,7 @@ class Builder:
         s.report = dict(moves={})
         s.dr2rec = {s.dr.m.stance: s.pack.neutral}   # DR move -> pack record playing it
         s.timemap, s._parents, s.whole_done = {}, None, {}
+        s._owners = None                             # reaction_owners() as new() sees them (guard_window())
         s.shared = []
         s.throw_sides = []
         s.throw_victims = []          # the victims' records of the throws both games have (throw_ends())
@@ -710,6 +718,9 @@ class Builder:
             # numbers in the sheet (move_sheet.advantage).
             lr = s.rows[like_cmd]
             term = num(lr['TTT1 garde']) + num(lr['TTT1 libre']) - num(lr['TTT1 1re active'])
+            # The guard reaction the move will have is DR's (reactions()), not like's (B185).
+            guard = s.guard_window(mi, like)
+            if guard is not None: b['guard'], term = guard, guard
             free = b['first'] + term - b['block']
             # A sheet advantage read through crouched states (Jin's crouching jab: -190) would hold
             # the attacker for 220 frames: DR's own free frame then.
@@ -993,7 +1004,7 @@ class Builder:
         frame 11), else the pair's start bone, swept."""
         word = s.dr.raw[mi][20]
         bone = s.dr_bone
-        raw = [word >> 8 * k & 0xff for k in range(4)]
+        raw = [DR_POINTS.get(word >> 8 * k & 0xff, word >> 8 * k & 0xff) for k in range(4)]
         out = [bone(x) for x in raw]
         lost = [k for k in (0, 2) if raw[k] and not out[k] and out[k + 1]]
         if lost:
@@ -1576,6 +1587,68 @@ class Builder:
         s.report['heading_turns'] = out
         return out
 
+    def reaction_valid(s, x):
+        m = s.dr.m
+        return x < len(m.moves) and m.moves[x]['name'] not in ('motOrigin',) and not m.moves[x]['name'].startswith('_')
+
+    def reaction_row(s, r):
+        return struct.unpack_from('<14H', s.tables, 32 + r * 42)
+
+    def reaction_attacks(s):
+        """{DR move: pack record} of the attacks reactions() gives DR's reactions."""
+        m, attacks = s.dr.m, {}
+        for mi, ri in s.dr2rec.items():
+            if ri in attacks.values() or ri in s.whole_done: continue
+            mv = m.moves[mi]
+            if not mv['first'] or mv['damage'] >= 16384: continue
+            if (s.pack.word(ri, 12) >> 16) < 633: continue
+            base, alt = s.dr_hit(mi)
+            if base: attacks[mi] = ri
+        return attacks
+
+    def reaction_owners(s, attacks):
+        """{DR reaction: the pack record that plays it}: the one most of the common attacks put it in."""
+        votes = defaultdict(Counter)
+        for mi, ri in attacks.items():
+            if ri >= s.ttt1.count: continue                # a new move's row is its model's, not DR's
+            base = s.dr_hit(mi)[0]
+            for k, t in enumerate(s.reaction_row(s.pack.word(ri, 12) >> 16)):
+                if t >= BASE_ID and s.reaction_valid(base[k + 1]): votes[t - BASE_ID][base[k + 1]] += 1
+        owner = {}
+        for k, c in sorted(votes.items(), key=lambda x: -max(x[1].values())):
+            owner.setdefault(c.most_common(1)[0][0], k)
+        return owner
+
+    def guard_window(s, mi, like):
+        """The frame the victim of a new move mi (a copy of record like) is free in its standing guard,
+        counted from the frame it is hit: the end window of the record reactions() will put in its row's
+        guard slot (GUARD), DR's reaction there. A record pairing it keeps its own window (Tekken 3's,
+        reaction_clip()); a record made for it (record()) has DR's. new() gave the move the free frame of the
+        block advantage aimed at with like's guard instead: Jin's b+1, 3 (Jz_jmplk, Leaping Side Kick) copies
+        the jab, guard window 19, and DR's sGrd_YA37 frees the victim at 38; its recovery 27..56 played in
+        13 frames, the landing too quick, and +20 on block (B185). None: the move keeps like's."""
+        base = s.dr_hit(mi)[0]
+        r = s.pack.word(like, 12) >> 16
+        if not base or r < 633 or not s.dr.m.moves[mi]['first'] or s.dr.m.moves[mi]['damage'] >= 16384: return None
+        t, x = s.reaction_row(r)[GUARD], base[GUARD + 1]
+        if t < BASE_ID or not s.reaction_valid(x): return None
+        if s._owners is None: s._owners = s.reaction_owners(s.reaction_attacks())
+        k = s._owners.get(x)
+        if k is None:
+            # Paired down a chain of reactions (reaction_clip(): the record each goes on to, side by side).
+            for y, kk in s._owners.items():
+                seen = set()
+                while kk is not None and y is not None and kk not in seen and kk not in s.whole_done:
+                    if y == x: k = kk; break
+                    seen.add(kk); kk, y = s.pack_next(kk), s.dr_next(y)
+                if k is not None: break
+        if k is None:
+            w = s.dr_end(x)[1]
+            if not w and s.name in REORDER: w = min(s.cv.ch.frames(s.cv.ch.move(x)[0]), 255)
+            if w: return w
+            k = t - BASE_ID
+        return next((e[5] for e in s.pack.cancels(k) if e[0] == 0xc000 and e[5]), None)
+
     def reactions(s):
         """DR's reactions on the victim (A2 rule 9, all of them converted: the TTT1 ones the pack had
         were TTT1's animations, none DR's, the user's verdict of 2026-10-25). In DR the victim plays
@@ -1589,26 +1662,9 @@ class Builder:
         root, a TTT1 row's curve on top sent the victim of f,f, f+2 out of the 1's reach (the
         knockdown's 2550 against DR's 0)."""
         m = s.dr.m
-        attacks = {}
-        for mi, ri in s.dr2rec.items():
-            if ri in attacks.values() or ri in s.whole_done: continue
-            mv = m.moves[mi]
-            if not mv['first'] or mv['damage'] >= 16384: continue
-            if (s.pack.word(ri, 12) >> 16) < 633: continue
-            base, alt = s.dr_hit(mi)
-            if base: attacks[mi] = ri
-        valid = lambda x: x < len(m.moves) and m.moves[x]['name'] not in ('motOrigin',) and not m.moves[x]['name'].startswith('_')
-        row = lambda r: struct.unpack_from('<14H', s.tables, 32 + r * 42)
-        votes = defaultdict(Counter)
-        for mi, ri in attacks.items():
-            if ri >= s.ttt1.count: continue                # a new move's row is its model's, not DR's
-            base = s.dr_hit(mi)[0]
-            for k, t in enumerate(row(s.pack.word(ri, 12) >> 16)):
-                if t >= BASE_ID and valid(base[k + 1]): votes[t - BASE_ID][base[k + 1]] += 1
-        owner = {}
-        for k, c in sorted(votes.items(), key=lambda x: -max(x[1].values())):
-            name = c.most_common(1)[0][0]
-            owner.setdefault(name, k)
+        attacks = s.reaction_attacks()
+        valid, row = s.reaction_valid, s.reaction_row
+        owner = s.reaction_owners(attacks)
         done, cloned = {}, {}
         for x, k in owner.items(): s.reaction_clip(k, x, done)
 
@@ -1922,6 +1978,51 @@ class Builder:
                 s.pack.set_cancels(k, new)
                 out += [(k, e[3] - BASE_ID) for e, x in zip(entries, new) if e != x]
         s.report['string_turns'] = out
+        return out
+
+    # Tekken 3's transitions (fighter_move_advance, t3-ps1 src/combat/8002D178.c) that start the next
+    # move at its frame 1, and the one doing the same turn while the animation goes on from the frame it
+    # was left at (12 and 20: rot_mode 4 / 6; 14 and 21: rot_mode 2); 2 for the others.
+    GOING_ON = {12: 20, 14: 21}
+    STARTING_OVER = (0, 6, 9, 10, 11, 12, 13, 14, 15)
+
+    def goes_on(s):
+        """An entry from a DR record to one whose clip is the same animation (Bmt_hasai -> Bmt_hasai_D,
+        4~3 on a fighter down, at 22; Jz_m_k19 / Jz_m_k00 -> their _D, the L.L.R.K.'s 3+4) goes on with
+        it: on_down()'s 14 and the hidden follow-ups' 12 started the clip over at frame 1, and Jin played
+        the flip kick twice (B165). Only when Tekken 3 lets it go on (move_active_pending_test: the
+        frame left at not past the target's last active frame). A record cut short on that animation
+        whose end (0xC000) starts it over (Co_s_tlk00, 6 frames, -> Co_s_tlk01, which DR goes on to at
+        5): an entry without input at its last frame going on with it (transition 2) before the end,
+        as recoveries() does for the Power Stance. Returns [(record, target, transition before, after)]
+        (after: 'entry' for the added entry)."""
+        dr_made = set(s.dr2rec.values()) - {s.pack.neutral}
+        clips, out = {}, []
+        def clip(k):
+            if k not in clips: clips[k] = s.clip_of(s.pack, k)
+            return clips[k]
+        for k in sorted(dr_made):
+            entries, changed = s.pack.cancels(k), False
+            new = []
+            for e in entries:
+                t, at, d = e[4] & 0x3f, e[7], e[3] - BASE_ID
+                a, b = clip(k), clip(d) if 0 <= d < len(s.pack.records) else None
+                rec = s.pack.records[d] if b else None
+                if (e[0] != 0xc000 and t in s.STARTING_OVER and d != k and a and b and 1 < at < min(len(a), len(b))
+                        and a[:at + 1] == b[:at + 1] and (not rec[45] or at <= rec[46])):
+                    x = e[4] & 0xc0 | s.GOING_ON.get(t, 2)
+                    out.append((k, d, e[4], x))
+                    e, changed = (*e[:4], x, *e[5:]), True
+                elif (e[0] == 0xc000 and t in s.STARTING_OVER and d != k and a and b and 1 < len(a) < len(b)
+                        and b[:len(a)] == a and (not rec[45] or len(a) - 1 <= rec[46])
+                        and not any(x[0] != 0xc000 and x[3] == e[3] for x in entries)):
+                    last = len(a) - 1
+                    new.append((0x10, 0, 0, e[3], 2, last, 255, last))
+                    out.append((k, d, e[4], 'entry'))
+                    changed = True
+                new.append(e)
+            if changed: s.pack.set_cancels(k, new)
+        s.report['goes_on'] = out
         return out
 
     def alias_records(s):
@@ -2631,7 +2732,7 @@ class Builder:
             if ri >= s.ttt1.count: own[ri].add(mi)
         rx = s.report.get('reactions', {})
         reacting = {int(k) for k in rx.get('paired', {})} | set(rx.get('cloned', {}).values())
-        out, airborne = [], []
+        out, airborne, taken = [], [], []
         for ri, mis in sorted(own.items()):
             if ri in reacting: continue
             rec = s.pack.records[ri]
@@ -2639,13 +2740,23 @@ class Builder:
             dr = {tuple(s.dr.raw[mi][i] for i in (9, 12, 13, 14)) for mi in mis}
             name = s.dr.m.moves[min(mis)]['name']
             if any(d[1] for d in dr):
-                if before not in dr: airborne.append((ri, name, list(before), [list(d) for d in sorted(dr)]))
+                if before in dr: continue
+                # A move DR starts from the stance and pushes through the air otherwise than the model did:
+                # DR's window. Jin's u/f+4 (Jz_jprk00F) jumps forward in DR, -9848 a frame from 9 to 23; its
+                # copy of u+1 stood still (0, 9..34) and kicked short of the opponent (B185).
+                (d,) = dr if len(dr) == 1 else (None,)
+                if d and d[0] != before[0] and any(p == s.dr.m.stance for mi in mis for p, *_ in s.parents(mi)):
+                    struct.pack_into('<h', rec, 22, d[0]); rec[25], rec[26], rec[27] = d[1:]
+                    taken.append((ri, name, list(before), list(d)))
+                    continue
+                airborne.append((ri, name, list(before), [list(d) for d in sorted(dr)]))
                 continue
             if before == (0, 0, 0, 0): continue
             struct.pack_into('<h', rec, 22, 0); rec[25] = rec[26] = rec[27] = 0
             out.append((ri, name, before))
         s.report['air_windows'] = [(ri, n, list(b)) for ri, n, b in out]
         s.report['air_windows_dr'] = airborne
+        s.report['air_windows_taken'] = taken
         return out
 
     def window_order(s):
@@ -3407,11 +3518,13 @@ def build(name, out, moves=None, pack_dir=None):
     if name in REORDER: print(f"tails blended towards the end's record: {b.tails()}")
     aw = b.air_windows()
     print(f"copied records on the ground in DR, model's air window cleared: {len(aw)}; "
-          f"airborne in DR with other numbers, left: {len(b.report['air_windows_dr'])}")
+          f"airborne in DR with other numbers, left: {len(b.report['air_windows_dr'])}, "
+          f"DR's taken (ground moves DR pushes through the air): {b.report['air_windows_taken']}")
     if name in REORDER: print(f"airborne reactions landing at DR's frame: {b.landings()}")
     if name in REORDER: print(f"DR's charges lighting the fists: {b.supercharges()}")
     if name in REORDER: print(f"DR's turns at the end of the whole animations: {b.end_turns()}")
     print(f"string follow-ups turning steadily to the victim: {len(b.string_turns())}")
+    print(f"follow-ups going on with the same animation, not starting it over: {b.goes_on()}")
     cer = b.ceremonies()
     if cer: print("round start and end on DR's animations: " + ', '.join(f'{a} {n} {r}' for a, n, r in cer))
     snd = b.ceremony_sounds()

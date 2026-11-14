@@ -284,11 +284,16 @@ static int vs_waits(void) {
     return waiting >= 0 && vs_open() && vs_state((unsigned)waiting) == VS_HANDICAP && done_by_now((unsigned)waiting ^ 1);
 }
 static unsigned grid_state(unsigned p) { return psx_mod_read_word(GRID_BLOCKS + p * GRID_STRIDE); }
-/* The Practice grid while player 1's pad picks the dummy. */
+/* The Practice grid while the player's pad picks the dummy, in the other
+ * block (state 3): player 1's pad, or player 2's when player 2 started the
+ * Practice (the dummy then in player 1's block, B170). The player's pad, -1
+ * when no dummy waits. */
 static int practice_dummy(void) {
-    return psx_mod_read_word(SCREEN) == ARCADE_GRID && psx_mod_read_word(MODE) == PRACTICE &&
-           psx_mod_read_word(0x8010ff4c) == 0x27bdffd0 && psx_mod_read_half(PHASE) <= 1 &&
-           grid_state(0) != CHOOSING && grid_state(1) == CHOOSING_CPU;
+    if (psx_mod_read_word(SCREEN) != ARCADE_GRID || psx_mod_read_word(MODE) != PRACTICE ||
+        psx_mod_read_word(0x8010ff4c) != 0x27bdffd0 || psx_mod_read_half(PHASE) > 1) return -1;
+    for (unsigned d = 0; d < 2; d++)
+        if (grid_state(d) == CHOOSING_CPU && grid_state(d ^ 1) != CHOOSING) return (int)(d ^ 1);
+    return -1;
 }
 /* With QUICK SELECT (GAME OPTION), the Practice chooses on the VS grid,
  * mode 5 (grid_side_update): the player's block goes 3 -> 11, then the
@@ -301,12 +306,12 @@ static int quick_dummy(void) {
     return -1;
 }
 /* The pad that picks the dummy, -1 none. */
-static int dummy_pad(void) { return practice_dummy() ? 0 : quick_dummy(); }
+static int dummy_pad(void) { int pad = practice_dummy(); return pad >= 0 ? pad : quick_dummy(); }
 /* The fighter under the dummy's cursor: the Arcade grid's block, else the VS
  * grid's cell (block +8 column, +12 row; its Tag page holds the guests). */
 extern unsigned tekken3_ttt1_grid_character(unsigned cell);
 static unsigned dummy_under(int pad) {
-    if (practice_dummy()) return psx_mod_read_word(GRID_BLOCKS + GRID_STRIDE + 0x1c);
+    if (practice_dummy() >= 0) return psx_mod_read_word(GRID_BLOCKS + (unsigned)(pad ^ 1) * GRID_STRIDE + 0x1c);
     uint32_t block = VS_BLOCKS + (unsigned)(pad ^ 1) * VS_STRIDE;
     unsigned x = psx_mod_read_word(block + 8), y = psx_mod_read_word(block + 12);
     return x < 7 && y < 4 ? tekken3_ttt1_grid_character(y * 7 + x) : ABSENT;
@@ -450,7 +455,7 @@ int tekken3_stage_select_line(const char **label, const char **name, int *arrows
     if (band && dummy_pad() >= 0) {      /* the VS grid's place with QUICK SELECT */
         *arrows = 2;
         shown(LINE_PRACTICE, label, name);
-        return practice_dummy() ? 2 : 1;
+        return practice_dummy() >= 0 ? 2 : 1;
     }
     return 0;
 }

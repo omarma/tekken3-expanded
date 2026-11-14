@@ -14,6 +14,25 @@ def flags(value):
     return (low << 8) | ((value & 0x180000) << 9) | ((value & 0x400000) << 8)
 
 
+# The window kind of a record's attributes (bits 11..15, Actor + 0x60 >> 11):
+# TTT1 has 14 kinds (the switch of fighter_window_flag_set 0x80113984),
+# Tekken 3 13 (0x8004096C). Both engines read two of them: 9 (airborne from
+# the record's air_start: attribute bit 4, same number in both) and the low
+# crush, TTT1 13 / T3 12: a hit of id 0x10F (a low) does not touch a fighter
+# in that window's airborne frames (TTT1 hit_detect 0x800FB148, T3
+# hit_contact_check 0x8004406C). Yoshimitsu's Flea
+# (u+1+2) and some 100 other TTT1 records carry 13; read as 13 by T3 they lost
+# the crush and every low hit him on his sword (B179, GH#221). TTT1's 12
+# (12 records of Armor King and Kunimitsu, no rule in either engine) has no
+# T3 number: 14, outside T3's switch, which T3 reads as no special window.
+WINDOW_KINDS = {12: 14, 13: 12, 14: 13}
+
+
+def attributes(value):
+    kind = value >> 11 & 31
+    return value & ~(31 << 11) | WINDOW_KINDS.get(kind, kind) << 11
+
+
 def properties(ram, pointer):
     """Yield timed property rows, including damage during paired animations.
 

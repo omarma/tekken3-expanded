@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools/ttt1'))       # glyphs (t3_music)
 
-CINEMATICS_VERSION = 22
+CINEMATICS_VERSION = 23
 STAMP = 'version.txt'
 DATA = ROOT / 'tools/data/ttt_cinematics'
 WORK = ROOT / 'workspace/ttt1-import'
@@ -237,6 +237,7 @@ def converted_cine(key, e, data, out):
     # A TTT arcade stage drawn instead of the arena, and its storm's lightning.
     if data.get('ttt_stage') is not None:
         lines.append(f"ttt-stage {data['ttt_stage']}" + (f" {data['ttt_courtyard']}" if data.get('ttt_courtyard') else ''))
+        if data.get('ttt_light'): lines.append(f"floor-light {data['ttt_light']}")   # Devil's flight: lit where the camera looks
     lines += [f"storm {s[0]} {s[1]}{' quiet' if s[2:] and s[2] else ''}" for s in data.get('storms', [])]
     lines += ['filter ' + ' '.join(map(str, f)) for f in data.get('filters', [])]   # screen filters (cmd 23, 24)
     lights = {a['light'] for a in data['actors'] if a.get('light')}
@@ -266,6 +267,13 @@ def converted_cine(key, e, data, out):
             if held is not None and steps: steps = [[data['first'], held]]
             lines += [f'hand {i} {h} {t} {pose}' for t, pose in steps]
     lines += [f'eyes {i} {t} {closed}' for i, a in enumerate(data['actors']) for t, closed in a.get('eyes', [])]
+    # The wings (cmd 28: Devil's ending): the TTT1 arcade wing pose of each frame (ttt_to_cine.py wings).
+    lines += [f'wings {i} {t} {pose}' for i, a in enumerate(data['actors']) for t, pose in a.get('wings', [])]
+    # The declaration's "shadow": an actor without its shadow (Devil and Jun flying, high over the floor).
+    for i, a in enumerate(data['actors']):
+        for s in a.get('shadow', []):
+            lines.append(f'shadow {i} {s["from"]} 0')
+            if s.get('to') is not None and s['to'] < n: lines.append(f'shadow {i} {s["to"]} 1')
     # The declaration's "faces": the face the actor's open eyes show (Lee's smile).
     lines += [f'face {i} {t} {n}' for i, a in enumerate(data['actors']) for t, n in a.get('faces', [])]
     lines += [f'spark {t} {i} {bone} {kind}' for t, i, bone, kind in data.get('sparks', [])]

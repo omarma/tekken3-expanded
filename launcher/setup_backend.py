@@ -328,7 +328,8 @@ def cinematics_models_ready():
 # its MOVESET card, read from the player's PSP disc. Optional, with the TTT1 characters
 # (a DR pack starts from the native's TTT1 pack): written into the catalogue after the TTT1
 # import, then copied beside the game with it.
-DR_EXPECTED='Expected: Tekken: Dark Resurrection USA for PSP (ULUS-10139), as an .iso, and PPSSPP installed on this computer.'
+DR_EXPECTED=('Expected: Tekken: Dark Resurrection USA for PSP (ULUS-10139), as an .iso, and PPSSPP on this computer '
+           '(installed or portable: the setup looks for it, or uses the PPSSPP folder you choose).')
 
 def dr_tools():
     """tools/dr_import_version.py and tools/dr_setup.py (this checkout's, as import_version)."""
@@ -336,6 +337,18 @@ def dr_tools():
     if tools not in sys.path:sys.path.insert(0,tools)
     import dr_import_version,dr_setup
     return dr_import_version,dr_setup
+
+def ppsspp_note(choice=None):
+    """The setup window's line under PPSSPP folder (B162): where PPSSPP's VFPU tables were found
+    (the folder chosen, or the search's), else what to choose."""
+    dr_tools()
+    import ppsspp_vfpu
+    found=ppsspp_vfpu.vfpu_dir(choice or None)
+    if found:
+        source=found.parent.parent if found.parent.name.lower()=='assets' else found
+        return True,f'PPSSPP found: {source}'
+    if choice:return False,ppsspp_vfpu.problem(choice)
+    return False,f'PPSSPP not found on this computer: click Browse and choose {ppsspp_vfpu.where_to_point()}.'
 
 def names_and(names):
     return ', '.join(names[:-1])+' and '+names[-1] if len(names)>1 else ''.join(names)
@@ -394,7 +407,7 @@ def dr_off(folder):
     for name in (V.CATALOG,V.STAMP,'report.json'):(folder/name).unlink(missing_ok=True)
     if gone:log_line(f'Tekken 5 DR Content off: {len(gone)} DR files removed from {folder}')
 
-def prepare_dr(dr_iso,env,keep=False):
+def prepare_dr(dr_iso,env,keep=False,ppsspp=None):
     """The DR movesets in the catalogue, unless this version is already there.
     Optional: without the disc an earlier version stays; a failure or a missing
     disc leaves the natives on their Tekken 3 and TTT1 moves. Ready or not."""
@@ -409,7 +422,8 @@ def prepare_dr(dr_iso,env,keep=False):
         # workspace/ was deleted: the catalogue beside the game, as update_ttt1 does.
         shutil.rmtree(ROSTER,ignore_errors=True);shutil.copytree(INSTALLED,ROSTER)
     emit(message='Adding the Dark Resurrection movesets',detail=dr_converting())
-    try:run([sys.executable,ROOT/'tools/dr_setup.py','--iso',dr_iso,'--roster',ROSTER],environment=env,
+    # ppsspp: the PPSSPP folder the player chose (B162); without it, dr_setup looks for one.
+    try:run([sys.executable,ROOT/'tools/dr_setup.py','--iso',dr_iso,'--roster',ROSTER,*(['--ppsspp',ppsspp] if ppsspp else [])],environment=env,
             friendly='The Dark Resurrection movesets could not be prepared.')
     except SetupError:
         emit(message='Skipping the Dark Resurrection movesets',detail='They could not be prepared from your PSP disc (see the setup log). '+dr_without())
@@ -476,23 +490,39 @@ def run(command, *, environment=None, directory=ROOT, friendly='Setup could not 
         progress='Preparing game files'):
     """friendly: the message for a failure; with only_code, for that exit code
     only, and any other failure shows the last line of the command's output.
-    progress: the words before a build's step counter."""
+    progress: the words before a build's step counter. A compiler error in
+    the output is named in the message (B164: the log of a failed build is
+    hundreds of lines long)."""
     log_line('RUN '+subprocess.list2cmdline([str(x) for x in command]))
     with subprocess.Popen([str(x) for x in command],cwd=directory,env=environment,
             stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',
             creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0) as process:
         # The launcher's Windows Job owns this worker and all its children.
-        last=0;tail=''
+        last=0;tail='';first_error=None
         for line in process.stdout:
             log_line(line.rstrip())
             if line.strip():tail=line.strip()
+            if first_error is None:first_error=compiler_error(line)
             match=re.match(r'\[(\d+)/(\d+)\]',line)
             if match and time.monotonic()-last>.25:
                 emit(detail=progress+': '+match[1]+' / '+match[2]);last=time.monotonic()
         code=process.wait(timeout=timeout)
     if code and only_code is not None and code!=only_code:
         raise SetupError(f'Setup stopped: {tail[-300:]} (details in {STATE/"setup.log"})')
-    if code:raise SetupError(friendly)
+    if code:raise SetupError(with_first_error(friendly,first_error))
+
+def compiler_error(line):
+    """'file.cpp: error' from a GCC / Clang error line ('path:12:3: error: text'), else None."""
+    match=re.match(r'\s*(.+?):\d+(?::\d+)?: (?:fatal )?error: (.+)',line)
+    if not match:return None
+    return f'{Path(match[1]).name}: {match[2].strip()[:160]}'
+
+def with_first_error(friendly,first_error):
+    """The friendly message with the first compiler error, before 'Open the setup log'."""
+    if not first_error:return friendly
+    said=f'The first error is in {first_error}'
+    head,mark,rest=friendly.partition(' Open the setup log')
+    return f'{head} {said}.{mark}{rest}' if mark else f'{friendly} {said}.'
 
 def download(spec):
     cache=STATE/'downloads';cache.mkdir(parents=True,exist_ok=True)
@@ -1024,7 +1054,7 @@ TEKKEN3_EXPECTED=('Expected: MAME set tekken3, Tekken 3 (World, TET2/VER.E1), wi
 TTT_DISC_EXPECTED=('Expected: Tekken Tag Tournament USA for PS2 (SLUS-20001), version 1.00 or 2.00 (Greatest Hits), '
                    'as a .cue with its .bin, a .bin or an .iso.')
 
-def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True,dr_iso=None,dr_content=True):
+def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,pc=True,dr_iso=None,dr_content=True,ppsspp=None):
     """The optional files given that this setup reads and cannot use: a
     list of dicts (key, file, name, path, reason, without, expected)."""
     problems=[]
@@ -1053,7 +1083,7 @@ def optional_problems(include_ttt1,tekken3=None,ttt_disc=None,cinematics=False,p
         V=dr_tools()[0]
         made=dr_made();folder=ROSTER if ttt1_ready(ROSTER) else INSTALLED
         stamp=V.read_stamp(folder);gone=dr_missing(folder) if stamp else []
-        reason=dr_tools()[1].iso_problem(dr_iso) if dr_iso and (not made or gone) else None
+        reason=dr_tools()[1].iso_problem(dr_iso,ppsspp) if dr_iso and (not made or gone) else None
         if not dr_iso and stamp and not made:
             reason='Your Dark Resurrection movesets and characters were made by an older version of this setup.'
         if reason:
@@ -1099,7 +1129,7 @@ def prepare_cinematics(ttt_disc,catalogue=None,out=None):
     run([sys.executable,ROOT/'tools/ttt_cinematics.py','--catalogue',catalogue,'--out',out,*(['--ttt-disc',ttt_disc] if ttt_disc else [])],
         friendly="The TTT cinematics could not be prepared. Open the setup log for details, then click Try again.")
 
-def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,android=False,pc=True,dr_iso=None,dr_content=None):
+def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,android=False,pc=True,dr_iso=None,dr_content=None,ppsspp=None):
     """First setup, or an update: generate the game again only for a new
     RELEASE, and bring the TTT1 characters to this import version with the
     least work (ttt1_plan). pc=False (with android, Build Android APK): only
@@ -1117,7 +1147,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
     dr_content=bool(dr_content or dr_iso)
     save_json(STATE/'last-inputs.json',{'disc':str(disc),'ttt1':str(ttt) if include_ttt1 else '',
         'include_ttt1':include_ttt1,'tekken3':str(tekken3 or ''),
-        'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'dr_iso':str(dr_iso or ''),'dr_content':dr_content,'android':android})
+        'ttt_cinematics':cinematics,'ttt_disc':str(ttt_disc or ''),'dr_iso':str(dr_iso or ''),'dr_content':dr_content,'ppsspp':str(ppsspp or ''),'android':android})
     # The TTT cinematics come with the TTT1 characters (Jin's red lightning: tools/ttt1_hitspark.py).
     cinematics=cinematics and include_ttt1
     # The TTT PS2 disc, optional with the TTT1 characters: the TTT stages' PS2
@@ -1130,7 +1160,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
     # levels and the arcade stages, an unsupported TTT PS2 disc the PS2 music;
     # checked now rather than failing at the end of the import. The terminal
     # setup asks whether to go on (the window asked before starting).
-    problems=optional_problems(include_ttt1,tekken3,ttt_disc,cinematics,pc,dr_iso,dr_content)
+    problems=optional_problems(include_ttt1,tekken3,ttt_disc,cinematics,pc,dr_iso,dr_content,ppsspp)
     go_on_without(problems)
     if any(p['key']=='tekken3' for p in problems):tekken3=None
     # A disc set aside keeps what it made before (prepare_ttt_ps2_music's keep).
@@ -1173,7 +1203,7 @@ def prepare(disc,ttt,include_ttt1,tekken3=None,cinematics=False,ttt_disc=None,an
             environment=env,friendly="The TTT1 characters' import could not finish. Open the setup log for details, then click Try again.")
     elif plan=='update':update_ttt1(steps,env)
     # The Dark Resurrection movesets and characters, from the TTT1 catalogue just made (before install_roster).
-    if dr_content:dr=prepare_dr(dr_iso,env,keep=dr_set_aside)
+    if dr_content:dr=prepare_dr(dr_iso,env,keep=dr_set_aside,ppsspp=ppsspp)
     else:
         # Unticked: no DR content, in the catalogue nor beside the game.
         dr=False
@@ -1285,7 +1315,7 @@ def update_install():
     prepare(path('disc'),path('ttt1'),saved.get('include_ttt1',True),path('tekken3') if saved.get('tekken3') else None,
             saved.get('ttt_cinematics',False),path('ttt_disc') if saved.get('ttt_disc') else None,
             dr_iso=path('dr_iso') if saved.get('dr_iso') else None,
-            dr_content=saved.get('dr_content',bool(saved.get('dr_iso'))))
+            dr_content=saved.get('dr_content',bool(saved.get('dr_iso'))),ppsspp=saved.get('ppsspp') or None)
 
 def launch_game(settings=False):
     """The game opens on its launcher unless the player ticked its "Skip
@@ -1306,6 +1336,7 @@ if __name__=='__main__':
     parser.add_argument('--ttt-disc',type=Path,help="Tekken Tag Tournament USA PS2 disc: the TTT stages' PS2 music and the endings' music")
     parser.add_argument('--dr-iso',type=Path,help="Tekken: Dark Resurrection USA PSP disc (.iso): the Tekken 5 DR Content (implies --dr-content)")
     parser.add_argument('--dr-content',action='store_true',help="Tekken 5 DR Content (experimental; for now Jin's DR moveset): without it, no DR content")
+    parser.add_argument('--ppsspp',help="PPSSPP's folder or program, for the Tekken 5 DR Content (only if the setup does not find it)")
     parser.add_argument('--wait-for-parent',action='store_true')
     parser.add_argument('--text',action='store_true',help='plain progress lines (terminal setup)')
     parser.add_argument('--play',action='store_true',help='start the game once setup is complete')
@@ -1324,7 +1355,7 @@ if __name__=='__main__':
                              args.tekken3.resolve() if args.tekken3 else None,
                              args.ttt_cinematics,args.ttt_disc.resolve() if args.ttt_disc else None,
                              android=args.android or args.android_only,pc=not args.android_only,
-                             dr_iso=args.dr_iso.resolve() if args.dr_iso else None,dr_content=args.dr_content)
+                             dr_iso=args.dr_iso.resolve() if args.dr_iso else None,dr_content=args.dr_content,ppsspp=args.ppsspp)
         elif args.android:android_only()
         else:update_install()
     except Exception as error:

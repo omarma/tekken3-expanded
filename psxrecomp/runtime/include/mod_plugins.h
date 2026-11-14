@@ -103,7 +103,7 @@ int psx_mod_gpu_high_vram_ready(void);
  * native resolution (gr_scale() > 1) and samples the half: at x1, or with
  * Vulkan, the game's sprite is drawn as it is.
  *
- * set: slot 0..31; page = texture page x | y << 4 | colour depth << 7 (the
+ * set: slot 0..63; page = texture page x | y << 4 | colour depth << 7 (the
  * texpage bits 0-4 and 7-8); uv = the sprite's word 2 (u | v << 8 | CLUT
  * << 16). Returns 0 if refused. clear: the slot matches nothing again.
  */

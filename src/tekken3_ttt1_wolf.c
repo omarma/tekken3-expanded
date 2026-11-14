@@ -14,14 +14,16 @@
  *   zero), angle += d / 32 (16-bit angles, sign-extended: no wrap), then a
  *   wobble of about 21 units from the sine table and the random generator;
  *   paused with the game (0x802435CC / 0x802435C0);
- * - it is drawn by the fighter renderer after her (0x8010D6D8), additive
- *   (all its pixels lighter than the floor under it, same frame with and
- *   without the flag);
+ * - it is drawn by the fighter renderer after her (0x8010D6D8), opaque: its
+ *   packets are 0x24 / 0x2C, texpage ABR 0 (MAME RAM on the final stage, B157;
+ *   its translucent look is the final stage's purple light and the effects
+ *   over it, C above all);
  * - the effects (tools/ttt1/spirit.py), on the wolf's bones: A between its
  *   knees, bones 13 and 16, where its legs end (fading with the flag, a wisp
  *   W every 32 frames), B on each knee, C on bone 1 (the root), S on each
- *   knee. A Tekken 3 actor's bones come in the same order as the arcade
- *   block's (legs 12..14, 15..17). Here they are drawn whenever the
+ *   knee; square billboards in the arcade's 640 x 480 (square pixels). A
+ *   Tekken 3 actor's bones come in the same order as the arcade block's
+ *   (legs 12..14, 15..17). Here they are drawn whenever the
  *   wolf is; the arcade creates them on its stage 14 only, where the wolf
  *   always is.
  *
@@ -31,8 +33,14 @@
  * wolf's textures and the effects' images in the upper VRAM half
  * (Unknown-TTT1-wolf.glow, uploaded at each fight). The game solves its
  * skeleton (0x8003AFCC, pause flag set: our local matrices kept) and draws
- * its body (0x80037924, no shadow), outside emulated time; the engine writes
- * each packet's command, so the semi-transparent bit goes on afterwards.
+ * its body (0x80037924, no shadow), outside emulated time.
+ * The effects' images: A, B and C are too many for the upper half (B157:
+ * 232 448 halfwords, 80 640 free), so each drawn frame uploads the four it
+ * draws into a 64 x 128 set, one per wolf and frame buffer (the renderer may
+ * still read the other buffer's). Their offsets are the arcade's, in view
+ * space; Tekken 3's view matrix has its y row times 0x1BD2 / 4096 (its
+ * 368 x 480 screen, 0x80045C18), so the y offsets take that ratio too (B157:
+ * the flames, the aura and the wisps were 1.74 times too flat).
  * Not in our cinematics (engine scenes, Ogre lifting the sub-boss, the
  * Embu). The upper half is made by the activation (before the renderer
  * starts) only when the pack is staged; a renderer without it (Vulkan)
@@ -40,6 +48,7 @@
  * logs it. */
 #include "mod_plugins.h"
 #include "psx_runtime.h"
+#include "savestate.h"
 #include "tekken3_host_clock.h"
 #include "tekken3_ttt1_assets.h"
 #include <math.h>
@@ -66,8 +75,9 @@ enum {
     PACKETS=0x12000,                    /* a wolf's packets, both buffers (about 2 x 32 KB) */
     SPRITES=16, SPRITE=40,
     BAND_PAGE=10, CLUT_X=704,           /* tools/ttt1/spirit.py */
+    SETS_X=704, SETS_Y=516, SET_W=64, SET_H=128, GLOW_CLUT_X=960,
 };
-enum { SEQ_A, SEQ_B, SEQ_C, SEQ_W, SEQS };
+enum { SEQ_A, SEQ_B, SEQ_C, SEQ_W, SEQS, STREAMS=SEQ_W };
 
 static struct {
     int tried, ok, upper;
@@ -76,7 +86,8 @@ static struct {
     uint32_t memory;                    /* the model in guest memory */
     uint32_t gpu;                       /* both wolves' packets and sprites */
     uint16_t bones[3];                  /* the root and the two knees: 1, 13, 16 */
-    struct { unsigned count; const unsigned char *frames; } seq[SEQS];
+    struct { unsigned count,size; const unsigned char *images; } stream[STREAMS];   /* A, B, C */
+    struct { unsigned count; const unsigned char *frames; } wisp;                   /* W: u, v, w-1, h-1, page, clut */
     int uploaded; uint64_t uploaded_at; /* the emulated clock at the last upload */
 } pack;
 
@@ -89,6 +100,7 @@ static struct {
     uint64_t last_drawn; unsigned last_buffer; uint32_t wobble;
     int live;                           /* drawn on the frame before */
     unsigned a_counter,a_spawn,b_counter[2],c_counter,s_counter[2]; int a_alpha;
+    uint16_t set[SET_H][SET_W];         /* the images of the frame, as uploaded */
     Wisp wisps[4];
 } wolves[2];
 
@@ -126,10 +138,11 @@ static uint32_t word(const unsigned char *p) { return p[0]|p[1]<<8|p[2]<<16|(uin
 static uint16_t half(const unsigned char *p) { return (uint16_t)(p[0]|p[1]<<8); }
 
 /* The pack: 'GLOW', version, rectangles, sequences, 0, the three bones, the
- * rectangles, the sequences (tools/ttt1/spirit.py). Checked whole once. */
+ * rectangles, A, B and C's images, W's frames (tools/ttt1/spirit.py). Checked
+ * whole once. */
 static int parse_pack(void) {
     const unsigned char *b=pack.pack,*end=b+pack.pack_size;
-    if(pack.pack_size<18 || memcmp(b,"GLOW",4) || half(b+4)!=1 || half(b+8)!=SEQS) return 0;
+    if(pack.pack_size<18 || memcmp(b,"GLOW",4) || half(b+4)!=2 || half(b+8)!=SEQS) return 0;
     for(unsigned i=0;i<3;i++) pack.bones[i]=half(b+12+2*i);
     const unsigned char *p=b+18;
     for(unsigned r=0,n=half(b+6);r<n;r++) {
@@ -138,13 +151,19 @@ static int parse_pack(void) {
         if(y<512 || y+h>1024 || x+w>1024 || p+8+2u*w*h>end) return 0;
         p+=8+2u*w*h;
     }
-    for(unsigned s=0;s<SEQS;s++) {
-        if(p+2>end) return 0;
-        pack.seq[s].count=half(p); pack.seq[s].frames=p+2;
-        p+=2+8u*pack.seq[s].count;
-        if(p>end || !pack.seq[s].count) return 0;
+    static const unsigned sizes[STREAMS]={64,64,128};
+    for(unsigned s=0;s<STREAMS;s++) {
+        if(p+4>end) return 0;
+        unsigned n=half(p),size=half(p+2);
+        if(!n || size!=sizes[s]) return 0;
+        pack.stream[s].count=n; pack.stream[s].size=size; pack.stream[s].images=p+4;
+        p+=4+(size_t)n*size*size/2;
+        if(p>end) return 0;
     }
-    return 1;
+    if(p+2>end) return 0;
+    pack.wisp.count=half(p); pack.wisp.frames=p+2;
+    p+=2+8u*pack.wisp.count;
+    return p<=end && pack.wisp.count;
 }
 static void upload_pack(void) {
     const unsigned char *p=pack.pack+18;
@@ -170,7 +189,7 @@ static void wolf_activate(void) {
     if(!wanted()) return;
     pack.pack=read_file("wolf.glow",&pack.pack_size);
     if(!pack.pack || !parse_pack()) {
-        if(pack.pack) fprintf(stderr,"Unknown's wolf: Unknown-TTT1-wolf.glow unreadable, no wolf\n");
+        if(pack.pack) fprintf(stderr,"Unknown's wolf: Unknown-TTT1-wolf.glow unreadable or older than B157, no wolf\n");
         free(pack.pack); pack.pack=NULL;
         return;
     }
@@ -218,13 +237,13 @@ static int load(void) {
 
 /* A mesh's packets, as tekken3_ttt1_mod.c's make_packets_native, reading the
  * wolf's band (page 10 of the upper half) through its palettes (x 704..,
- * y 512..), additive: texpage ABR 1 and the command's semi-transparent bit. */
+ * y 512..), opaque as the arcade's (B157). */
 static uint32_t make_packets(uint32_t bundle,uint32_t out,uint32_t end) {
     uint32_t m=psx_mod_read_word(bundle+16);
     uint32_t uv=m+psx_mod_read_half(m);
     uint32_t src=uv+psx_mod_read_half(uv);
     static const unsigned size[4]={32,40,40,52};
-    static const unsigned opcode[4]={0x26,0x2e,0x36,0x3e};
+    static const unsigned opcode[4]={0x24,0x2c,0x34,0x3c};
     static const unsigned voff[4][4]={{12,20,28,0},{12,20,28,36},{12,24,36,0},{12,24,36,48}};
     for(unsigned kind=0;kind<4;kind++) {
         unsigned count=psx_mod_read_byte(src++),nv=(kind&1)?4:3;
@@ -237,7 +256,7 @@ static uint32_t make_packets(uint32_t bundle,uint32_t out,uint32_t end) {
                 psx_mod_write_word(out+16,0x808080); psx_mod_write_word(out+28,0x808080);
                 if(nv==4) psx_mod_write_word(out+40,0x808080);
             }
-            unsigned tpage=BAND_PAGE|0x800|0x20|(mat&0x8000?0x80u:0u);
+            unsigned tpage=BAND_PAGE|0x800|(mat&0x8000?0x80u:0u);
             unsigned clut=0x8000|((mat&0x7fff)+CLUT_X/16);
             for(unsigned j=0;j<nv;j++) {
                 uint32_t v=psx_mod_read_half(uv+2+psx_mod_read_byte(src++)*2);
@@ -354,12 +373,13 @@ static void step(unsigned p) {
     wolves[p].y+=div_trunc(div_trunc(tsin(v&0xfff),6),32);
     v=wolves[p].wobble+(rnd()&0x3f);
     wolves[p].z+=div_trunc(div_trunc(tsin((v>>1)&0xfff),6),32);
-    /* The effects: A 18 images of 2 frames (0x8015A31C), B 23 (0x8015A584),
-     * C 18 (0x8015A8E8), S one a frame (0x8015AE94), a wisp from A every
-     * 32 frames (0x8015A524). */
-    if(++wolves[p].a_counter>=0x24) wolves[p].a_counter=0;
-    for(unsigned i=0;i<2;i++) if(++wolves[p].b_counter[i]>=0x2e) wolves[p].b_counter[i]=0;
-    if(++wolves[p].c_counter>=0x24) wolves[p].c_counter=0;
+    /* The effects (ttt-ps1/src/decor): A 36 images of 2 frames (0x8015A31C,
+     * image = counter / 2, back to 0 at 36), B 45 of 1 frame (0x8015A584,
+     * counter 0..0x2C), C 36 of 2 frames (0x8015A8E8), S one a frame
+     * (0x8015AE94), a wisp from A every 32 frames (0x8015A524). */
+    if((++wolves[p].a_counter>>1)>=36) wolves[p].a_counter=0;
+    for(unsigned i=0;i<2;i++) if(++wolves[p].b_counter[i]>=0x2d) wolves[p].b_counter[i]=0;
+    if((++wolves[p].c_counter>>1)>=36) wolves[p].c_counter=0;
     for(unsigned i=0;i<2;i++) wolves[p].s_counter[i]++;
     uint32_t a=wolves[p].actor;
     int32_t ax=0,ay=0,az=0;
@@ -397,23 +417,33 @@ static void call(CPUState *cpu,uint32_t fn,uint32_t a0) {
     psx_dispatch_call(cpu,fn,RETURN);
 }
 
-/* The view: camera = R . world + T, then the GTE's projection. */
-typedef struct { int32_t r[9],t[3],ofx,ofy,h; } View;
+/* The view: camera = R . world + T, then the GTE's projection; ys, the
+ * y row's length over the x row's (0x1BD2 / 4096 in a fight). */
+typedef struct { int32_t r[9],t[3],ofx,ofy,h; double ys; } View;
 static int project(const View *v,int32_t x,int32_t y,int32_t z,int32_t out[3]) {
     for(unsigned i=0;i<3;i++)
         out[i]=(int32_t)(((int64_t)v->r[i*3]*x+(int64_t)v->r[i*3+1]*y+(int64_t)v->r[i*3+2]*z)>>12)+v->t[i];
     return out[2]>64;
 }
-/* One billboard: corners (x0, y0)..(x1, y1) around a view point, image k of
- * sequence s, colour c, linked in the ordering table at its depth plus bias
- * (the arcade's effects: +0xE). */
+/* An image in VRAM: u, v, width - 1, height - 1, page, palette (the pack's
+ * W frames are these 8 bytes). */
+typedef struct { unsigned char f[8]; } Tex;
+static Tex tex(unsigned u,unsigned v,unsigned size,unsigned page,unsigned clut) {
+    Tex t={{(unsigned char)u,(unsigned char)v,(unsigned char)(size-1),(unsigned char)(size-1),
+            (unsigned char)page,(unsigned char)(page>>8),(unsigned char)clut,(unsigned char)(clut>>8)}};
+    return t;
+}
+/* One billboard: corners (x0, y0)..(x1, y1) around a view point, the y ones
+ * times the view's ys, image t, colour c, linked in the ordering table at its
+ * depth plus bias (the arcade's effects: +0xE). */
 static void sprite(const View *v,uint32_t ot,uint32_t *at,uint32_t end,const int32_t c[3],
-                   int x0,int y0,int x1,int y1,unsigned s,unsigned k,unsigned colour,int bias) {
+                   int x0,int y0,int x1,int y1,Tex t,unsigned colour,int bias) {
     if(*at+SPRITE>end || colour==0) return;
-    const unsigned char *f=pack.seq[s].frames+8*(k%pack.seq[s].count);
+    const unsigned char *f=t.f;
     int32_t sx[2],sy[2];
+    double cy0=c[1]+y0*v->ys,cy1=c[1]+y1*v->ys;
     sx[0]=v->ofx+(int32_t)((int64_t)v->h*(c[0]+x0)/c[2]); sx[1]=v->ofx+(int32_t)((int64_t)v->h*(c[0]+x1)/c[2]);
-    sy[0]=v->ofy+(int32_t)((int64_t)v->h*(c[1]+y0)/c[2]); sy[1]=v->ofy+(int32_t)((int64_t)v->h*(c[1]+y1)/c[2]);
+    sy[0]=v->ofy+(int32_t)lround(v->h*cy0/c[2]); sy[1]=v->ofy+(int32_t)lround(v->h*cy1/c[2]);
     if(sx[1]<-1024 || sx[0]>1023 || sy[1]<-1024 || sy[0]>1023) return;
     int index=(c[2]>>5)+bias;
     if(index<1) index=1;
@@ -431,18 +461,40 @@ static void sprite(const View *v,uint32_t ot,uint32_t *at,uint32_t end,const int
     psx_mod_write_word(slot,(link&0xff000000u)|(q&0xffffff));
     *at+=SPRITE;
 }
+static Tex wisp_tex(unsigned k) {
+    Tex t; memcpy(t.f,pack.wisp.frames+8*(k%pack.wisp.count),8); return t;
+}
 static void bone_view(const View *v,unsigned p,unsigned bone,int32_t c[3]) {
     uint32_t b=wolves[p].actor+BONE_WORLD+bone*BONE_SIZE;
     project(v,(int32_t)psx_mod_read_word(b),(int32_t)psx_mod_read_word(b+4),(int32_t)psx_mod_read_word(b+8),c);
+}
+/* An image of a streamed sequence into the frame's set, at (x, y) halfwords. */
+static void place_image(unsigned p,unsigned s,unsigned k,unsigned x,unsigned y) {
+    unsigned size=pack.stream[s].size,w=size/4;
+    const unsigned char *img=pack.stream[s].images+(size_t)(k%pack.stream[s].count)*w*size*2;
+    for(unsigned r=0;r<size;r++) for(unsigned i=0;i<w;i++) wolves[p].set[y+r][x+i]=half(img+2*(r*w+i));
 }
 static void effects(const CPUState *cpu,unsigned p) {
     View v;
     for(unsigned i=0;i<9;i++) v.r[i]=(int16_t)psx_mod_read_half(WORLD_VIEW+i*2);
     for(unsigned i=0;i<3;i++) v.t[i]=(int32_t)psx_mod_read_word(WORLD_VIEW+0x14+i*4);
     v.ofx=(int32_t)cpu->gte_ctrl[24]>>16; v.ofy=(int32_t)cpu->gte_ctrl[25]>>16; v.h=(int32_t)(cpu->gte_ctrl[26]&0xffff);
+    double rx=0,ry=0;
+    for(unsigned i=0;i<3;i++) { rx+=(double)v.r[i]*v.r[i]; ry+=(double)v.r[3+i]*v.r[3+i]; }
+    v.ys=rx>0?sqrt(ry/rx):1.0;
     uint32_t ot=psx_mod_read_word(psx_mod_read_word(OT)+4),buffer=psx_mod_read_word(BUFFER)&1;
     uint32_t at=pack.gpu+2*PACKETS+(p*2+buffer)*SPRITES*SPRITE,end=at+SPRITES*SPRITE;
     int32_t c[3];
+    /* This frame's images of C, A and the two B into its set: C at (0, 0),
+     * A at (32, 0), B on the first knee at (48, 0), on the second at (32, 64). */
+    unsigned sx=SETS_X+SET_W*(p*2+buffer),page=sx/64|0x800|0x20,vy=SETS_Y-512;
+    place_image(p,SEQ_C,wolves[p].c_counter>>1,0,0);
+    place_image(p,SEQ_A,wolves[p].a_counter>>1,32,0);
+    place_image(p,SEQ_B,wolves[p].b_counter[0],48,0);
+    place_image(p,SEQ_B,wolves[p].b_counter[1],32,64);
+    psx_mod_gpu_high_vram_upload((int)sx,SETS_Y,SET_W,SET_H,&wolves[p].set[0][0]);
+    const Tex ta=tex(128,vy,64,page,0x8000|(GLOW_CLUT_X/16+SEQ_A)),tc=tex(0,vy,128,page,0x8000|(GLOW_CLUT_X/16+SEQ_C));
+    const Tex tb[2]={tex(192,vy,64,page,0x8000|(GLOW_CLUT_X/16+SEQ_B)),tex(128,vy+64,64,page,0x8000|(GLOW_CLUT_X/16+SEQ_B))};
     /* A: between the knees (0x8015A31C), 1034 x 896, bias -0x14. */
     int32_t m[3]={0,0,0};
     for(unsigned k=0;k<2;k++) {
@@ -450,33 +502,41 @@ static void effects(const CPUState *cpu,unsigned p) {
         for(unsigned i=0;i<3;i++) m[i]+=(int32_t)psx_mod_read_word(b+i*4);
     }
     if(project(&v,m[0]>>1,m[1]>>1,m[2]>>1,c))
-        sprite(&v,ot,&at,end,c,-517,-448,517,448,SEQ_A,wolves[p].a_counter>>1,(unsigned)wolves[p].a_alpha,-0x14);
+        sprite(&v,ot,&at,end,c,-517,-448,517,448,ta,(unsigned)wolves[p].a_alpha,-0x14);
     /* B on each knee (0x8015A584), 930 x 930 from 724 above, bias -0xF. */
     for(unsigned k=0;k<2;k++) {
         bone_view(&v,p,pack.bones[1+k],c);
-        if(c[2]>64) sprite(&v,ot,&at,end,c,-465,-724,465,206,SEQ_B,wolves[p].b_counter[k]>>1,0x80,-0xf);
+        if(c[2]>64) sprite(&v,ot,&at,end,c,-465,-724,465,206,tb[k],0x80,-0xf);
     }
     /* C on the root, bone 1 (0x8015A8E8), 1724 x 1724, bias -0x1E. */
     bone_view(&v,p,pack.bones[0],c);
-    if(c[2]>64) sprite(&v,ot,&at,end,c,-862,-862,862,862,SEQ_C,wolves[p].c_counter>>1,0x80,-0x1e);
+    if(c[2]>64) sprite(&v,ot,&at,end,c,-862,-862,862,862,tc,0x80,-0x1e);
     /* S on each knee (0x8015AE94): the wisps' images, one a frame, 758 x 688, bias -7. */
     for(unsigned k=0;k<2;k++) {
         bone_view(&v,p,pack.bones[1+k],c);
-        if(c[2]>64) sprite(&v,ot,&at,end,c,-379,-344,379,344,SEQ_W,wolves[p].s_counter[k]&7,0x80,-7);
+        if(c[2]>64) sprite(&v,ot,&at,end,c,-379,-344,379,344,wisp_tex(wolves[p].s_counter[k]&7),0x80,-7);
     }
     /* The wisps (0x8015AC00): an image every 4 frames, 412 x 412, fading, bias -0xA. */
     for(unsigned i=0;i<4;i++) {
         const Wisp *w=&wolves[p].wisps[i];
         if(w->alive && project(&v,w->x,w->y,w->z,c))
-            sprite(&v,ot,&at,end,c,-206,-206,206,206,SEQ_W,(w->counter>>2)&7,(unsigned)w->life,-0xa);
+            sprite(&v,ot,&at,end,c,-206,-206,206,206,wisp_tex((w->counter>>2)&7),(unsigned)w->life,-0xa);
     }
 }
 
 extern int tekken3_ttt1_guest_grafted(unsigned player);
 extern int tekken3_cine_pending(void);
+extern int tekken3_ttt1_native_model_player(unsigned player);
+/* Unknown herself, not a native drawn by its TTT1 model (F32 E6). A player's
+ * guest identity stays on the last guest that player pointed at while a
+ * native on its Tekken 3 moves fights, and that native's TTT1 model counts as
+ * grafted too: against Unknown, her identity on the other side gave every
+ * native with a TTT1 model a wolf (B168). A native on its TTT1 moves has its
+ * own identity (Law-TTT1); Gon and Dr. B have no TTT1 model. */
 static int unknown(unsigned p) {
     const char *prefix=tekken3_guest_data_prefix_for(p);
-    return prefix && !strncmp(prefix,"Unknown-",8) && tekken3_ttt1_guest_grafted(p);
+    return prefix && !strncmp(prefix,"Unknown-",8) && !tekken3_ttt1_native_model_player(p) &&
+           tekken3_ttt1_guest_grafted(p);
 }
 /* For the other users of the upper half (Devil's and Angel's PS2 lasers):
  * whether rectangle x, y, w, h overlaps the wolf's pages (x 640..1023, y
@@ -530,6 +590,9 @@ void tekken3_ttt1_wolf_after_actor(CPUState *cpu,uint32_t actor) {
     uint64_t cycles=psx_cycle_count;
     int service=psx_in_device_service;
     psx_in_device_service=1;
+    /* No save state taken or loaded inside: the solver and the body run
+     * with RETURN as their return address (B181). */
+    psx_savestate_hold++;
     CPUState saved=*cpu;
     uint32_t scratch[256];
     for(unsigned i=0;i<256;i++) scratch[i]=psx_mod_read_word(0x1f800000+i*4);
@@ -557,21 +620,13 @@ void tekken3_ttt1_wolf_after_actor(CPUState *cpu,uint32_t actor) {
     }
     call(cpu,BODY,a);
     psx_mod_write_word(PAUSE,pause);
-    /* The engine wrote each drawn packet's command over ours: semi-transparent again. */
-    static const unsigned size[4]={32,40,40,52};
-    for(uint32_t q=wolves[p].start;q<wolves[p].next;) {
-        uint32_t w=psx_mod_read_word(q+4);
-        unsigned op=w>>24;
-        if(op<0x24 || op>0x3f) { q+=32; continue; }                 /* an empty block */
-        psx_mod_write_word(q+4,w|0x02000000u);
-        q+=size[(op>>3)-4];
-    }
     while(steps--) step(p);
     if(glowing()) effects(&saved,p);
     for(unsigned i=0;i<256;i++) psx_mod_write_word(0x1f800000+i*4,scratch[i]);
     *cpu=saved;
     psx_cyc_batch_flush();
     psx_cycle_count=cycles; psx_in_device_service=service;
+    psx_savestate_hold--;
     if(tracing()) {
         static unsigned n;
         static uint64_t spent;

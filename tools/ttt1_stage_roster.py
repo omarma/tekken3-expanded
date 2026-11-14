@@ -41,7 +41,10 @@ OPTIONAL = ('TTT1-voices.juv',           # Tetsujin ne parle pas
             # ressorts des accessoires (tools/ttt1/accessories.py) : pas chez Tetsujin, Bruce, les Jacks...
             *(f'TTT1-arcade-P{c}.acc' for c in (1, 2, 3)),
             # poignee de la lame d'Unknown (tools/ttt1/hilt.py) : elle seule
-            *(f'TTT1-arcade-P{c}.hilt' for c in (1, 2, 3)))
+            *(f'TTT1-arcade-P{c}.hilt' for c in (1, 2, 3)),
+            # sabre et poignard de Tetsujin (tools/ttt1/stick.py, B177), sa queue sur les coups de
+            # Roger (tools/ttt1/tail.py)
+            *(f'TTT1-arcade-P{c}.{e}' for c in (1, 2, 3) for e in ('stick', 'tail')))
 
 
 # Carte MOVESET du sélecteur (src/tekken3_native_moves.c) : les natifs de Tekken 3 sur

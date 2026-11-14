@@ -6,8 +6,8 @@ tools/t5/t5_moveset.py, to compare the two games move by move.
     python3 tools/t5/t3_moveset.py --live [--out file.tsv]     # through slot.py: runs the game
     python3 tools/t5/t3_moveset.py --ram workspace/t5/t3-ram.bin [--out file.tsv]
 
---disc builds the RAM the game would have from the disc image (disc/Tekken
-3 (Track 1).bin and disc/SLUS_004.02, tools/bns_tool.py): the executable at
+--disc builds the RAM the game would have from the disc image (disc/'s track
+1 as its cue names it, tools/disc_track.py, and disc/SLUS_004.02, tools/bns_tool.py): the executable at
 0x80010000, then the fighter's move block (TEKKEN3.BNS entry 280 + key, the
 file char_file_queue reads as 0x4A + n) and the shared one (entry 279, 0x49)
 relocated as movelist_relocate does (Tekken 3 PS1 decompilation,
@@ -209,11 +209,12 @@ def disc_ram(name):
     """(2 MiB RAM, move header, key) of a fighter, from the disc image alone."""
     sys.path.insert(0, str(ROOT / 'tools'))
     import bns_tool
+    from disc_track import data_track   # the cue's track 1, not a fixed name (B187)
     key = KEYS[name]
     disc = disc_dir()
     exe = (disc / 'SLUS_004.02').read_bytes()
     entries, _, _ = bns_tool.load_us_table(disc / 'SLUS_004.02')
-    with bns_tool.open_bns_source(disc / 'Tekken 3 (Track 1).bin') as src:
+    with bns_tool.open_bns_source(data_track(disc)) as src:
         read = lambda n: src.read_at(entries[n].offset, entries[n].size)
         shared, own = read(279), read(280 + key)
     ram = bytearray(0x200000)

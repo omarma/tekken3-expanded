@@ -9354,6 +9354,47 @@ static void handle_present_dump(int id, const char *json)
              id, s_present_dump_req, s_present_dump_ok, s_present_dump_w, s_present_dump_h);
 }
 
+/* window_shot - the OpenGL drawable as the player sees it, after the CRT
+ * present pass (B189) and before the host OSD. Served at the next GL swap. */
+static char s_window_shot_path[512];
+static volatile int s_window_shot_req = 0;
+static int s_window_shot_w = 0, s_window_shot_h = 0, s_window_shot_ok = 0;
+const char *debug_server_window_shot_wanted(void)
+{
+    return s_window_shot_req ? s_window_shot_path : NULL;
+}
+void debug_server_window_shot_write(const uint8_t *rgb, int w, int h)
+{
+    s_window_shot_req = 0;
+    s_window_shot_ok = 0;
+    FILE *f = fopen(s_window_shot_path, "wb");
+    if (f) {
+        s_window_shot_ok = png_write_rgb(f, rgb, (uint32_t)w, (uint32_t)h);
+        fclose(f);
+    }
+    s_window_shot_w = w; s_window_shot_h = h;
+}
+static void handle_window_shot(int id, const char *json)
+{
+    if (json_get_str(json, "path", s_window_shot_path, sizeof(s_window_shot_path))) {
+        s_window_shot_path[sizeof(s_window_shot_path) - 1] = ' ';
+        s_window_shot_ok = 0;
+        s_window_shot_req = 1;
+        send_fmt("{\"id\":%d,\"ok\":true,\"pending\":1}", id);
+        return;
+    }
+    send_fmt("{\"id\":%d,\"ok\":true,\"pending\":%d,\"written\":%d,\"width\":%d,\"height\":%d}",
+             id, s_window_shot_req, s_window_shot_ok, s_window_shot_w, s_window_shot_h);
+}
+/* screen_model - {"kind":0..3} sets the screen model live (as in settings:
+ * raw, crt, composite, trinitron; B189 CRT pass); reports the effective one. */
+static void handle_screen_model(int id, const char *json)
+{
+    int kind = json_get_int(json, "kind", -1);
+    if (kind >= 0) gpu_set_screen_kind(kind);
+    send_fmt("{\"id\":%d,\"ok\":true,\"screen_kind\":%d}", id, gpu_get_screen_kind());
+}
+
 static void handle_present_screenshot(int id, const char *json)
 {
     extern int gr_wide_supported(void);
@@ -13990,6 +14031,8 @@ static const CmdEntry s_commands[] = {
     { "dump_buffer",       handle_dump_buffer },
     { "wide_full",         handle_wide_full },
     { "wide_shot",         handle_wide_shot },
+    { "window_shot",       handle_window_shot },
+    { "screen_model",      handle_screen_model },
     { "gpu_opcodes",       handle_gpu_opcodes },
     { "gpu_ring_stats",    handle_gpu_ring_stats },
     { "gpu_frame_dump",    handle_gpu_frame_dump },

@@ -14,7 +14,7 @@ Kept free of other imports, like tools/ttt1_import_version.py.
 """
 from pathlib import Path
 
-DR_IMPORT_VERSION = 21             # 2: <Name>-DR-camera.txt (DR's move cameras)
+DR_IMPORT_VERSION = 23            # 2: <Name>-DR-camera.txt (DR's move cameras)
                                    # 3: DR's strong-hit effect on each attack record (byte 47)
                                    # 4: <Name>-DR-movelist.bin (COMMAND LIST from the Tekken wiki's DR page)
                                    # 5: dr-characters.txt, the DR characters' catalogue (C2 S5, tools/dr_catalog.py);
@@ -39,6 +39,10 @@ DR_IMPORT_VERSION = 21             # 2: <Name>-DR-camera.txt (DR's move cameras)
                                    #     the DR line's next change takes the higher + 1 at its merge
                                    # 21: DR's cries, swings, impacts and timed sounds on the DR moves
                                    #     (<Name>-DR-voices.juv, -sfx.jus; tools/psp/dr_move_sounds.py, F35, dev only)
+                                   # 22: a follow-up on the same animation goes on with it, not from frame 1
+                                   #     (dr_pack.goes_on: 4~3 on a fighter down, the L.L.R.K.'s 3+4; B165)
+                                   # 23: u/f+4 hits (DR's point 112 = the right foot, DR's forward jump); a new move's
+                                   #     recovery timed on the guard reaction it really gets (dr_pack.guard_window, B185)
 STAMP = 'dr-import-version.txt'
 CATALOG = 'dr-characters.txt'
 # The natives that have a DR moveset, in the order they were done (PSP-DR.md A3, A4, A5).

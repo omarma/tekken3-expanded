@@ -732,6 +732,9 @@ void psx_scheduler_resume_at(uint32_t resume_pc)
     /* longjmp abandons every mid-block CPS frame — sentinel RFE must not
      * treat the new top-level dispatch as a continuable live chain. */
     g_sched_top_level_resume = 1;
+    /* The abandoned frames included any host code that held save states off
+     * (savestate.h): their release will never run. */
+    { extern int psx_savestate_hold; psx_savestate_hold = 0; }
     longjmp(g_scheduler_jmpbuf, 1); /* unwind to psx_scheduler_run; never returns */
 }
 

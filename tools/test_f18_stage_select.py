@@ -21,6 +21,8 @@ injected on port 2: a PSX_DEBUG_TOOLS=ON build (build-dbg).
     moveset   B128: the same with the TTT1 catalogue (--ttt1), Tekken 3 fighters
               on both sides: player 1's MOVESET card, the dummy's pick: its
               card (TTT1), then the band, once; circle, again; T3 PAUL
+    p2practice B170: Practice started by player 2: player 2's card, the
+              dummy's (player 1's block, pad 2), then the band, once each
     quick     Practice with QUICK SELECT (the VS grid): the dummy's card, then
               the band, circle back to the grid, again, T3 PAUL: arena 0
     random    RANDOM of both games: the stage drawn and its music together
@@ -309,7 +311,7 @@ def moveset(args):
         g.press(CROSS); time.sleep(.8); g.shot(out / 'mv-2-p2-card.png')
         assert cards(2) == 1 and bands() == 0, f"the dummy's pick: {cards(2)} card(s), {bands()} band(s)"
         g.press(RIGHT); g.press(CROSS); time.sleep(.8); g.shot(out / 'mv-3-band.png')
-        assert 'P2 takes TTT1 moves' in g.logtext(), "the dummy's card was not taken on TTT1"
+        assert 'p2 takes ttt1 moves' in g.logtext().lower(), "the dummy's card was not taken on TTT1"
         assert bands() == 1 and g.value(SCREEN) == 9, f"the dummy's card taken: {bands()} band(s)"
         g.press(CIRCLE); time.sleep(.5)
         assert 'Practice, back to the grid' in g.logtext() and g.value(SCREEN) == 9, 'circle did not go back'
@@ -325,7 +327,7 @@ def moveset(args):
         assert bands() == 2 and cards(2) == 2, f'{bands()} bands, {cards(2)} dummy cards'
         assert arena == 0, f'not arena 0 ({arena})'
         assert g.value(MUSIC, 2) == 0x07, f"not Paul's music ({g.value(MUSIC, 2):#x})"
-        assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext()), 'the dummy is not on its TTT1 moves'
+        assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext(), re.I), 'the dummy is not on its TTT1 moves'
         print('\n'.join(l for l in g.logtext().splitlines()
                         if 'Stage select' in l or 'Native moves: P' in l or 'on the TTT1 moveset' in l))
         print("moveset: OK, the dummy's card, then the band, once each")
@@ -360,7 +362,7 @@ def quick(args):
             if n == 1:
                 g.press(RIGHT); time.sleep(.3)
             g.press(CROSS); time.sleep(.8)
-            assert g.logtext().count('P2 takes TTT1 moves') == n, "the dummy's card was not taken on TTT1"
+            assert g.logtext().lower().count('p2 takes ttt1 moves') == n, "the dummy's card was not taken on TTT1"
         assert bands() == n and dummy(), \
             f"the dummy's pick {n}: {bands()} band(s), blocks {g.vs_state(0)}, {g.vs_state(1)}"
     try:
@@ -388,11 +390,72 @@ def quick(args):
         assert arena == 0, f'not arena 0 ({arena})'
         assert g.value(MUSIC, 2) == 0x07, f"not Paul's music ({g.value(MUSIC, 2):#x})"
         if cards:
-            assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext()), 'the dummy is not on its TTT1 moves'
+            assert re.search(r'P2 \w+ on the TTT1 moveset', g.logtext(), re.I), 'the dummy is not on its TTT1 moves'
         print('\n'.join(l for l in g.logtext().splitlines()
                         if 'Stage select' in l or 'Native moves: P' in l or 'on the TTT1 moveset' in l))
         print('quick: OK')
     finally:
+        g.stop()
+
+
+GRID_BLOCKS, GRID_STRIDE = 0x8011864c, 0x7c   # the Arcade grid's player blocks: +0 state (1 choosing, 3 the CPU)
+
+
+def p2practice(args):
+    """B170 (GH#218): Practice started by player 2 (pad 2 on the modes
+    menu). Player 2 picks on the right; then the dummy, the CPU in player 1's
+    block (state 3), is picked with pad 2. Expected as when player 1 starts:
+    player 2's MOVESET card, then the dummy's card (P1), then the band, once
+    each; T3 PAUL: arena 0, music 0x07, the dummy on its TTT1 moves. In
+    1.5.0 the dummy's pick went straight to the fight (no card, no band)."""
+    out = Path(args.out).resolve()
+    ttt1 = Path(args.ttt1)
+    assert (ttt1 / 'natives.txt').is_file(), f'no natives.txt in {ttt1}'
+    g = Game(Path(args.build).resolve(), out / 'run-p2practice', Path(args.data), args.aspect == '16:9',
+             env={'TEKKEN3_TTT1_ASSETS': str(ttt1), 'TEKKEN3_STAGE_SELECT': 'vs=default,practice=default'})
+    bands = lambda: g.logtext().count('waits on the STAGE band')
+    cards = lambda p: g.logtext().count(f'Native moves: P{p} opens the MOVESET card')
+    grid = lambda: [g.value(GRID_BLOCKS + p * GRID_STRIDE) for p in (0, 1)]
+    human = lambda: [g.value(HUMAN + 2 * p, 2) for p in (0, 1)]
+    try:
+        to_menu(g, pad2=True)
+        g.write(LINE, menu_line(g, PRACTICE), 4)
+        g.p2(CROSS)
+        g.wait(lambda: g.value(SCREEN) == 9 and g.value(MODE) == PRACTICE, 'the Practice grid never came', 30)
+        time.sleep(2)
+        print('grid', grid(), 'human', human())
+        g.shot(out / 'p2-0-grid.png')
+        g.p2(CROSS); time.sleep(1); g.shot(out / 'p2-1-p2-card.png')
+        print('after the first pick: grid', grid(), 'cards', cards(1), cards(2))
+        assert cards(2) == 1 and bands() == 0, f"player 2's pick: {cards(2)} card(s), {bands()} band(s)"
+        g.p2(CROSS); time.sleep(1.5)
+        assert 'P2 takes T3 moves' in g.logtext(), "player 2's card was not taken"
+        print('player 2 done: grid', grid())
+        g.p2(CROSS); time.sleep(.8); g.shot(out / 'p2-2-dummy-card.png')
+        print('the dummy picked: grid', grid(), 'screen', g.value(SCREEN), 'cards', cards(1), cards(2), 'bands', bands())
+        assert cards(1) == 1 and bands() == 0, f"the dummy's pick: {cards(1)} card(s), {bands()} band(s)"
+        g.p2(RIGHT); g.p2(CROSS); time.sleep(.8); g.shot(out / 'p2-3-band.png')
+        assert 'p1 takes ttt1 moves' in g.logtext().lower(), "the dummy's card was not taken on TTT1"
+        assert bands() == 1 and g.value(SCREEN) == 9, f"the dummy's card taken: {bands()} band(s)"
+        g.p2(CIRCLE); time.sleep(.5)
+        assert 'Practice, back to the grid' in g.logtext() and g.value(SCREEN) == 9, 'circle did not go back'
+        g.p2(CROSS); time.sleep(.8)
+        assert cards(1) == 2 and bands() == 1, f'the pick after circle: {cards(1)} card(s), {bands()} band(s)'
+        g.p2(CROSS); time.sleep(.8)
+        assert bands() == 2, f'the card taken again: {bands()} band(s)'
+        g.p2(RIGHT); g.p2(RIGHT)
+        g.p2(CROSS); time.sleep(.5); g.shot(out / 'p2-4-paul.png')
+        g.p2(CROSS)
+        arena = fight_on(g, out, 'p2-5-fight')
+        assert 'Practice takes T3 PAUL' in g.logtext(), 'the band did not take T3 PAUL'
+        assert bands() == 2 and cards(1) == 2, f'{bands()} bands, {cards(1)} dummy cards'
+        assert arena == 0, f'not arena 0 ({arena})'
+        assert g.value(MUSIC, 2) == 0x07, f"not Paul's music ({g.value(MUSIC, 2):#x})"
+        assert re.search(r'P1 \w+ on the TTT1 moveset', g.logtext(), re.I), 'the dummy is not on its TTT1 moves'
+        print("p2practice: OK, player 2's card, the dummy's (P1), then the band")
+    finally:
+        print('\n'.join(l for l in g.logtext().splitlines()
+                        if 'Stage select' in l or 'Native moves: P' in l or 'on the TTT1 moveset' in l))
         g.stop()
 
 
@@ -490,7 +553,7 @@ def off(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('what', choices=['vs', 'practice', 'moveset', 'quick', 'random', 'option', 'off'])
+    ap.add_argument('what', choices=['vs', 'practice', 'moveset', 'p2practice', 'quick', 'random', 'option', 'off'])
     ap.add_argument('out')
     ap.add_argument('--build', default='build-rel-lite')
     ap.add_argument('--data', default=str(DATA))
@@ -498,7 +561,7 @@ def main():
     ap.add_argument('--seed', default=7, type=int, help='random: the draw (7: TTT PAUL)')
     ap.add_argument('--ttt1', default=str(DATA / 'ttt1'), help='moveset, quick: the TTT1 catalogue (natives.txt)')
     args = ap.parse_args()
-    {'vs': vs, 'practice': practice, 'moveset': moveset, 'quick': quick, 'random': random, 'option': option, 'off': off}[args.what](args)
+    {'vs': vs, 'practice': practice, 'moveset': moveset, 'p2practice': p2practice, 'quick': quick, 'random': random, 'option': option, 'off': off}[args.what](args)
 
 
 if __name__ == '__main__':

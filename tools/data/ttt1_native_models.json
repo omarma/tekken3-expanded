@@ -4,7 +4,10 @@
   "(select_apply_costume_button, ttt-ps1/src/menus/8016AEFC.c) : LP -> variante 0, LK -> 1, RP -> 2, RK -> 3,",
   "Start -> 4 si elle existe, sinon rien (null : Start ne choisit pas, comme la borne ; Tag retombe sur 0 mais n'existe pas sur PS1). PS1 : LP Carre, RP Triangle, LK Croix,",
   "RK Rond, Start. Exception choisie : Mokujin (pas de Tetsujin). Valeurs = emplacements TTT1 (table 0x8001110C),",
-  "planches : tools/ttt1/model/native_sheet.py. Gon, Dr. B et les soldats Force n'ont pas de modele TTT1."
+  "planches : tools/ttt1/model/native_sheet.py. Gon, Dr. B et les soldats Force n'ont pas de modele TTT1.",
+  "eyes_shut (B176) : emplacement -> expression du .face montree yeux fermes (clignement et coups de Tekken 3, acteur +0x1290),",
+  "a la place du clignement de la borne (0x801949C0) quand celui-ci n'est pas des yeux fermes : Xiaoyu 108 (3 = sourire,",
+  "yeux ouverts ; 84, memes images, a 4), Lei et Anna (0 : la borne ne les fait pas cligner). Choisi a l'oeil sur les images."
  ],
  "version": 1,
  "natives": {
@@ -39,6 +42,12 @@
     "LK": 75,
     "RK": 5,
     "Start": null
+   },
+   "eyes_shut": {
+    "4": 4,
+    "5": 4,
+    "74": 4,
+    "75": 4
    }
   },
   "king": {
@@ -99,6 +108,9 @@
     "slot": 85,
     "chance": "1/6",
     "doc": "la borne le donne une fois sur six quand Xiaoyu sort de la case aleatoire"
+   },
+   "eyes_shut": {
+    "108": 4
    }
   },
   "eddy": {
@@ -209,6 +221,12 @@
     "LK": 37,
     "RK": 111,
     "Start": null
+   },
+   "eyes_shut": {
+    "36": 4,
+    "37": 4,
+    "106": 4,
+    "111": 4
    }
   },
   "trueogre": {

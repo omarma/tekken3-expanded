@@ -64,7 +64,11 @@ class Conversion:
                 if w[6] < 0 or ri == 0: cache[ri] = (I3, [0.0, 0.0, 3000.0])
                 else:
                     Rp, Tp = fk(C.ttt1_part_row(w[6]))
-                    R = mul(Rp, mul(rot_rest([x & 0xffff for x in w[7:10]]), anim.get(ri, I3)))
+                    # a second mesh turns with the part it belongs to: the chest's (2, 3) and the pelvis's
+                    # (5, 6), with no offset nor rest angles, and the head's (22, 23: its parent, offset, angles)
+                    host = {2: 1, 3: 1, 5: 4, 6: 4, 22: 21, 23: 21}.get(ri)
+                    head = host if host and w[3:10] == row(T, host)[3:10] else ri
+                    R = mul(Rp, mul(rot_rest([x & 0xffff for x in w[7:10]]), anim.get(head, I3)))
                     cache[ri] = (R, [Tp[k] + sum(Rp[k][c] * w[3 + c] for c in range(3)) for k in range(3)])
             return cache[ri]
 

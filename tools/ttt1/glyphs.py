@@ -84,13 +84,11 @@ def segment(im, n):
 
 def data_track():
     """The disc's first track, as named in the cue the setup writes into disc/
-    (a Redump set keeps its own file names, a split single-file dump others)."""
-    import re
-    cue = ROOT / 'disc/Tekken 3 (USA).cue'
-    if cue.is_file():
-        found = re.search(r'FILE\s+"([^"]+)"', cue.read_text(errors='replace'))
-        if found and (ROOT / 'disc' / found[1]).is_file(): return ROOT / 'disc' / found[1]
-    return ROOT / 'disc/Tekken 3 (USA) (Track 1).bin'
+    (a Redump set keeps its own file names, a split single-file dump others):
+    tools/disc_track.py."""
+    import sys; sys.path.insert(0, str(ROOT / 'tools'))
+    from disc_track import data_track as track
+    return track(ROOT / 'disc')
 
 def alphabet():
     import sys; sys.path.insert(0, str(ROOT / 'tools'))

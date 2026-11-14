@@ -14,7 +14,7 @@ Kept free of other imports: launcher/setup_backend.py reads it at every start.
 """
 from pathlib import Path
 
-TTT1_IMPORT_VERSION = 19
+TTT1_IMPORT_VERSION = 28
 STAMP = 'import-version.txt'
 
 # Update steps (implemented in tools/ttt1_setup.py, update_step): name ->
@@ -42,6 +42,12 @@ STEPS = {
     'ui-hd': ('workspace', "Guests' portraits and grid tiles: truer colours, the portrait's fade, and HD above x1"),
     'native-models': ('workspace', "Tekken 3's own fighters on their TTT1 arcade models"),
     'native-movelists': ('roster', "Kuma's, Ogre's, Gun Jack's and True Ogre's TTT1 move lists in Practice"),
+    'waist-faces': ('workspace', "Guests' and Tekken 3's fighters' waists on their TTT1 models"),
+    'tetsujin-name': ('workspace', "The announcer calling Tetsujin's name"),
+    'cache-welds': ('workspace', "Joints of the guests and of Tekken 3's fighters on their TTT1 models, faces"),
+    'tetsujin-weapons': ('workspace', "Tetsujin's sword and dagger (Yoshimitsu's and Kunimitsu's moves)"),
+    'window-kinds': ('roster', "Lows pass under Yoshimitsu's Flea and the other TTT1 low crushes"),
+    'tetsujin-tail': ('roster', "Tetsujin's tail (Roger's and Alex's moves)"),
 }
 
 # What brings a roster from version n - 1 to n: its update steps, in order, or
@@ -138,6 +144,51 @@ UPDATES = {
     # tools/data/wiki): tools/ttt1/movelist.py was only given the guests, so they
     # showed Tekken 3's list. Nothing else changes.
     19: ['native-movelists'],
+    # 20: Anna's LP and LK models (slots 36 / 37): her dress panel 26 read
+    # buffer cells that piece 24 leaves just before it on the cabinet; baked
+    # into the right shin, 24 is drawn much earlier, the cells were overwritten
+    # and the panel's top hung from her right shoulder (B153, GH#201). Those
+    # values now go through the cache (convert.stale_buffer_reads, route_stale).
+    # Only Anna-Native-TTT1-arcade-P1 / P2 change.
+    20: ['native-models'],
+    # 21 (B157, GH#199): Unknown's wolf again. Its glow
+    # pack takes TTT1's whole tables (A 36, B 45, C 36 images, C at full size), which the
+    # runtime uploads frame by frame (pack version 2), and its model loses the double faces
+    # the converter gives a guest's pelvis and legs (convert(double_sided=False)): its
+    # back's inner faces showed through the ribs of its belly.
+    21: ['unknown-wolf'],
+    # 22 (B160, GH#210): the converter's double faces (Lee's knee, 3) only
+    # on welds that touch a leg. The pelvis's waist welds (to the chest, or between the pelvis's
+    # two meshes) gave it double faces too, drawn at their depth rank: the inside of Hwoarang's
+    # jacket (LP, RP) showed over his belly. Guests' and natives' pelvis rows change.
+    22: ['waist-faces'],
+    # 23 (F37): Xiaoyu's hidden costume, the
+    # cabinet's variant 7 (model 85, its random cell's one time in six), as
+    # Xiaoyu-Native-TTT1-arcade-P8 (F37); no button picks it.
+    23: ['native-models'],
+    # 24 (B173, GH#225): Tetsujin's name, which TTT1 splices from three driver samples
+    # (driver sound 0x120, tools/ttt1/sfx.py NAME_RAW), in each of its sound
+    # packs (index 1025). Nothing else changes.
+    24: ['tetsujin-name'],
+    # 25 (B176, GH#228): the converter's exact welds (14) on the cache's welds
+    # too: a weld of free weights (12/4, 4/12) to a vertex left in the cache became the PS1's 8/8,
+    # so Xiaoyu's right thigh (punch models) stuck to her pelvis and her knees bent wrong. Guests'
+    # and natives' models change. The natives' faces too: Xiaoyu's gold LK costume, Lei and Anna
+    # shut their eyes with a closed-eye image (tools/data/ttt1_native_models.json, eyes_shut).
+    25: ['cache-welds'],
+    # 26: Tetsujin's and Kinjin's sword and dagger on Yoshimitsu's and Kunimitsu's moves, which
+    # TTT1 draws by code for body 15 (tools/ttt1/stick.py, B177, GH#223): their .stick holds the
+    # sword then the dagger; model and textures unchanged.
+    26: ['tetsujin-weapons'],
+    # 27: a record's window kind (attributes bits 11..15) renumbered from TTT1's
+    # to Tekken 3's: TTT1's 13, the low crush (Yoshimitsu's Flea, u+1+2: a low
+    # passes under him), is T3's 12; T3 read it as 13 and every low hit him on his
+    # sword (B179, GH#221). tools/ttt1_retrofit_window_kinds.py.
+    27: ['window-kinds'],
+    # 28: Tetsujin's and Kinjin's tail on Roger's and Alex's moves (tools/ttt1/tail.py,
+    # feat/tetsujin-tail, GH#223): the shapes of Mokujin's in Tekken 5 DR, the body's
+    # reflection tile; written from their .stick, which the roster now stages too.
+    28: ['tetsujin-tail'],
 }
 
 

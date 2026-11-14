@@ -1,6 +1,6 @@
 """ROM-free checks for setup integrity, archive boundaries and cancellation."""
 from pathlib import Path
-import contextlib,hashlib,io,json,os,re,shutil,subprocess,sys,tempfile,time,unittest,zipfile
+import contextlib,hashlib,io,json,os,re,shutil,struct,subprocess,sys,tempfile,time,unittest,zipfile
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import setup_backend as backend
@@ -16,6 +16,91 @@ class SetupTests(unittest.TestCase):
             self.assertEqual(backend.cue_for(image),root/'Tekken 3.cue')
             other=root/'other.bin';other.write_bytes(b'x')
             self.assertEqual(backend.cue_for(other),other)
+
+    def test_the_tools_read_the_data_track_the_cue_names(self):
+        # B187: a Redump set keeps its names in disc/ ("Tekken 3 (USA) (Track 1).bin"), a split
+        # single-file dump takes its stem's ("Tekken 3 (Track 1).bin"); the DR step opened the
+        # latter by name and failed on the former, the setup going on without the DR movesets.
+        tools=Path(__file__).resolve().parents[1]/'tools'
+        sys.path[:0]=[str(tools),str(tools/'t5')]
+        import disc_track,bns_tool,t3_moveset
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            # Redump: as prepare_disc stages it (the cue always named after game.toml's cue_name).
+            redump=root/'redump';redump.mkdir()
+            for n in (1,2,3):(redump/f'Tekken 3 (USA) (Track {n}).bin').write_bytes(b'\0'*2352)
+            (redump/'Tekken 3 (USA).cue').write_text(''.join(
+                f'FILE "Tekken 3 (USA) (Track {n}).bin" BINARY\n  TRACK 0{n} {"MODE2/2352" if n==1 else "AUDIO"}\n    INDEX 01 00:00:00\n'
+                for n in (1,2,3)))
+            self.assertEqual(disc_track.data_track(redump),redump/'Tekken 3 (USA) (Track 1).bin')
+            # Single file: split by the setup itself, the cue renamed by prepare_disc.
+            single=root/'single';single.mkdir();(single/'Tekken 3.bin').write_bytes(b'\1'*2352*3)
+            (single/'Tekken 3.cue').write_text('FILE "Tekken 3.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n'
+                                              '  TRACK 02 AUDIO\n    INDEX 01 00:00:01\n  TRACK 03 AUDIO\n    INDEX 01 00:00:02\n')
+            with patch.object(backend,'STATE',root/'state'),patch.object(backend,'emit'):
+                cue=backend.single_bin(single/'Tekken 3.cue')
+            disc=root/'disc';shutil.copytree(cue.parent,disc);(disc/cue.name).rename(disc/'Tekken 3 (USA).cue')
+            self.assertEqual(disc_track.data_track(disc),disc/'Tekken 3 (Track 1).bin')
+            # The DR step's reading of the Tekken 3 moves (tools/t5/t3_moveset.py disc_ram).
+            (redump/'SLUS_004.02').write_bytes(b'\0'*0x1000)
+            opened=[]
+            class Stop(Exception):pass
+            def source(path):opened.append(Path(path));raise Stop
+            with patch.object(t3_moveset,'disc_dir',return_value=redump),\
+                 patch.object(bns_tool,'load_us_table',return_value=({},None,None)),\
+                 patch.object(bns_tool,'open_bns_source',side_effect=source):
+                with self.assertRaises(Stop):t3_moveset.disc_ram('jin')
+            self.assertEqual(opened,[redump/'Tekken 3 (USA) (Track 1).bin'])
+            with self.assertRaises(FileNotFoundError):disc_track.data_track(root/'state')
+
+    def test_a_failed_build_names_its_first_compiler_error(self):
+        # B164 (GH#208): the message named no step, the log was 2,600 lines.
+        output=('[1/64] Building CXX object x.o\nFAILED: [code=1] x.o\n'
+                '/home/deck/Games/t/rabbitizer/include/instructions/RabbitizerInstrId.h:22:32: warning: ignored\n'
+                "/home/deck/Games/t/rabbitizer/include/instructions/RabbitizerInstrId.h:22:32: error: 'RabbitizerInstrId' was not declared in this scope\n"
+                '/home/deck/Games/t/b.c:3: error: later\nninja: build stopped: subcommand failed.\n')
+        command=[sys.executable,'-c',f'import sys;sys.stdout.write({output!r});sys.exit(1)']
+        friendly='The game files could not be prepared. Open the setup log for details, then click Try again.'
+        with tempfile.TemporaryDirectory() as temp,patch.object(backend,'STATE',Path(temp)),patch.object(backend,'emit'):
+            with self.assertRaises(backend.SetupError) as raised:backend.run(command,directory=temp,friendly=friendly)
+            self.assertEqual(str(raised.exception),"The game files could not be prepared. The first error is in "
+                "RabbitizerInstrId.h: 'RabbitizerInstrId' was not declared in this scope. "
+                'Open the setup log for details, then click Try again.')
+            with self.assertRaises(backend.SetupError) as raised:
+                backend.run([sys.executable,'-c','import sys;sys.exit(1)'],directory=temp,friendly=friendly)
+            self.assertEqual(str(raised.exception),friendly)
+        self.assertEqual(backend.compiler_error(r'C:\T\src\a b.c:12:3: fatal error: x.h: No such file'),'a b.c: x.h: No such file')
+
+    def test_rabbitizer_headers_made_again_when_damaged(self):
+        # B164 (GH#208): headers left empty by an earlier configure stayed, and
+        # every build after failed in rabbitizer. The recompiler's own block,
+        # run by the real CMake on a copy of the rabbitizer tables.
+        cmake=shutil.which('cmake');ninja=shutil.which('ninja')
+        compiler=shutil.which('cc') or shutil.which('clang') or shutil.which('gcc')
+        if not (cmake and ninja and compiler):self.skipTest('needs cmake, ninja and a GCC or Clang driver on PATH')
+        recompiler=Path(__file__).resolve().parents[1]/'psxrecomp/recompiler'
+        text=(recompiler/'CMakeLists.txt').read_text(encoding='utf-8')
+        start=text.index('if(NOT MSVC)\n    set(_rbz ');block=text[start:text.index('\n# Rabbitizer MIPS decoder',start)]
+        with tempfile.TemporaryDirectory(prefix='tekken-rbz-') as temp:
+            root=Path(temp);shutil.copytree(recompiler/'lib/rabbitizer/tables',root/'lib/rabbitizer/tables')
+            (root/'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20)\nproject(Rbz C)\n'+block+'\n',encoding='utf-8')
+            def configure():
+                done=subprocess.run([cmake,'-S',str(root),'-B',str(root/'build'),'-G','Ninja',
+                                     f'-DCMAKE_MAKE_PROGRAM={ninja}',f'-DCMAKE_C_COMPILER={compiler}'],
+                                    capture_output=True,text=True,timeout=120)
+                self.assertEqual(done.returncode,0,done.stdout+done.stderr)
+                return done.stdout
+            headers=[root/'lib/rabbitizer/include/generated/InstrId_enum.h',
+                     root/'lib/rabbitizer/cplusplus/include/generated/Registers_enum_classes.hpp']
+            self.assertRegex(configure(),r'Rabbitizer table headers written: \d+')
+            good=[path.read_bytes() for path in headers]
+            self.assertIn(b'typedef enum RabbitizerInstrId',good[0]);self.assertIn(b'enum class GprO32',good[1])
+            other=root/'lib/rabbitizer/include/generated/Abi_enum.h';date=other.stat().st_mtime_ns
+            headers[0].write_bytes(b'');headers[1].write_bytes(good[1][:200])     # empty, cut short
+            self.assertIn('Rabbitizer table headers written: 2 ',configure())
+            self.assertEqual([path.read_bytes() for path in headers],good)
+            self.assertEqual(other.stat().st_mtime_ns,date)                         # untouched: nothing to rebuild
+            self.assertNotIn('Rabbitizer table headers written',configure())
 
     @unittest.skipUnless(os.environ.get('PSXRECOMP_TEST_TOOLCHAIN'),'Set PSXRECOMP_TEST_TOOLCHAIN to run real CMake/Ninja regression')
     def test_future_timestamp_build_loop_and_retry(self):
@@ -272,6 +357,36 @@ class SetupTests(unittest.TestCase):
                 backend.free_space()
             self.assertFalse(spare.exists());self.assertTrue(all(p.exists() for p in kept))
 
+    def test_fit_window_stays_in_the_work_area(self):
+        import easy_launcher
+        self.assertEqual(easy_launcher.fit_window((646,859),(0,0,1920,1032),(16,40)),(646,859,629,66))   # fits: natural size, centered
+        self.assertEqual(easy_launcher.fit_window((646,859),(0,0,1280,672),(16,40)),(646,632,309,0))     # 720p: cut to the work area
+        self.assertEqual(easy_launcher.fit_window((2000,900),(100,50,1280,672),(16,40)),(1264,632,100,50))
+
+    def test_small_screen_keeps_the_buttons_and_scrolls_the_options(self):
+        try:import tkinter;tkinter.Tk().destroy()
+        except Exception:self.skipTest('no Tk window here')
+        import easy_launcher
+        seen={}
+        def hook(app):
+            w=app.window
+            def check():
+                w.update()
+                seen['size']=(w.winfo_width(),w.winfo_height())
+                p=app.primary;seen['button']=(p.winfo_rooty()+p.winfo_height()-w.winfo_rooty(),p.winfo_ismapped())
+                seen['bar']=app.scrollbar.winfo_ismapped()
+                app.canvas.yview_moveto(1);w.update()
+                c=app.cinematics_check;bottom=c.winfo_rooty()+c.winfo_height()
+                seen['last']=app.canvas.winfo_rooty()<=c.winfo_rooty() and bottom<=app.canvas.winfo_rooty()+app.canvas.winfo_height()
+                w.destroy()
+            w.after(200,check)
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(backend,'STATE',Path(temp)/'.setup'),patch.object(easy_launcher,'work_area',return_value=(0,0,1280,672)):
+                easy_launcher.gui(test_hook=hook)
+        self.assertLessEqual(seen['size'][1],672-40);self.assertLessEqual(seen['size'][0],1280)
+        self.assertTrue(seen['button'][1]);self.assertLessEqual(seen['button'][0],seen['size'][1])   # Set up & play shows
+        self.assertTrue(seen['bar']);self.assertTrue(seen['last'])                                     # the last option scrolls into view
+
     @unittest.skipUnless(os.name=='nt','Windows process ownership')
     def test_window_asks_before_starting_with_an_unusable_optional_file(self):
         try:import tkinter;tkinter.Tk().destroy()
@@ -293,6 +408,25 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(seen[0],('tekken3',False,'Choose another tekken3.zip'))
         self.assertEqual(seen[1][seen[1].index('--tekken3')+1],str(bad))   # the backend logs it and goes on
 
+    def test_ttt_settings_stay_together_before_the_dr_content(self):
+        try:import tkinter;tkinter.Tk().destroy()
+        except Exception:self.skipTest('no Tk window here')
+        import easy_launcher
+        seen={}
+        def hook(app):
+            rows=app.window.winfo_children()[0].pack_slaves()
+            where=lambda widget:next(i for i,row in enumerate(rows) if row==widget or str(widget).startswith(str(row)+'.'))
+            seen['order']=[where(w) for w in (app.cinematics_check,app.dr_check,app.dr_controls[0])]
+            seen['dr']=[w.winfo_class() for w in app.dr_controls]
+            app.ttt1.set(True);app.dr_content.set(False);app.update_ttt1()
+            seen['states']=(str(app.cinematics_check['state']),str(app.dr_check['state']),str(app.dr_controls[0]['state']))
+            app.window.after(0,app.window.destroy)
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(backend,'STATE',Path(temp)/'.setup'):easy_launcher.gui(test_hook=hook)
+        self.assertEqual(seen['order'],sorted(seen['order']))   # TTT Cinematics, then the DR box, then its disc
+        self.assertEqual(seen['dr'],['TEntry','TButton'])      # the DR disc's field, not another one
+        self.assertEqual(seen['states'],('normal','normal','disabled'))
+
     def test_cancel_closes_owned_worker(self):
         job=ProcessJob()
         child=subprocess.Popen([sys.executable,'-c','import sys,time;sys.stdin.readline();time.sleep(120)'],stdin=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW)
@@ -302,6 +436,202 @@ class SetupTests(unittest.TestCase):
         finally:
             job.close();child.stdin.close()
             if child.poll() is None:child.terminate();child.wait()
+
+class PpssppSearchTests(unittest.TestCase):
+    """B162 (GH#206): PPSSPP's VFPU tables found outside C:'s Program Files (tools/ppsspp_vfpu.py):
+    simulated folders only, the real PATH, registry, drives and shortcuts left out."""
+    def setUp(self):
+        backend.dr_tools()
+        import ppsspp_vfpu
+        self.P=ppsspp_vfpu
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        self.root=Path(temp.name);self.home=self.root/'home';self.home.mkdir()
+        self.path={}
+        for name,value in dict(_registry=lambda:iter(()),_drives=lambda:[],_shortcuts=lambda home:iter(())).items():
+            patcher=patch.object(ppsspp_vfpu,name,side_effect=value);patcher.start();self.addCleanup(patcher.stop)
+        patcher=patch.object(ppsspp_vfpu.shutil,'which',side_effect=lambda exe:self.path.get(exe));patcher.start();self.addCleanup(patcher.stop)
+        env={k:v for k,v in os.environ.items() if k not in ('PPSSPP_VFPU','SCOOP','SCOOP_GLOBAL','ChocolateyInstall')}
+        c=self.root/'C'
+        env.update({'ProgramFiles':str(c/'Program Files'),'ProgramFiles(x86)':str(c/'Program Files (x86)'),
+                    'ProgramW6432':str(c/'Program Files'),'LOCALAPPDATA':str(c/'Local'),'APPDATA':str(c/'Roaming'),
+                    'ProgramData':str(c/'ProgramData')})
+        patcher=patch.dict(os.environ,env,clear=True);patcher.start();self.addCleanup(patcher.stop)
+        patcher=patch.object(ppsspp_vfpu,'HOST',self.root/'no-host');patcher.start();self.addCleanup(patcher.stop)   # not in a container
+
+    def ppsspp(self,folder,exe='PPSSPPWindows64.exe',below='assets/vfpu',tables=None):
+        folder.mkdir(parents=True,exist_ok=True)
+        if exe:(folder/exe).write_bytes(b'MZ')
+        vfpu=folder/below;vfpu.mkdir(parents=True,exist_ok=True)
+        for t in tables or self.P.TABLES:(vfpu/f'{t}.dat').write_bytes(b'\1')
+        return vfpu.resolve()
+
+    def as_system(self,windows=False,mac=False):
+        for name,value in (('WINDOWS',windows),('MAC',mac)):
+            patcher=patch.object(self.P,name,value);patcher.start();self.addCleanup(patcher.stop)
+
+    def test_nothing_found_says_what_to_choose(self):
+        self.as_system(windows=True)
+        self.assertIsNone(self.P.vfpu_dir(home=self.home))
+        text=self.P.problem(home=self.home)
+        self.assertIn('PPSSPP was not found',text);self.assertIn('Browse beside PPSSPP folder',text)
+        self.assertIn('PPSSPPWindows64.exe',text);self.assertNotRegex(text,r'\b[Ww]e\b')
+
+    def test_a_portable_zip_chosen_by_its_folder_its_program_or_above_it(self):
+        folder=self.root/'D/Games/ppsspp_win';vfpu=self.ppsspp(folder)
+        for choice in (folder,folder/'PPSSPPWindows64.exe',self.root/'D/Games',   # the folder the zip was extracted into
+                       folder/'assets',vfpu,f'"{folder}"',f'  {folder}  '):
+            self.assertEqual(self.P.vfpu_dir(choice,home=self.home),vfpu,choice)
+        self.assertIsNone(self.P.problem(folder,home=self.home))
+
+    def test_a_portable_zip_in_downloads_is_found(self):
+        self.as_system(windows=True)
+        vfpu=self.ppsspp(self.home/'Downloads/ppsspp_win')
+        self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+
+    def test_another_drives_program_files_and_root_folders(self):
+        self.as_system(windows=True)
+        drive=self.root/'D'
+        with patch.object(self.P,'_drives',return_value=[drive]):
+            vfpu=self.ppsspp(drive/'Program Files/PPSSPP');self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+            shutil.rmtree(drive/'Program Files')
+            vfpu=self.ppsspp(drive/'PPSSPP_win64');self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+            shutil.rmtree(drive/'PPSSPP_win64')
+            vfpu=self.ppsspp(drive/'Emulators/PPSSPP 1.19');self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+            shutil.rmtree(drive/'Emulators')
+            vfpu=self.ppsspp(drive/'PPSSPP portable/ppsspp_win');self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)   # the zip's own folder inside
+
+    def test_the_registry_or_a_shortcut_points_to_it(self):
+        self.as_system(windows=True)
+        folder=self.root/'E/Apps/Emu/PP';vfpu=self.ppsspp(folder)
+        with patch.object(self.P,'_registry',side_effect=lambda:iter([folder])):
+            self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+        with patch.object(self.P,'_shortcuts',side_effect=lambda home:iter([folder])):
+            self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+
+    def test_a_shortcut_target_is_read(self):
+        target='D:\\Games\\ppsspp\\PPSSPPWindows64.exe'
+        base=target.encode('latin-1')+b'\0';wide=target.encode('utf-16-le')+b'\0\0'
+        head=0x24;volume=b'\x10\0\0\0'+bytes(12)
+        local=head+len(volume);suffix=local+len(base);uni=suffix+1;usuffix=uni+len(wide)
+        body=volume+base+b'\0'+wide+b'\0\0'
+        info=struct.pack('<9I',head+len(body),head,1,head,local,0,suffix,uni,usuffix)+body
+        lnk=struct.pack('<I',0x4C)+bytes(16)+struct.pack('<I',0x82)+bytes(52)+info   # HasLinkInfo, IsUnicode
+        path=self.root/'PPSSPP.lnk';path.write_bytes(lnk)
+        self.assertEqual(str(self.P.lnk_target(path)).replace('/','\\'),target)
+        path.write_bytes(b'not a shortcut');self.assertIsNone(self.P.lnk_target(path))
+
+    def test_linux_on_the_path(self):
+        self.as_system()
+        prefix=self.root/'usr';(prefix/'bin').mkdir(parents=True);(prefix/'bin/PPSSPPSDL').write_bytes(b'ELF')
+        vfpu=self.ppsspp(prefix/'share/ppsspp',exe=None)
+        self.path['PPSSPPSDL']=str(prefix/'bin/PPSSPPSDL')
+        self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+        self.path.clear();self.path['ppsspp']=str(self.root/'build/ppsspp')     # a build: assets beside the program
+        vfpu=self.ppsspp(self.root/'build',exe='ppsspp');self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+
+    def test_linux_flatpak_of_the_user(self):
+        self.as_system()
+        files=self.home/'.local/share/flatpak/app/org.ppsspp.PPSSPP/current/active/files'
+        vfpu=self.ppsspp(files/'share/ppsspp',exe=None);self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+        shutil.rmtree(files/'share')
+        vfpu=self.ppsspp(files/'lib/ppsspp',exe=None);self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)   # another layout
+
+    def test_macos_app(self):
+        self.as_system(mac=True)
+        app=self.home/'Applications/PPSSPP.app'
+        vfpu=self.ppsspp(app/'Contents/Resources',exe=None);self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+        self.assertEqual(self.P.vfpu_dir(app,home=self.home),vfpu)
+
+    def test_a_missing_table_or_an_old_ppsspp_is_not_used(self):
+        self.as_system(windows=True)
+        folder=self.root/'D/PPSSPP';self.ppsspp(folder,tables=self.P.TABLES[:-1])
+        self.assertIsNone(self.P.vfpu_dir(folder,home=self.home))
+        shutil.rmtree(folder/'assets/vfpu')                                    # older than its VFPU tables
+        text=self.P.problem(folder,home=self.home)
+        self.assertIn('too old',text);self.assertIn(f'No PPSSPP VFPU tables (assets/vfpu) in {folder}',text)
+
+    def test_the_choice_then_ppsspp_vfpu_then_the_search(self):
+        chosen=self.ppsspp(self.root/'chosen');other=self.ppsspp(self.root/'other')
+        self.ppsspp(self.home/'Downloads/ppsspp')
+        with patch.dict(os.environ,PPSSPP_VFPU=str(other)):
+            self.assertEqual(self.P.vfpu_dir(self.root/'chosen',home=self.home),chosen)
+            self.assertEqual(self.P.vfpu_dir(home=self.home),other)
+            self.assertEqual(self.P.vfpu_dir(self.root/'nothing',home=self.home),other)   # a wrong choice falls back
+
+    def test_an_appimage_is_named_with_what_to_do(self):
+        self.as_system()
+        (self.home/'Applications').mkdir();image=self.home/'Applications/PPSSPP-v1.19-anylinux-x86_64.AppImage'
+        image.write_bytes(b'ELF')
+        self.assertIn('--appimage-extract',self.P.problem(home=self.home))
+        self.assertIn('squashfs-root',self.P.problem(image,home=self.home))
+
+    def in_distrobox(self):
+        """B184 (GH#238): a Steam Deck's distrobox, the host's root under /run/host (simulated)."""
+        self.as_system();host=self.root/'run/host';host.mkdir(parents=True)
+        patcher=patch.object(self.P,'HOST',host);patcher.start();self.addCleanup(patcher.stop)
+        return host
+
+    def test_steam_deck_host_system_flatpak_from_distrobox(self):
+        host=self.in_distrobox()
+        app=host/'var/lib/flatpak/app/org.ppsspp.PPSSPP'
+        vfpu=self.ppsspp(app/'current/active/files/share/ppsspp',exe=None)
+        self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)
+        self.assertIsNone(self.P.problem(home=self.home))
+
+    def test_steam_deck_flatpak_app_folder_chosen_or_pasted_as_a_host_path(self):
+        host=self.in_distrobox()
+        app=host/'var/lib/flatpak/app/org.ppsspp.PPSSPP'
+        vfpu=self.ppsspp(app/'x86_64/stable/0123abcd/files/share/ppsspp',exe=None)   # current/active are links: walked past
+        for choice in (app,'/var/lib/flatpak/app/org.ppsspp.PPSSPP',              # pasted from the Deck's file manager
+                       '/var/lib/flatpak/app/org.ppsspp.PPSSPP/x86_64/stable/0123abcd/files/share/ppsspp/assets'):
+            self.assertEqual(self.P.vfpu_dir(choice,home=self.home),vfpu,choice)
+        user=self.home/'.local/share/flatpak/app/org.ppsspp.PPSSPP'; shutil.rmtree(app)
+        vfpu=self.ppsspp(user/'x86_64/stable/89ef/files/share/ppsspp',exe=None)
+        self.assertEqual(self.P.vfpu_dir(user,home=self.home),vfpu)
+
+    def test_steam_deck_emudeck_user_flatpak_with_a_container_home(self):
+        host=self.in_distrobox()
+        with patch.dict(os.environ,USER='deck'):
+            vfpu=self.ppsspp(host/'home/deck/.local/share/flatpak/app/org.ppsspp.PPSSPP/current/active/files/share/ppsspp',exe=None)
+            self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)                 # distrobox create --home: the host's home
+            shutil.rmtree(host/'home')
+            vfpu=self.ppsspp(self.home/'.local/share/flatpak/app/org.ppsspp.PPSSPP/current/active/files/share/ppsspp',exe=None)
+            self.assertEqual(self.P.vfpu_dir(home=self.home),vfpu)                 # the shared home (EmuDeck's --user)
+
+    def test_steam_deck_message_says_what_to_paste(self):
+        self.in_distrobox()
+        text=self.P.problem(home=self.home)
+        self.assertIn('Steam Deck',text);self.assertIn('~/.local/share/flatpak/app/org.ppsspp.PPSSPP',text)
+        self.assertIn('/var/lib/flatpak/app/org.ppsspp.PPSSPP',text);self.assertNotRegex(text,r'[Ww]e')
+
+    def test_a_host_path_is_not_rewritten_outside_a_container(self):
+        self.as_system();host=self.root/'run/host'
+        self.ppsspp(host/'var/lib/flatpak/app/org.ppsspp.PPSSPP/current/active/files/share/ppsspp',exe=None)
+        self.assertIsNone(self.P.vfpu_dir('/var/lib/flatpak/app/org.ppsspp.PPSSPP',home=self.home))   # HOST is no-host here
+
+    def test_the_window_has_a_ppsspp_folder_with_the_dr_disc(self):
+        try:import tkinter;tkinter.Tk().destroy()
+        except Exception:self.skipTest('no Tk window here')
+        import easy_launcher
+        vfpu=self.ppsspp(self.root/'D/ppsspp_win');seen={}
+        def hook(app):
+            seen['kinds']=[w.winfo_class() for w in app.ppsspp_controls]
+            app.ttt1.set(True);app.dr_content.set(False);app.update_ttt1()
+            seen['off']=[str(w['state']) for w in app.ppsspp_controls]
+            app.dr_content.set(True);app.update_ttt1();app.ppsspp.set(str(self.root/'D/ppsspp_win'));app.check_ppsspp()
+            seen['on']=[str(w['state']) for w in app.ppsspp_controls];seen['note']=app.ppsspp_note.get()
+            app.window.after(0,app.window.destroy)
+        with patch.object(backend,'STATE',self.root/'.setup'):easy_launcher.gui(test_hook=hook)
+        self.assertEqual(seen['kinds'],['TEntry','TButton'])
+        self.assertEqual(seen['off'],['disabled','disabled']);self.assertEqual(seen['on'],['normal','normal'])
+        self.assertEqual(seen['note'],f'PPSSPP found: {vfpu.parent.parent}')
+
+    def test_the_window_line_says_where(self):
+        vfpu=self.ppsspp(self.root/'D/ppsspp_win')
+        found,text=backend.ppsspp_note(str(self.root/'D/ppsspp_win'))
+        self.assertTrue(found);self.assertEqual(text,f'PPSSPP found: {vfpu.parent.parent}')
+        found,text=backend.ppsspp_note(str(self.root/'nowhere'))
+        self.assertFalse(found);self.assertIn('No PPSSPP VFPU tables',text)
 
 class UpdateTests(unittest.TestCase):
     """An existing install after a git pull or a new release zip: the setup
@@ -421,6 +751,7 @@ class UpdateTests(unittest.TestCase):
     def packs(self,folder,stamp):
         folder.mkdir(parents=True,exist_ok=True)
         for s in self.A.STAGES:(folder/self.A.pack_name(s)).write_bytes(b'ASTG')
+        for name in self.A.face_names():(folder/name).write_bytes(b'FACE')
         (folder/'version.txt').write_text(f'{stamp}\n')
 
     def with_tekken3(self,**ready):
@@ -947,6 +1278,16 @@ class UpdateTests(unittest.TestCase):
 
     def dr_runs(self):
         return [c for c in self.commands if len(c)>1 and c[1].endswith('dr_setup.py')]
+
+    def test_dr_chosen_ppsspp_is_kept_and_given_to_dr_setup(self):
+        # B162: the PPSSPP folder chosen in the setup goes to the check and to dr_setup.py, and an update keeps it.
+        self.with_dr_iso()
+        inputs=backend.load_json(self.paths['STATE']/'last-inputs.json');inputs.update(ppsspp=r'D:\PPSSPP',dr_content=True)
+        backend.save_json(self.paths['STATE']/'last-inputs.json',inputs)
+        with patch.object(backend.dr_tools()[1],'iso_problem',return_value=None) as check:backend.update_install()
+        self.assertEqual(check.call_args.args[1],r'D:\PPSSPP')
+        run=self.dr_runs()[0];self.assertEqual(run[run.index('--ppsspp')+1],r'D:\PPSSPP')
+        self.assertEqual(backend.load_json(self.paths['STATE']/'last-inputs.json')['ppsspp'],r'D:\PPSSPP')
 
     def test_dr_disc_adds_the_dr_movesets_once(self):
         self.with_dr_iso()

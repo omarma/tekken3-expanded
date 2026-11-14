@@ -17,8 +17,8 @@ wolf's actor (their addresses from the log):
 - place: its root trails hers by about 800 behind (0x8016968C: target 800
   behind and 150 above, x / 6 and y, z / 8 a frame), on the side away from
   the opponent;
-- drawing: its packets read the upper VRAM half (texpage bit 11) additively
-  (ABR 1) with the semi-transparent bit, and some are linked in the frame.
+- drawing: its packets read the upper VRAM half (texpage bit 11), opaque as
+  the arcade's (B157), and some are linked in the frame.
 
 --off: TEKKEN3_UNKNOWN_WOLF=0, the same fight without the wolf (the checks then
 expect none). --shots N: N captures, a quarter of a second apart, in
@@ -164,7 +164,7 @@ def place(g, side, wolf):
 
 def packets_check(g, block_address):
     """The wolf's packets (the layout of make_packets): how many, how many
-    additive in the upper half with the semi-transparent bit, how many linked."""
+    opaque in the upper half (as the arcade's, B157), how many linked."""
     block = g.read(block_address, PACKETS)
     sizes, q, cmds, upper, linked = {4: 32, 5: 40, 6: 40, 7: 52}, 0, 0, 0, 0
     while q + 8 <= len(block):
@@ -173,7 +173,7 @@ def packets_check(g, block_address):
         if not 0x24 <= op <= 0x3f: q += 32; continue
         tp = struct.unpack_from('<I', block, q + (24 if op >= 0x34 else 20))[0] >> 16
         cmds += 1
-        upper += bool(op & 2) and tp & 0x800 and (tp >> 5 & 3) == 1
+        upper += not op & 2 and bool(tp & 0x800)
         linked += tag_word >> 24 != 0
         q += sizes[op >> 3]
     return cmds, upper, linked
@@ -237,9 +237,9 @@ def main():
             if near[s] < n * .8: failures.append(f'P{s}: wolf 200..2500 from her in {near[s]}/{n} samples only')
             if behind[s] < n * .6: failures.append(f'P{s}: wolf behind her in {behind[s]}/{n} samples only')
             cmds, upper, linked = drawn.get(s, (0, 0, 0))
-            print(f'P{s}: packets {cmds}, semi-transparent additive in the upper half {upper}, linked {linked} '
+            print(f'P{s}: packets {cmds}, opaque in the upper half {upper}, linked {linked} '
                   f'(paused)', flush=True)
-            if not cmds or upper < cmds: failures.append(f'P{s}: packets {upper}/{cmds} additive in the upper half')
+            if not cmds or upper < cmds: failures.append(f'P{s}: packets {upper}/{cmds} opaque in the upper half')
             if not linked: failures.append(f'P{s}: no packet linked')
     finally:
         g.stop()

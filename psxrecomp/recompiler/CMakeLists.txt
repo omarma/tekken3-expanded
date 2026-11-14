@@ -30,60 +30,83 @@ endif()
 # explicit language instead, reproducing tables/tools/c_table_gen.sh.
 # Runs with any GNU-style driver (clang/gcc, including the Windows setup's
 # clang pack); only MSVC's cl.exe, which lacks -x c, is left out.
+#
+# Made again at every configure, and a header written only when it differs
+# (no rebuild otherwise): a header left empty or cut short by an earlier
+# configure (a full disk, an interrupted setup) used to stay forever, since
+# only InstrId_enum.h's presence was checked, and every later build then
+# failed in rabbitizer with "'RabbitizerInstrId' was not declared" (B164,
+# GH#208, Steam Deck).
 if(NOT MSVC)
     set(_rbz "${CMAKE_CURRENT_SOURCE_DIR}/lib/rabbitizer")
-    if(NOT EXISTS "${_rbz}/include/generated/InstrId_enum.h")
-        message(STATUS "Generating rabbitizer table headers with ${CMAKE_C_COMPILER}")
-        file(MAKE_DIRECTORY "${_rbz}/include/generated"
-                            "${_rbz}/cplusplus/include/generated")
-        # <template subdir>|<output dir>|<output suffix> ("|", not ":", which
-        # a Windows drive letter carries)
-        set(_rbz_sets
-            "c|${_rbz}/include/generated|h"
-            "cplusplus|${_rbz}/cplusplus/include/generated|hpp")
-        foreach(_set IN LISTS _rbz_sets)
-            string(REPLACE "|" ";" _parts "${_set}")
-            list(GET _parts 0 _lang)
-            list(GET _parts 1 _outdir)
-            list(GET _parts 2 _ext)
-            file(GLOB _templates "${_rbz}/tables/templates/${_lang}/*.table.template")
-            if(NOT _templates)
+    set(_rbz_written 0)
+    file(MAKE_DIRECTORY "${_rbz}/include/generated"
+                        "${_rbz}/cplusplus/include/generated")
+    # <template subdir>|<output dir>|<output suffix> ("|", not ":", which
+    # a Windows drive letter carries)
+    set(_rbz_sets
+        "c|${_rbz}/include/generated|h"
+        "cplusplus|${_rbz}/cplusplus/include/generated|hpp")
+    foreach(_set IN LISTS _rbz_sets)
+        string(REPLACE "|" ";" _parts "${_set}")
+        list(GET _parts 0 _lang)
+        list(GET _parts 1 _outdir)
+        list(GET _parts 2 _ext)
+        file(GLOB _templates "${_rbz}/tables/templates/${_lang}/*.table.template")
+        if(NOT _templates)
+            message(FATAL_ERROR
+                "no rabbitizer ${_lang} templates under ${_rbz}/tables/templates")
+        endif()
+        foreach(_tpl IN LISTS _templates)
+            get_filename_component(_stem "${_tpl}" NAME)
+            string(REPLACE ".table.template" "" _stem "${_stem}")
+            set(_out "${_outdir}/${_stem}.${_ext}")
+            execute_process(
+                COMMAND "${CMAKE_C_COMPILER}" -E -P -x c
+                        "-I${_rbz}/tables/tables" "${_tpl}"
+                OUTPUT_VARIABLE _body
+                ERROR_VARIABLE _err
+                RESULT_VARIABLE _rc)
+            if(NOT _rc EQUAL 0)
                 message(FATAL_ERROR
-                    "no rabbitizer ${_lang} templates under ${_rbz}/tables/templates")
+                    "rabbitizer table gen failed for ${_tpl} (exit ${_rc}): ${_err}")
             endif()
-            foreach(_tpl IN LISTS _templates)
-                get_filename_component(_stem "${_tpl}" NAME)
-                string(REPLACE ".table.template" "" _stem "${_stem}")
-                set(_out "${_outdir}/${_stem}.${_ext}")
-                execute_process(
-                    COMMAND "${CMAKE_C_COMPILER}" -E -P -x c
-                            "-I${_rbz}/tables/tables" "${_tpl}"
-                    OUTPUT_VARIABLE _body
-                    ERROR_VARIABLE _err
-                    RESULT_VARIABLE _rc)
-                if(NOT _rc EQUAL 0)
+            string(STRIP "${_body}" _probe)
+            if(_probe STREQUAL "")
+                message(FATAL_ERROR
+                    "rabbitizer table gen produced no output for ${_tpl} "
+                    "(preprocessor treated it as a non-source input)")
+            endif()
+            # Header guard: output basename, dots to underscores, as in
+            # tables/tools/c_table_gen.sh.
+            string(REPLACE "." "_" _guard "${_stem}.${_ext}")
+            set(_hdr "/* SPDX-FileCopyrightText: © 2022-2023 Decompollaborate */\n")
+            string(APPEND _hdr "/* SPDX-License-Identifier: MIT */\n\n")
+            string(APPEND _hdr "/* Automatically generated. DO NOT MODIFY */\n\n")
+            string(APPEND _hdr "#ifndef ${_guard}_automatic\n")
+            string(APPEND _hdr "#define ${_guard}_automatic\n\n")
+            string(APPEND _hdr "${_body}\n#endif\n")
+            set(_old "")
+            if(EXISTS "${_out}")
+                file(READ "${_out}" _old)
+            endif()
+            if(NOT _old STREQUAL _hdr)
+                file(WRITE "${_out}" "${_hdr}")
+                file(READ "${_out}" _old)
+                if(NOT _old STREQUAL _hdr)
                     message(FATAL_ERROR
-                        "rabbitizer table gen failed for ${_tpl} (exit ${_rc}): ${_err}")
+                        "rabbitizer table header ${_out} could not be written "
+                        "(is the disk full?)")
                 endif()
-                string(STRIP "${_body}" _probe)
-                if(_probe STREQUAL "")
-                    message(FATAL_ERROR
-                        "rabbitizer table gen produced no output for ${_tpl} "
-                        "(preprocessor treated it as a non-source input)")
-                endif()
-                # Header guard: output basename, dots to underscores, as in
-                # tables/tools/c_table_gen.sh.
-                string(REPLACE "." "_" _guard "${_stem}.${_ext}")
-                set(_hdr "/* SPDX-FileCopyrightText: © 2022-2023 Decompollaborate */\n")
-                string(APPEND _hdr "/* SPDX-License-Identifier: MIT */\n\n")
-                string(APPEND _hdr "/* Automatically generated. DO NOT MODIFY */\n\n")
-                string(APPEND _hdr "#ifndef ${_guard}_automatic\n")
-                string(APPEND _hdr "#define ${_guard}_automatic\n\n")
-                file(WRITE "${_out}" "${_hdr}${_body}\n#endif\n")
-            endforeach()
+                math(EXPR _rbz_written "${_rbz_written} + 1")
+            endif()
         endforeach()
+    endforeach()
+    if(_rbz_written)
+        message(STATUS "Rabbitizer table headers written: ${_rbz_written} (with ${CMAKE_C_COMPILER})")
     endif()
     unset(_rbz)
+    unset(_rbz_written)
 endif()
 
 # Rabbitizer MIPS decoder

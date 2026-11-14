@@ -257,22 +257,46 @@ def hit_effect_64():
     ttt1_hitspark.write()
 
 
-def unknown_hilt_step(roster, work):
-    """Unknown's costumes converted again with the hilt of her blade (tools/ttt1/hilt.py, B107):
-    model, textures, face, springs and .hilt of each, as a full import writes them (captures
-    and ROM regions reused)."""
-    if not imported('unknown'):
-        print("Unknown's blade hilt: skipped (Unknown not imported)", flush=True)
+def reconvert_costumes(key, what):
+    """A guest's costumes converted again as a full import writes them: model, textures, face,
+    springs, .hilt and .stick of each (captures and ROM regions reused)."""
+    name = key.capitalize()
+    if not imported(key):
+        print(f"{what}: skipped ({name} not imported)", flush=True)
         return
     sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1'), str(ROOT / 'tools/ttt1/model')]
     import ttt1_import as I
-    report = json.loads((WORK / 'unknown/import-report.json').read_text())
-    ram, out = WORK / 'captures/unknown-select-ram.bin', WORK / 'unknown/guest'
-    for c, slot in enumerate(TABLE['unknown'].get('costumes') or [report['keys']['slot']], 1):
-        model = WORK / 'unknown' / ('ttt1.3dm' if c == 1 else f'costume{c}/ttt1.3dm')
-        if slot is None or not model.is_file() or not (out / f'Unknown-TTT1-arcade-P{c}.3dm').is_file(): continue
-        m = I.model(ram, slot, out, 'Unknown', model.parent, c)
-        print(f'  unknown costume {c}: {m["bytes"]} bytes', flush=True)
+    report = json.loads((WORK / f'{key}/import-report.json').read_text())
+    ram, out = WORK / f'captures/{key}-select-ram.bin', WORK / f'{key}/guest'
+    for c, slot in enumerate(TABLE[key].get('costumes') or [report['keys']['slot']], 1):
+        model = WORK / key / ('ttt1.3dm' if c == 1 else f'costume{c}/ttt1.3dm')
+        if slot is None or not model.is_file() or not (out / f'{name}-TTT1-arcade-P{c}.3dm').is_file(): continue
+        m = I.model(ram, slot, out, name, model.parent, c)
+        print(f'  {key} costume {c}: {m["bytes"]} bytes', flush=True)
+
+
+def unknown_hilt_step(roster, work):
+    """Unknown's costumes converted again with the hilt of her blade (tools/ttt1/hilt.py, B107)."""
+    reconvert_costumes('unknown', "Unknown's blade hilt")
+
+
+def tetsujin_weapons_step(roster, work):
+    """Tetsujin's costumes (Kinjin's on Start) converted again with the sword and the dagger TTT1
+    draws by code on Yoshimitsu's and Kunimitsu's moves (tools/ttt1/stick.py, B177): the same
+    model and textures, a .stick beside each."""
+    reconvert_costumes('tetsujin', "Tetsujin's sword and dagger")
+def tetsujin_tail_step(roster, work):
+    """Tetsujin's and Kinjin's tail on Roger's and Alex's moves (tools/ttt1/tail.py): a .tail
+    beside each costume, from its .stick; in the import's guest folder too when it is there, so
+    that the roster staged again from it keeps the tail."""
+    sys.path.insert(0, str(ROOT / 'tools/ttt1'))
+    import tail
+    folders = [roster] + ([WORK / 'tetsujin/guest'] if work else [])
+    for folder in folders:
+        for stick in sorted(folder.glob('Tetsujin-TTT1-arcade-P*.stick')):
+            print(f'  {stick.with_suffix(".tail").name}: {tail.write(stick.with_suffix(".tail"), stick)} quads', flush=True)
+
+
 def hitspark():
     """The natives' and the common TTT Hitspark packs again, from the ROM
     regions (tools/ttt1_hitspark.py): the throw spark, the knockdown smoke and
@@ -365,6 +389,12 @@ def native_limbs_step(roster, work):
     N.main([WORK if work else roster])     # WORK: the natives' own folders and the roster
 
 
+def window_kinds_step(roster, work):
+    """TTT1's window kinds renumbered to Tekken 3's in the move packs (tools/ttt1_retrofit_window_kinds.py, B179)."""
+    import ttt1_retrofit_window_kinds as K
+    K.main([WORK if work else roster])     # WORK: every pack of the import and the roster
+
+
 def native_movelists_step(roster, work):
     """Kuma's, Ogre's, Gun Jack's and True Ogre's Practice move lists for their TTT1
     moves (tools/ttt1/movelist.py, from tools/data/wiki): into their own folders,
@@ -382,6 +412,20 @@ def native_movelists_step(roster, work):
         (roster / f'{key.capitalize()}-TTT1-movelist.bin').write_bytes(M.build(key)[0])
 
 
+def tetsujin_name_step(roster, work):
+    """Tetsujin's announced name (B173): TTT1 splices it from three driver
+    samples (tools/ttt1/sfx.py NAME_RAW); its sound packs, its own and each
+    donor moveset's, written again with the same sounds plus the name."""
+    if not imported('tetsujin'): return
+    sys.path[:0] = [str(ROOT / 'tools'), str(ROOT / 'tools/ttt1')]
+    import ttt1_import as I, sfx
+    out, ram = WORK / 'tetsujin' / 'guest', WORK / 'captures' / 'tetsujin-select-ram.bin'
+    for report in sorted(out.glob('sfx-report*.json')):
+        own = report.stem.removeprefix('sfx-report')
+        indexes = [e['index'] for e in json.loads(report.read_text())['entries'] if e['index'] != sfx.NAME]
+        I.sounds(ram, indexes, TABLE['tetsujin']['sound'], out, 'Tetsujin' + own)
+
+
 UPDATE_STEPS = {'hands': hands_step,
                 'devil-jin': lambda roster, work: devil_jin(),
                 'panda-tiger': lambda roster, work: panda_tiger(),
@@ -396,11 +440,17 @@ UPDATE_STEPS = {'hands': hands_step,
                 'hit-effect-64': lambda roster, work: hit_effect_64(),
                 'native-limbs': native_limbs_step,
                 'unknown-hilt': unknown_hilt_step,
+                'tetsujin-weapons': tetsujin_weapons_step,
+                'tetsujin-tail': tetsujin_tail_step,
                 'hit-effect-64-more': lambda roster, work: hitspark(),
                 'exact-welds': half_welds_step,
                 'ui-hd': lambda roster, work: ui_hd(),
                 'native-models': lambda roster, work: native_models(),
-                'native-movelists': native_movelists_step}
+                'native-movelists': native_movelists_step,
+                'waist-faces': lambda roster, work: (half_welds_step(roster, work), native_models()),
+                'tetsujin-name': tetsujin_name_step,
+                'cache-welds': lambda roster, work: (half_welds_step(roster, work), native_models()),
+                'window-kinds': window_kinds_step}
 
 
 def update(roster):

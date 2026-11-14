@@ -144,6 +144,9 @@ void gpu_vblank_release_present_flush_guard(void);
  * 1=crt, 2=composite, 3=trinitron). Config/launcher-driven; the PSX_SCREEN
  * env var, if set, overrides this. Default 0 (raw) is byte-identical. */
 void gpu_set_screen_kind(int kind);
+/* Effective model (env override applied); the OpenGL present pass draws the
+ * CRT scanlines and phosphor mask for every value but 0. */
+int  gpu_get_screen_kind(void);
 
 /* Widescreen proportion correction (active only when aspect != 4:3 and the
  * game's [widescreen] block opts in — see config_loader.h). Tagged

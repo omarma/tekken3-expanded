@@ -189,9 +189,10 @@ def faces(d, slot):
     return (*pos(e[0]), w, h), sources, (d[FACE_BLINK + slot], d[FACE_FLAG_A + slot], d[FACE_FLAG_B + slot])
 
 
-def model(ram, slot, out, name, work, costume=1, stem=None):
+def model(ram, slot, out, name, work, costume=1, stem=None, double_sided=True, eyes_shut=None):
     """stem : nom des fichiers apres le nom (le loup d'Unknown : 'TTT1-wolf'),
-    sinon le costume 'TTT1-arcade-P<costume>'."""
+    sinon le costume 'TTT1-arcade-P<costume>'. eyes_shut : expression ecrite a la place
+    du clignement de la borne (natifs, B176 : tools/data/ttt1_native_models.json)."""
     import convert, texpack, check_texpack
     from fmt import load
     bank = (TTT1 / 'bankedroms.bin').read_bytes(); d = ram.read_bytes()
@@ -203,7 +204,8 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     src, tex = load(work / 'ttt1.3dm'), bank[to:to + tn]
     face = faces(d, slot)
     shown, sources, (blink, flag_a, flag_b) = face or ((), [], (0, 0, 0))
-    import hilt, stick
+    if face and eyes_shut is not None: blink = eyes_shut
+    import hilt, stick, tail
     # poignee de la lame d'Unknown, baton de Mokujin (F32 E5) : dessines hors du modele
     extra = hilt.prims(d, slot) + stick.prims(d, slot)
     try:
@@ -214,7 +216,7 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
         face = None; report = texpack.plan(tex, src, (), extra)
     import accessories
     # Os balances avec borne ou collision par la borne : gardes sur leur propre partie (F32, Heihachi).
-    ps1, relocs = convert.convert(src, keep=accessories.keep_rows(d, slot))
+    ps1, relocs = convert.convert(src, keep=accessories.keep_rows(d, slot), double_sided=double_sided)
     base = out / f'{name}-{stem or f"TTT1-arcade-P{costume}"}'
     base.with_suffix('.3dm').write_bytes(ps1)
     base.with_suffix('.relocs').write_bytes(struct.pack(f'<{len(relocs)}I', *relocs))
@@ -238,7 +240,11 @@ def model(ram, slot, out, name, work, costume=1, stem=None):
     springs = accessories.write(base.with_suffix('.acc'), d, slot, layout)
     if not springs['swinging']: base.with_suffix('.acc').unlink()
     if hilt.write(base.with_suffix('.hilt'), d, slot, convert.ps1_uv): print('poignee de la lame : 14 quads')
-    if stick.write(base.with_suffix('.stick'), d, slot, convert.ps1_uv): print('baton de Mokujin : 18 quads')
+    weapons = stick.write(base.with_suffix('.stick'), d, slot, convert.ps1_uv)
+    if weapons: print('baton de Mokujin : 18 quads' if weapons == 1 else 'sabre et poignard (Tetsujin) : 18 + 17 quads')
+    # queue de Tetsujin / Kinjin sur les coups de Roger et d'Alex, faite de la lame de son sabre
+    if name == 'Tetsujin' and tail.write(base.with_suffix('.tail'), base.with_suffix('.stick')):
+        print('queue (coups de Roger) : 3 segments')
     print(f'modele : {len(ps1)} o, {len(relocs)} relocalisations, lignes 21..26 <- {layout}, '
           f'seconds maillages {convert.SECOND}')
     lost = convert.unplaced(src)
@@ -255,7 +261,8 @@ def spirit(ram, slot, out, name, work):
     qu'elle) en <Name>-TTT1-wolf.3dm / .relocs / .tim, et la lueur de ses effets
     (archive 06, tools/ttt1/spirit.py) en <Name>-TTT1-wolf.glow."""
     import spirit as S, rom_ram as R
-    report = model(ram, slot, out, name, work / 'wolf', stem='TTT1-wolf')
+    # Sans faces doubles : le moteur peindrait l'interieur de son dos sur son ventre (B157).
+    report = model(ram, slot, out, name, work / 'wolf', stem='TTT1-wolf', double_sided=False)
     for e in ('face', 'acc'): (out / f'{name}-TTT1-wolf.{e}').unlink(missing_ok=True)
     files = [R.file(TTT1, 6, n) for n in range(10)]
     pack, glow = S.build(R.load(TTT1)[2], files, (out / f'{name}-TTT1-wolf.tim').read_bytes(), S.BONES)
@@ -361,7 +368,8 @@ def sounds(ram, indexes, profile, out, name):
     announced = sfx.name_index(data, profile)
     # Without MAME: the driver's C352 writes, measured once (tools/data/
     # ttt1_sfx_registers.json), replayed over the user's c352.bin. Empty
-    # entries of the table (Tetsujin's name: 0) have no sound.
+    # entries of the table have no sound (Tetsujin's name is a direct
+    # request instead: sfx.NAME_RAW).
     table = sfx.table(data)
     need = {i for i in set(indexes) | {announced} if i in sfx.RAW or (0 < i < len(table) and table[i][0])}
     recorded = sfx.measured((TTT1 / 'c352.bin').read_bytes(), need)

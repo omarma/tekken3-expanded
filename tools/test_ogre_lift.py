@@ -2,31 +2,36 @@
 """Ogre's cutscene lifts the stage 9 boss (F07, src/tekken3_ttt1_roster.c).
 
     python tools/test_ogre_lift.py OUT --boss heihachi|devil|angel|unknown
-        [--player paul|heihachi|<guest key>] [--build build-f07] [--shots] [--visible]
+        [--player paul|law|hwoarang|jin|heihachi|<guest key>] [--moves 0|1|dr]
+        [--key square|cross|triangle|circle] [--fight-boss] [--charge] [--env K=V]
+        [--build build-f07] [--shots] [--visible]
 
 Cold boot (tools/ttt1_live.py), ARCADE, the player's cell (stock grid for a
-native, the Tag page for a guest), Square. The stage 9 boss is set through
+native, the Tag page for a guest), --key (Square). --moves: a native's moves
+(TEKKEN3_NATIVE_MOVES: 0 Tekken 3's, 1 TTT1's, dr; B163 was a native on its
+TTT1 or DR moves). The stage 9 boss is set through
 TEKKEN3_CPU_GUESTS (`0,0,1,<boss>`; `0,0,0` for Heihachi); once the mod has
 written the opponent list, the first fight counts as stage 9, Ogre comes
-next. Rounds are won by emptying player 2's life in turbo, in real time
+next (--fight-boss: as stage 8, the boss fought before Ogre, as in a game). Rounds are won by emptying player 2's life in turbo, in real time
 from Ogre's K.O. on. During the cutscene (state 8, phases 16-17) the
 player's actor must be the boss (Jin for a Heihachi player and a Heihachi
 boss) and its root (actor +0x908..+0x90C, three halfwords) must travel:
 the largest range of one coordinate over phase 17 (Heihachi about 1 900,
 a fighter left in guard a few units). Then phase 20 must give the player
 its own fighter back against True Ogre. The log must say "Ogre's cutscene
-lifts", and not "unmapped native entry". --shots: a screenshot every 15 frames of the cutscene into OUT. One game:
+lifts", and not "unmapped native entry"; the model grafted on the
+lifted player for the cutscene must be the boss's (B163). --shots: a screenshot every 15 frames of the cutscene into OUT. One game:
 run it through slot.py. Exit status 1 on any failure. Time Attack plays no
 cutscene (phase 16 goes straight to 20): Arcade only.
 """
-import argparse, json, sys, time
+import argparse, json, re, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ttt1_live as L
 
 STATE, PHASE, STAGE, OPPONENTS = 0x800AE204, 0x800AE224, 0x800AFAAC, 0x800AFB18
 ACTOR, ACTOR_SIZE, P2_LIFE = 0x800A9228, 0x188C, 0x800AAEA8
-NATIVES = {'paul': 0, 'law': 1, 'jin': 9, 'heihachi': 13}
+NATIVES = {'paul': 0, 'law': 1, 'hwoarang': 6, 'jin': 9, 'heihachi': 13}
 BOSS_NAMES = {'heihachi': 'Heihachi', 'devil': 'Devil', 'angel': 'Angel', 'unknown': 'Unknown'}
 RISE = 400          # root travel over phase 17 (Heihachi: about 1 900)
 
@@ -39,11 +44,17 @@ def main():
     ap.add_argument('--build', default='build-f07')
     ap.add_argument('--visible', action='store_true')
     ap.add_argument('--shots', action='store_true')
+    ap.add_argument('--moves', default='0', help='TEKKEN3_NATIVE_MOVES: 0 T3 moves, 1 TTT1, dr')
+    ap.add_argument('--fight-boss', action='store_true', help='the first fight counts as stage 8: the stage 9 boss is fought before Ogre')
+    ap.add_argument('--env', action='append', default=[], help='KEY=VALUE for the game (TEKKEN3_CPU_COSTUME=tekken3)')
+    ap.add_argument('--charge', action='store_true', help="player 1 charges (the four buttons) before each of Ogre's K.O.s: the cutscene starts charged")
+    ap.add_argument('--key', default='square', choices=('square', 'cross', 'triangle', 'circle'))
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     native = a.player in NATIVES
-    env = {'TEKKEN3_NATIVE_MOVES': '0',
+    env = {'TEKKEN3_NATIVE_MOVES': a.moves,
            'TEKKEN3_CPU_GUESTS': '0,0,0' if a.boss == 'heihachi' else f'0,0,1,{a.boss}'}
+    env.update(e.split('=', 1) for e in a.env)
     s = L.Session(guest='kazuya' if native else a.player, visible=a.visible, build=L.ROOT / a.build, env=env)
     catalogue = [l.split()[0] for l in (s.assets / 'guests.txt').read_text().splitlines() if l.split()]
     player_id = NATIVES[a.player] if native else s.cid
@@ -75,9 +86,9 @@ def main():
                 if (r, c) == (row, col): break
                 press(0xffbf if r < row else 0xffef if r > row else 0xffdf if c < col else 0xff7f)
             s.wait(lambda: s.value(0x80118668) == s.cid, 'guest cell', 10)
-        press(0x7fff)
+        press({'square': 0x7fff, 'cross': 0xbfff, 'triangle': 0xefff, 'circle': 0xdfff}[a.key])
         q(cmd='turbo', enabled=1)
-        end, staged = time.monotonic() + 1500, False
+        end, staged, charged = time.monotonic() + 1500, False, -10**9
         while True:
             if time.monotonic() > end: raise RuntimeError(f'no cutscene: state {s.value(STATE)}')
             st, ph = s.value(STATE), s.value(PHASE, 2)
@@ -85,9 +96,16 @@ def main():
                 boss = s.value(OPPONENTS + 32, 1)
                 if a.boss == 'heihachi' or boss >= L.GUEST_ID:    # the mod's own list written
                     print('stage 9 boss', boss, flush=True)
-                    s.write(STAGE, 8, 1); staged = True
+                    s.write(STAGE, 7 if a.fight_boss else 8, 1); staged = True
             if st == 8 and 6 <= ph < 9:
                 life = s.value(P2_LIFE)
+                if life >> 16 and a.charge and s.value(ACTOR + ACTOR_SIZE + 0x18, 2) == 14                         and q(cmd='frame')['frame'] - charged > 400:
+                    q(cmd='turbo', enabled=0)
+                    q(cmd='input_route_clear'); q(cmd='input_route_append', frames=40, buttons=0x0fff)
+                    q(cmd='input_route_append', frames=20, buttons=0xffff); q(cmd='input_route_start')
+                    while q(cmd='input_route_status').get('active'): time.sleep(.02)
+                    charged = q(cmd='frame')['frame']; print('charged at', charged, flush=True)
+                    q(cmd='turbo', enabled=1)
                 if life >> 16: s.write(P2_LIFE, life & 0xFFFF)
             if st == 8 and ph >= 16: break
             time.sleep(.01)
@@ -121,6 +139,14 @@ def main():
     if rise < RISE: failures.append(f'the root moved {rise}, under {RISE}')
     records = len({x[5] for x in samples})
     if after != player_id: failures.append(f'after the cutscene P1 is {after}, expected {player_id}')
+    # B163: the model drawn for the lifted player is the boss's, not the player's own (a native on
+    # its TTT1 or DR moves kept its files: Ogre lifted Hwoarang in Devil's place).
+    lifted = 'Jin' if want == 9 else 'Heihachi' if want == 13 else BOSS_NAMES[a.boss]
+    cut = log[log.find("Ogre's cutscene lifts"):log.find("Ogre's cutscene over")]
+    drawn = re.findall(r'^(.+?) model: P1 model header replaced', cut, re.M)
+    # (phase 20 grafts the player's own model back before the reload's log line: the first only)
+    if not drawn or not drawn[0].startswith(lifted):
+        failures.append(f'model grafted on P1 for the cutscene {drawn[:1]}, expected {lifted}')
     print(f'{a.player} vs {a.boss}: phase 17 {len(samples)} samples, actor {ids}, root travel {rise}, '
           f'{records} records, back to {after}')
     for x in failures: print('ECHEC', x)

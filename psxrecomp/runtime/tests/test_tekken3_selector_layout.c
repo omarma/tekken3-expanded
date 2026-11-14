@@ -337,6 +337,15 @@ static void verify_ball_choice(void) {
     Tekken3SelectorPacket credit=p(0xbd15c,0x65,233,278,10,16);
     /* The grid phase keeps each chosen face with its player. */
     assert(tekken3_selector_place(&frame,&face,61).sidecar_dx==-61);
+    /* B175: QUICK SELECT's Time Attack banner, TIME ATTACK! from x = 204
+     * (T) to 347 (!), under the right panel; the left name stays left
+     * (captured in game 2026-11-12). */
+    for(int x=204;x<=347;x+=13) {
+        Tekken3SelectorPacket glyph=p(0xbcc80,0x65,x,274,14,24);
+        assert(tekken3_selector_place(&frame,&glyph,61).sidecar_dx==61);
+    }
+    Tekken3SelectorPacket law=p(0xbcc58,0x65,67,274,14,24);
+    assert(tekken3_selector_place(&frame,&law,61).sidecar_dx==-61);
     packets[n++]=p(0xbe928,0x62,88,315,192,80);
     assert(tekken3_selector_analyze_frame(packets,n,368,480,&frame));
     assert(frame.choice_panel);
@@ -377,6 +386,13 @@ static void verify_vs_handicap(void) {
     assert(tekken3_selector_place(&frame,&score,61).sidecar_dx==0);
     Tekken3SelectorPacket frame_line=p(0xb9530,0x40,69,384,34,1);
     assert(tekken3_selector_place(&frame,&frame_line,61).sidecar_dx==0);
+    /* B175: True Ogre's chosen face is three strips; the last one (y 374,
+     * 32 x 10) stays with the face while the bar is parked (captured in
+     * game 2026-11-12, both sides). */
+    Tekken3SelectorPacket ogre_low=p(0xb95f0,0x65,70,374,32,10);
+    Tekken3SelectorPacket ogre_low_right=p(0xb96f0,0x65,266,374,32,10);
+    assert(tekken3_selector_place(&frame,&ogre_low,61).sidecar_dx==0);
+    assert(tekken3_selector_place(&frame,&ogre_low_right,61).sidecar_dx==0);
     /* Both names (JIN, KING: 14x24 glyphs) and their underlines stay over
      * the centred faces (captured in game 2026-09-27). */
     Tekken3SelectorPacket name_left=p(0xb99d4,0x65,67,274,14,24);

@@ -24,6 +24,13 @@ extern "C" {
 
 #define SAVESTATE_SLOTS 12
 
+/* Hold: while > 0, savestate_poll leaves a staged save or load pending.
+ * Host code that runs guest routines from C (a mod calling a game function
+ * with a sentinel return address, then putting the registers back) raises
+ * it around the call: a save taken inside would record that sentinel as a
+ * return address, and a load would abandon the C frame halfway. */
+extern int psx_savestate_hold;
+
 /* Configure the slot directory + integrity key (from main, after config load).
  *
  * When bios_token is non-empty (e.g. "openbios" / "scph1001"):

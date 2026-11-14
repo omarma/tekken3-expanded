@@ -6,7 +6,9 @@
 
 Run by the setup (launcher/setup_backend.py) when it is given tekken3.zip
 (Tekken 3 arcade, TET2/VER.E1): no MAME, a few seconds. Writes
-stage00.ast .. stage12.ast (pack.py, format pack.FORMAT) and version.txt
+stage00.ast .. stage12.ast (pack.py, format pack.FORMAT), the stock
+fighters' HD selector faces (faces.py: face-NN-tile-hd.bin,
+face-NN-portrait-hd.bin) and version.txt
 (version.ARCADE_STAGES_VERSION) into a temporary folder, then puts it in
 place of DIR (default workspace/arcade-stages/pack). CMakeLists.txt stages
 that folder beside the game as mods/arcade-stages, on PC and Android, where
@@ -49,6 +51,8 @@ def install(tekken3: Path, out: Path = DEFAULT_OUT, say=print) -> Path:
         path = temp / version.pack_name(s)
         pack.save(scene.Stage(arcade, s), path)
         say(f'stage {s:2}: {path.name} {path.stat().st_size} bytes')
+    import faces
+    faces.write(arcade, temp, say)          # the stock fighters' HD selector faces (B186)
     (temp / version.STAMP).write_text(f'{version.ARCADE_STAGES_VERSION}\n', encoding='utf-8')
     shutil.rmtree(out, ignore_errors=True)
     temp.replace(out)

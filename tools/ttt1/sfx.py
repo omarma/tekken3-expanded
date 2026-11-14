@@ -48,7 +48,19 @@ GAIN = 7816 / 2287
 # 80116EA4 calls 801253B0(0x112F, 27) when a beam starts (80116F8C), for
 # every beam type, on the frame the move's active window opens.
 LASER = 1024
-RAW = {LASER: (27, 0x112f)}
+# Tetsujin's name. Its sound profile (17) names no sound (half-word +16 is 0):
+# TTT1's select (8016F68C, ttt-ps1 src/menus/8016AEFC.c) asks code 15, variants
+# 0 and 7 (Tetsujin, golden Tetsujin), for driver sound 0x120 in slot 20
+# directly (8016F9FC: 8012536C(0x120, 0x14)), the others for the profile's
+# name (8016FA28). The driver plays 0x120 as three of its sample entries on one
+# voice, each cutting the one before at the next 120 Hz tick: 280 (bank 9
+# B2EE..C565, its own sample, cut after 18 ticks), 281 (the tail of Kunimitsu's
+# name 0x158 from 43:EF69, "tsu", 19 ticks) and 282 (the tail of Mokujin's name
+# 0x134 from 41:9559, "jin"), both a little lower than the names (0x16A1
+# against 0x173B). The measured writes replay that splice.
+TETSUJIN_NAME = 0x1120
+RAW = {LASER: (27, 0x112f), TETSUJIN_NAME: (20, 0x120)}
+NAME_RAW = {17: TETSUJIN_NAME}
 
 
 # The announcer calling the character's name, as TTT1 does when the character
@@ -66,9 +78,9 @@ PROFILES = 0x11e1c
 
 
 def name_index(ram: bytes, profile: int) -> int:
-    """Table index of the character's announced name; 0 if it has none
-    (Tetsujin's profile)."""
-    return struct.unpack_from('<H', ram, PROFILES + profile * 20 + 16)[0] & 0xfff
+    """Index of the character's announced name: the table's, or the direct
+    request that stands for it (NAME_RAW); 0 if it has none."""
+    return struct.unpack_from('<H', ram, PROFILES + profile * 20 + 16)[0] & 0xfff or NAME_RAW.get(profile, 0)
 
 
 def raw_list() -> str:
