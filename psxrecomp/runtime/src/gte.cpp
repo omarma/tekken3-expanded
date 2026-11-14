@@ -967,24 +967,30 @@ extern "C" void gte_precision_cpu_and(uint8_t rd, uint8_t rs, uint8_t rt,
     PreciseProjection out = {};
     const uint32_t rdVal = vs & vt;
 
-    const bool rt_is_mask = (vt >> 16) == 0xFFFFu;
-    const PreciseProjection *src = rt_is_mask ? a : b;
-    const uint32_t srcVal = rt_is_mask ? vs : vt;
-    const uint32_t maskVal = rt_is_mask ? vt : vs;
-    const uint16_t mask = static_cast<uint16_t>(maskVal & 0xFFFFu);
-    const int16_t hi_s16 = static_cast<int16_t>(srcVal >> 16);
+    const PreciseProjection *src = nullptr;
+    uint32_t srcVal = 0;
+    uint32_t maskVal = 0;
+    if (a && !b) {
+        src = a; srcVal = vs; maskVal = vt;
+    } else if (b && !a) {
+        src = b; srcVal = vt; maskVal = vs;
+    }
 
     if (src) {
+        const uint16_t mask = static_cast<uint16_t>(maskVal & 0xFFFFu);
+        const int16_t hi_s16 = static_cast<int16_t>(srcVal >> 16);
+
         if (maskVal == 0xFFFFFFFFu) {
             out = *src;
         } else if ((maskVal >> 16) == 0xFFFFu && mask >= 0x0FFFu && mask != 0xFFFFu &&
-                   (mask & (mask + 1)) == 0 && hi_s16 != 0 && hi_s16 != -1) {
+                   (mask & (mask + 1)) == 0 && hi_s16 != 0 && hi_s16 != -1 &&
+                   src->z != 0 && src->derived) {
             out = *src;
             const int32_t rd_lo = static_cast<int16_t>(rdVal & 0xFFFFu);
             const int32_t src_lo = static_cast<int16_t>(srcVal & 0xFFFFu);
             const int32_t rem_y = static_cast<int32_t>(static_cast<uint16_t>(srcVal) & ~mask);
 
-            out.x16 = (rd_lo << 16) + (src->x16 - (src_lo << 16));
+            out.x16 = (rd_lo * 65536) + (src->x16 - (src_lo * 65536));
             out.y16 = src->y16 + rem_y;
             out.derived = 1;
         }
