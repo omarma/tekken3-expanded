@@ -74,6 +74,8 @@ def ready():
         if state.get('dr') and not dr_current(INSTALLED):return False
         # An add-on added, removed or updated since the build.
         if addons_signature()!=state.get('addons',[]):return False
+        # A source the last build read has changed since (a fix unpacked over the same release, B190).
+        if sources_changed():return False
     except OSError:return False
     return True
 
@@ -721,6 +723,25 @@ def date_changed_sources():
     save_json(record_path,record)
     if changed:log_line(f'Dated now, to be compiled again: {len(changed)} changed file(s)'
                         +(' (no record of an earlier check: all of them)' if not old else ': '+', '.join(changed[:8])+(' ...' if len(changed)>8 else '')))
+
+def sources_changed():
+    """ready()'s check (B190): a file of the last build's record (.setup/sources.json, made by
+    date_changed_sources before each build) whose content differs now. A fix unpacked over an
+    install of the same release changes no version stamp: without this the launcher started the
+    old executable. Only the recorded files: what the game writes beside them (reports, dumps)
+    and files added since are not sources of the build in place. No record (an install set up
+    before the record existed): nothing to compare, as before."""
+    record=load_json(STATE/'sources.json')
+    for name,seen in record.items():
+        if not name.startswith(('src/','launcher/','tools/','psxrecomp/','recomp-ui/','native/','mods/','seeds/')) and \
+           name not in ('CMakeLists.txt','game.toml','symbols.toml','codegen_setup.c','codegen_setup.h','framework_pins.txt'):
+            continue
+        path=ROOT/name
+        try:info=path.stat()
+        except FileNotFoundError:continue
+        if [info.st_size,info.st_mtime_ns]==seen[:2]:continue
+        if info.st_size!=seen[0] or digest(path)!=seen[2]:return True
+    return False
 
 def validate_disc(disc,updating=False):
     if not disc.is_file():

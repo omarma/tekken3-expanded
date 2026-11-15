@@ -595,11 +595,30 @@ static int draw_alternative(unsigned id) {
     for(unsigned k=0;k<n;k++)if(!experimental(natives[id].alt[k].source) && !--d)return (int)k;
     return -1;
 }
+/* B190: a side that was human when its fight loaded stays the player's in that fight. During the
+ * Continue countdown the game hands the loser's side to the CPU (0x800AE1F8 + 2 * player drops to
+ * 0, t3-ps1 src/modes/80050428.c, fight phases 9-12) while the fight is still on screen, and its
+ * set-up runs again: the CPU COSTUME draws (F36 for a guest, B167 for a native's model) then
+ * re-dressed the player's own fighter in the middle of the fight, its model's memory rewritten
+ * under the frame being drawn (GPU halted on a bad GP0 command, or the game stuck in state 0),
+ * about two Continues in three with a guest. Recorded on every loading screen (the tick and each
+ * call), kept in the fight, dropped on any other screen (a Continue through the selector loads
+ * again). A challenger (B171) is the other way round: the CPU's side turning human. */
+static unsigned char fight_human[2];
+static void note_fight_human(void) {
+    unsigned screen=psx_mod_read_word(SCREEN);
+    for(unsigned p=0;p<2;p++)
+        if(screen==LOADING)fight_human[p]=psx_mod_read_half(0x800ae1f8+p*2)!=0;
+        else if(screen!=FIGHT)fight_human[p]=0;
+}
 /* The demo's two sides are the CPU's whatever 0x800AE1F8 holds (the menus
  * leave player 2's at 1 there). */
 static int cpu_slot(unsigned p) {
     unsigned mode=psx_mod_read_word(MODE);
-    return demo() || (!psx_mod_read_half(0x800ae1f8+p*2) && (mode<PRACTICE || mode==TEKKEN_BALL));
+    if(demo())return 1;
+    note_fight_human();
+    if(p<2 && fight_human[p])return 0;                  /* B190 */
+    return !psx_mod_read_half(0x800ae1f8+p*2) && (mode<PRACTICE || mode==TEKKEN_BALL);
 }
 
 /* The CPU MOVESET row of GAME OPTION (src/tekken3_game_options.c), RANDOM
@@ -863,6 +882,7 @@ void __wrap_func_8002A40C(CPUState *cpu) {
 /* The loading screen names the fighters (0x800ADD5C + 2 * player). */
 void tekken3_native_moves_tick(void) {
     unsigned screen=psx_mod_read_word(SCREEN);
+    note_fight_human();                                 /* B190 */
     /* A new visit of a selector starts without picks. */
     static int was_open;
     int open=selector_open();
